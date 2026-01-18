@@ -536,11 +536,11 @@ const App = () => {
         </div>
 
         {/* 公告栏 */}
-        <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg p-4 border-2 border-blue-300">
+        <div className="bg-gradient-to-r from-green-50 via-green-100 to-green-50 rounded-xl shadow-sm p-4 border-2 border-green-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 flex-1">
-              <div className="bg-white/20 p-2 rounded-lg">
-                <Activity className="w-6 h-6 text-white" />
+              <div className="bg-green-100 p-2 rounded-lg border border-green-200">
+                <Activity className="w-6 h-6 text-green-700" />
               </div>
               {isEditingAnnouncement ? (
                 <input 
@@ -548,12 +548,12 @@ const App = () => {
                   value={announcementInput} 
                   onChange={(e) => setAnnouncementInput(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && handleUpdateAnnouncement()}
-                  className="flex-1 px-4 py-2 rounded-lg border-2 border-white/30 bg-white/90 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-white"
+                  className="flex-1 px-4 py-2 rounded-lg border-2 border-green-200 bg-white text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-400"
                   placeholder="输入公告内容..."
                   autoFocus
                 />
               ) : (
-                <p className="text-white text-lg font-bold flex-1">{announcement.content || '暂无公告'}</p>
+                <p className="text-green-900 text-lg font-bold flex-1">{announcement.content || '暂无公告'}</p>
               )}
             </div>
             {isAdmin && (
@@ -562,13 +562,13 @@ const App = () => {
                   <>
                     <button 
                       onClick={handleUpdateAnnouncement}
-                      className="bg-white text-blue-600 px-4 py-2 rounded-lg font-bold hover:bg-blue-50 transition-colors flex items-center gap-2"
+                      className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 transition-colors flex items-center gap-2"
                     >
                       <CheckCircle className="w-4 h-4" /> 保存
                     </button>
                     <button 
                       onClick={() => { setIsEditingAnnouncement(false); setAnnouncementInput(''); }}
-                      className="bg-white/20 text-white px-4 py-2 rounded-lg font-bold hover:bg-white/30 transition-colors flex items-center gap-2"
+                      className="bg-white text-green-700 px-4 py-2 rounded-lg font-bold border border-green-200 hover:bg-green-50 transition-colors flex items-center gap-2"
                     >
                       <XCircle className="w-4 h-4" /> 取消
                     </button>
@@ -576,7 +576,7 @@ const App = () => {
                 ) : (
                   <button 
                     onClick={() => { setIsEditingAnnouncement(true); setAnnouncementInput(announcement.content || ''); }}
-                    className="bg-white/20 text-white px-4 py-2 rounded-lg font-bold hover:bg-white/30 transition-colors flex items-center gap-2"
+                    className="bg-white text-green-700 px-4 py-2 rounded-lg font-bold border border-green-200 hover:bg-green-50 transition-colors flex items-center gap-2"
                   >
                     <Edit className="w-4 h-4" /> 编辑公告
                   </button>
