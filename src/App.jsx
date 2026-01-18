@@ -412,11 +412,15 @@ const App = () => {
     const totalRevenue = loans.i;
     const totalExpense = (injections.i - wInj.i) + (deposits.i - wDep.i);
 
+    // 计算利息池 (每周利息)
+    const interestPool = (totalRevenue - totalExpense) / 52;
+
     return {
       loanPrincipal: loans.p,
       liabilities: totalLiabilities,
       netCashFlow: totalRevenue - totalExpense,
-      idleCash: totalLiabilities - loans.p
+      idleCash: totalLiabilities - loans.p,
+      interestPool: interestPool
     };
   }, [transactions]);
 
@@ -481,7 +485,7 @@ const App = () => {
     <div className="min-h-screen bg-gray-50 text-gray-800 p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* 头部 */}
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-gray-200">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-green-200">
           <div>
             <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
               <span className="text-blue-600 text-4xl font-bold">EUU</span> 超级投行
@@ -519,24 +523,25 @@ const App = () => {
         )}
 
         {/* 操作栏 */}
-        <div className="bg-white p-4 rounded-xl border border-gray-200 shadow-sm flex flex-wrap gap-4 items-center">
+        <div className="bg-white p-4 rounded-xl border border-green-200 shadow-sm flex flex-wrap gap-4 items-center">
             <span className="font-bold text-gray-700 mr-2 flex items-center gap-2"><Lock className="w-4 h-4 text-gray-400"/> 业务:</span>
             <Btn icon={PlusCircle} label="贷款" onClick={() => openModal('loan')} color="green" />
-            <div className="h-6 w-px bg-gray-300 mx-2"></div>
+            <div className="h-6 w-px bg-green-200 mx-2"></div>
             <Btn icon={PlusCircle} label="注资" onClick={() => openModal('injection')} color="blue" />
             <Btn icon={MinusCircle} label="撤资" onClick={() => openModal('withdraw_inj')} color="blue" />
-            <div className="h-6 w-px bg-gray-300 mx-2"></div>
+            <div className="h-6 w-px bg-green-200 mx-2"></div>
             <Btn icon={PlusCircle} label="存款" onClick={() => openModal('deposit')} color="purple" />
             <Btn icon={MinusCircle} label="取款" onClick={() => openModal('withdraw_dep')} color="purple" />
-            {isAdmin && <div className="h-6 w-px bg-gray-300 mx-2"></div>}
+            {isAdmin && <div className="h-6 w-px bg-green-200 mx-2"></div>}
             {isAdmin && <Btn icon={PlusCircle} label={`手动结算 (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
         </div>
 
         {/* 统计卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
           <StatCard title="总资产 (贷款)" value={formatMoney(stats.loanPrincipal)} subtext="已审核通过" icon={<ArrowUpRight className="text-green-600" />} />
           <StatCard title="总负债 (注资+存款)" value={formatMoney(stats.liabilities)} subtext="已审核通过" icon={<ArrowDownLeft className="text-red-500" />} />
           <StatCard title="闲置资金" value={formatMoney(stats.idleCash)} subtext="可用余额" icon={<Wallet className="text-yellow-500" />} />
+          <StatCard title="利息池" value={formatMoney(stats.interestPool)} subtext="周净利息" icon={<Activity className="text-purple-600" />} />
           <StatCard title="审批队列" value={pendingTx.length} subtext="笔待处理" icon={<Shield className="text-blue-600" />} />
         </div>
 
@@ -590,42 +595,53 @@ const Btn = ({ icon: Icon, label, onClick, color }) => (
 );
 
 const StatCard = ({ title, value, subtext, icon }) => (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-200 flex flex-col justify-between h-32">
+    <div className="bg-white p-6 rounded-xl shadow-sm border border-green-200 flex flex-col justify-between h-32">
         <div className="flex justify-between items-start"><h3 className="text-sm font-medium text-gray-500 uppercase">{title}</h3><div className="p-2 bg-gray-50 rounded-lg">{icon}</div></div>
         <div><div className="text-2xl font-bold text-gray-900">{value}</div><div className="text-xs font-medium text-gray-500 mt-1">{subtext}</div></div>
     </div>
 );
 
-const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete }) => (
-    <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className={`bg-${color}-50 px-6 py-4 border-b border-${color}-100 flex items-center gap-2`}>
-            <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
+const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete }) => {
+    const calculateWeeklyInterest = (principal, rate) => {
+        return (parseFloat(principal || 0) * parseFloat(rate || 0) / 100 / 52).toFixed(4);
+    };
+
+    return (
+        <div className="bg-white rounded-xl shadow-sm border border-green-200 overflow-hidden">
+            <div className={`bg-${color}-50 px-6 py-4 border-b border-green-200 flex items-center gap-2`}>
+                <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left">
+                    <thead className="bg-gray-50 text-gray-600 font-medium"><tr><th className="px-4 py-3">状态</th><th className="px-4 py-3">类型</th><th className="px-4 py-3">客户</th><th className="px-4 py-3 text-right">金额</th><th className="px-4 py-3 text-right">利息/周</th><th className="px-4 py-3">时间</th><th className="px-4 py-3 text-right">操作</th></tr></thead>
+                    <tbody className="divide-y divide-green-100">
+                        {data.map(row => {
+                            const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
+                            return (
+                                <tr key={row.id} className="hover:bg-gray-50">
+                                    <td className="px-4 py-3">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">待审</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">已拒绝</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">生效</span>}</td>
+                                    <td className="px-4 py-3 font-medium text-blue-600">{getTypeLabel(row.type)}</td>
+                                    <td className="px-4 py-3 font-medium">{row.client}</td>
+                                    <td className={`px-4 py-3 text-right font-mono font-bold ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</td>
+                                    <td className="px-4 py-3 text-right font-mono text-xs text-purple-600">{weeklyInterest}m</td>
+                                    <td className="px-4 py-3 text-xs text-gray-500">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
+                                    <td className="px-4 py-3 text-right">
+                                        {isAdmin ? (
+                                            <div className="flex justify-end gap-2">
+                                                <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-4 h-4"/></button>
+                                                <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
+                                            </div>
+                                        ) : <span className="text-gray-300">-</span>}
+                                    </td>
+                                </tr>
+                            );
+                        })}
+                        {data.length === 0 && <tr><td colSpan="7" className="px-6 py-4 text-center text-gray-400">暂无数据</td></tr>}
+                    </tbody>
+                </table>
+            </div>
         </div>
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-600 font-medium"><tr><th className="px-6 py-3">状态</th><th className="px-6 py-3">类型</th><th className="px-6 py-3">客户</th><th className="px-6 py-3 text-right">金额</th><th className="px-6 py-3 text-right">操作</th></tr></thead>
-                <tbody className="divide-y divide-gray-100">
-                    {data.map(row => (
-                        <tr key={row.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-3">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">待审</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">已拒绝</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">生效</span>}</td>
-                            <td className="px-6 py-3 font-medium text-blue-600">{getTypeLabel(row.type)}</td>
-                            <td className="px-6 py-3 font-medium">{row.client}</td>
-                            <td className={`px-6 py-3 text-right font-mono font-bold ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</td>
-                            <td className="px-6 py-3 text-right">
-                                {isAdmin ? (
-                                    <div className="flex justify-end gap-2">
-                                        <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-4 h-4"/></button>
-                                        <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
-                                    </div>
-                                ) : <span className="text-gray-300">-</span>}
-                            </td>
-                        </tr>
-                    ))}
-                    {data.length === 0 && <tr><td colSpan="5" className="px-6 py-4 text-center text-gray-400">暂无数据</td></tr>}
-                </tbody>
-            </table>
-        </div>
-    </div>
-);
+    );
+};
 
 export default App;
