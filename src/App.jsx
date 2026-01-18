@@ -12,25 +12,6 @@ import {
   getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken 
 } from 'firebase/auth';
 
-// --- 飞机 Logo SVG ---
-const PaperPlaneLogoSvg = () => (
-  <svg viewBox="0 0 200 200" className="w-16 h-16" xmlns="http://www.w3.org/2000/svg">
-    {/* 飞机主体 */}
-    <g transform="translate(100, 100)">
-      {/* 左翼 */}
-      <polygon points="0,0 -80,-40 -60,0" fill="#EF4444" opacity={0.9}/>
-      {/* 右翼 */}
-      <polygon points="0,0 80,-40 60,0" fill="#DC2626" opacity={0.95}/>
-      {/* 机身 */}
-      <polygon points="0,-20 -15,20 0,15 15,20" fill="#B91C1C"/>
-      {/* 尖头 */}
-      <polygon points="0,-30 -8,-20 0,-25 8,-20" fill="#7F1D1D"/>
-      {/* 阴影效果 */}
-      <polygon points="-60,0 -40,15 -50,10" fill="#991B1B" opacity={0.6}/>
-    </g>
-  </svg>
-);
-
 // ==========================================
 // 1. 智能环境配置 (Smart Configuration)
 // ==========================================
@@ -80,6 +61,19 @@ const getDocRef = (id) => {
   return doc(db, 'transactions', id);
 };
 
+// 事务类型中文映射
+const typeLabels = {
+  'loan': '贷款',
+  'injection': '注资',
+  'withdraw_inj': '撤资',
+  'deposit': '存款',
+  'withdraw_dep': '取款',
+  'interest_income': '利息收入',
+  'interest_expense': '利息支出'
+};
+
+const getTypeLabel = (type) => typeLabels[type] || type;
+
 // ==========================================
 // 2. 主应用程序 (Main App)
 // ==========================================
@@ -101,7 +95,9 @@ const App = () => {
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState('loan'); 
   const [formData, setFormData] = useState({ client: '', principal: '', rate: '' });
-  const [editId, setEditId] = useState(null); 
+  const [editId, setEditId] = useState(null);
+  const [nextSettleTime, setNextSettleTime] = useState('');
+  const [settleCountdown, setSettleCountdown] = useState(''); 
 
   // --- 初始化 Firebase Auth ---
   useEffect(() => {
@@ -149,8 +145,32 @@ const App = () => {
       }
     };
 
-    // 每分钟检查一次
-    const interval = setInterval(checkAndSettleInterest, 60000);
+    // 计算下一个周三12点
+    const calculateNextSettle = () => {
+      const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
+      let next = new Date(now);
+      const daysUntilWednesday = (3 - now.getDay() + 7) % 7 || 7;
+      next.setDate(next.getDate() + daysUntilWednesday);
+      next.setHours(12, 0, 0, 0);
+      return next;
+    };
+
+    const updateCountdown = () => {
+      const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
+      const next = calculateNextSettle();
+      const diff = next - now;
+      
+      if (diff > 0) {
+        const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+        const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+        const mins = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+        setSettleCountdown(`${days}天${hours}小时${mins}分钟`);
+      }
+    };
+
+    checkAndSettleInterest();
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 60000); // 每分钟更新
     return () => clearInterval(interval);
   }, [currentUser, transactions]);
 
@@ -419,9 +439,9 @@ const App = () => {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
         <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-300">
           <div className="text-center mb-8">
-            <PaperPlaneLogoSvg />
-            <h1 className="text-2xl font-bold text-slate-800 mt-4">EUU 超级投行</h1>
-            <p className="text-slate-500 mt-2 text-sm flex items-center justify-center gap-2">
+            <h1 className="text-4xl font-bold text-blue-600 mb-2">EUU</h1>
+            <p className="text-xl text-slate-600 font-semibold">超级投行</p>
+            <p className="text-slate-500 mt-3 text-sm flex items-center justify-center gap-2">
                <span className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : connectionStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'}`}></span>
                {connectionStatus === 'connected' ? '服务器已连接' : connectionStatus === 'connecting' ? '正在连接...' : '连接失败'}
             </p>
@@ -447,17 +467,12 @@ const App = () => {
       <div className="max-w-7xl mx-auto space-y-8">
         {/* 头部 */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-gray-200">
-          <div className="flex items-start gap-4">
-            <div className="flex-shrink-0">
-              <PaperPlaneLogoSvg />
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-2">
-                EUU 超级投行
-                {isAdmin && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">ADMIN</span>}
-              </h1>
-              <p className="text-slate-500 mt-1 text-sm">当前用户: <span className="font-bold">{currentUser.username}</span></p>
-            </div>
+          <div>
+            <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
+              <span className="text-blue-600 text-4xl font-bold">EUU</span> 超级投行
+              {isAdmin && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">ADMIN</span>}
+            </h1>
+            <p className="text-slate-500 mt-1 text-sm">当前用户: <span className="font-bold">{currentUser.username}</span></p>
           </div>
           <div className="flex flex-col items-end gap-2 mt-4 md:mt-0">
              <div className={`px-4 py-2 rounded-lg font-bold text-lg ${stats.netCashFlow >= -0.001 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -475,7 +490,7 @@ const App = () => {
                 {pendingTx.map(t => (
                   <div key={t.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
                      <div>
-                        <span className="font-bold mr-2">[{t.type}]</span> {t.client} - {formatMoney(t.principal)}
+                        <span className="font-bold mr-2">[{getTypeLabel(t.type)}]</span> {t.client} - {formatMoney(t.principal)}
                         <span className="text-xs text-gray-500 block">申请人: {t.createdBy}</span>
                      </div>
                      <div className="flex gap-2">
@@ -499,7 +514,7 @@ const App = () => {
             <Btn icon={PlusCircle} label="存款" onClick={() => openModal('deposit')} color="purple" />
             <Btn icon={MinusCircle} label="取款" onClick={() => openModal('withdraw_dep')} color="purple" />
             {isAdmin && <div className="h-6 w-px bg-gray-300 mx-2"></div>}
-            {isAdmin && <Btn icon={PlusCircle} label="结算利息" onClick={autoSettleInterest} color="amber" />}
+            {isAdmin && <Btn icon={PlusCircle} label={`手动结算 (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
         </div>
 
         {/* 统计卡片 */}
@@ -532,7 +547,7 @@ const App = () => {
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                 <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
                     <div className="flex justify-between items-center border-b pb-4">
-                        <h3 className="font-bold text-lg">{editId ? '编辑' : '新建'} {modalType}</h3>
+                        <h3 className="font-bold text-lg">{editId ? '编辑' : '新建'} {getTypeLabel(modalType)}</h3>
                         <button onClick={() => setModalOpen(false)}><X className="w-6 h-6 text-gray-400"/></button>
                     </div>
                     <form onSubmit={(e) => { e.preventDefault(); handleCRUD(editId ? 'update' : 'create', editId ? { id: editId, ...formData } : { ...formData, type: modalType }); }}>
@@ -573,11 +588,12 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
         </div>
         <div className="overflow-x-auto">
             <table className="w-full text-sm text-left">
-                <thead className="bg-gray-50 text-gray-600 font-medium"><tr><th className="px-6 py-3">状态</th><th className="px-6 py-3">客户</th><th className="px-6 py-3 text-right">金额</th><th className="px-6 py-3 text-right">操作</th></tr></thead>
+                <thead className="bg-gray-50 text-gray-600 font-medium"><tr><th className="px-6 py-3">状态</th><th className="px-6 py-3">类型</th><th className="px-6 py-3">客户</th><th className="px-6 py-3 text-right">金额</th><th className="px-6 py-3 text-right">操作</th></tr></thead>
                 <tbody className="divide-y divide-gray-100">
                     {data.map(row => (
                         <tr key={row.id} className="hover:bg-gray-50">
                             <td className="px-6 py-3">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">待审</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">已拒绝</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">生效</span>}</td>
+                            <td className="px-6 py-3 font-medium text-blue-600">{getTypeLabel(row.type)}</td>
                             <td className="px-6 py-3 font-medium">{row.client}</td>
                             <td className={`px-6 py-3 text-right font-mono font-bold ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</td>
                             <td className="px-6 py-3 text-right">
@@ -590,7 +606,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                             </td>
                         </tr>
                     ))}
-                    {data.length === 0 && <tr><td colSpan="4" className="px-6 py-4 text-center text-gray-400">暂无数据</td></tr>}
+                    {data.length === 0 && <tr><td colSpan="5" className="px-6 py-4 text-center text-gray-400">暂无数据</td></tr>}
                 </tbody>
             </table>
         </div>
