@@ -12,6 +12,25 @@ import {
   getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken 
 } from 'firebase/auth';
 
+// --- 飞机 Logo SVG ---
+const PaperPlaneLogoSvg = () => (
+  <svg viewBox="0 0 200 200" className="w-16 h-16" xmlns="http://www.w3.org/2000/svg">
+    {/* 飞机主体 */}
+    <g transform="translate(100, 100)">
+      {/* 左翼 */}
+      <polygon points="0,0 -80,-40 -60,0" fill="#EF4444" opacity={0.9}/>
+      {/* 右翼 */}
+      <polygon points="0,0 80,-40 60,0" fill="#DC2626" opacity={0.95}/>
+      {/* 机身 */}
+      <polygon points="0,-20 -15,20 0,15 15,20" fill="#B91C1C"/>
+      {/* 尖头 */}
+      <polygon points="0,-30 -8,-20 0,-25 8,-20" fill="#7F1D1D"/>
+      {/* 阴影效果 */}
+      <polygon points="-60,0 -40,15 -50,10" fill="#991B1B" opacity={0.6}/>
+    </g>
+  </svg>
+);
+
 // ==========================================
 // 1. 智能环境配置 (Smart Configuration)
 // ==========================================
@@ -114,6 +133,27 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
+  // --- 检查是否需要自动结算利息 (每周三中午12点) ---
+  useEffect(() => {
+    const checkAndSettleInterest = async () => {
+      if (!currentUser || !db) return;
+      
+      const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
+      const dayOfWeek = now.getDay(); // 0=周日，3=周三
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      
+      // 周三中午12点（检查是否在11:59-12:01分钟内）
+      if (dayOfWeek === 3 && hours === 12 && minutes >= 0 && minutes <= 1) {
+        await autoSettleInterest();
+      }
+    };
+
+    // 每分钟检查一次
+    const interval = setInterval(checkAndSettleInterest, 60000);
+    return () => clearInterval(interval);
+  }, [currentUser, transactions]);
+
   // --- 数据同步监听 ---
   useEffect(() => {
     if (!firebaseUser || !db) {
@@ -160,6 +200,57 @@ const App = () => {
       });
     } catch (e) { 
       console.error("Seeding admin failed:", e); 
+    }
+  };
+
+  // --- 自动结算利息 ---
+  const autoSettleInterest = async () => {
+    try {
+      const approved = transactions.filter(t => t.status === 'approved');
+      
+      // 计算各类型利息
+      const calc = (types) => approved
+        .filter(t => types.includes(t.type))
+        .reduce((acc, cur) => ({
+          total: acc.total + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100 / 52) // 周利息
+        }), { total: 0 });
+
+      const loanInterest = calc(['loan']).total;
+      const injectionInterest = calc(['injection']).total;
+      const depositInterest = calc(['deposit']).total;
+
+      // 生成利息结算记录
+      if (loanInterest > 0) {
+        await addDoc(getCollectionRef('transactions'), {
+          type: 'interest_income',
+          client: '利息收入',
+          principal: loanInterest,
+          rate: 0,
+          timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+          createdBy: 'System',
+          creatorId: 'system',
+          status: 'approved',
+          remark: '本周贷款利息自动结算'
+        });
+      }
+
+      if (injectionInterest + depositInterest > 0) {
+        await addDoc(getCollectionRef('transactions'), {
+          type: 'interest_expense',
+          client: '利息支出',
+          principal: injectionInterest + depositInterest,
+          rate: 0,
+          timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+          createdBy: 'System',
+          creatorId: 'system',
+          status: 'approved',
+          remark: '本周注资和存款利息自动结算'
+        });
+      }
+
+      console.log('✅ 自动结算利息成功');
+    } catch (e) {
+      console.error("自动结算利息失败:", e);
     }
   };
 
@@ -328,10 +419,8 @@ const App = () => {
       <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4 font-sans">
         <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-300">
           <div className="text-center mb-8">
-            <div className="bg-indigo-600 w-16 h-16 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-indigo-600/30">
-              <Shield className="w-8 h-8 text-white" />
-            </div>
-            <h1 className="text-2xl font-bold text-slate-800">EUU 超级投行</h1>
+            <PaperPlaneLogoSvg />
+            <h1 className="text-2xl font-bold text-slate-800 mt-4">EUU 超级投行</h1>
             <p className="text-slate-500 mt-2 text-sm flex items-center justify-center gap-2">
                <span className={`w-2 h-2 rounded-full ${connectionStatus === 'connected' ? 'bg-green-500' : connectionStatus === 'connecting' ? 'bg-yellow-500' : 'bg-red-500'}`}></span>
                {connectionStatus === 'connected' ? '服务器已连接' : connectionStatus === 'connecting' ? '正在连接...' : '连接失败'}
@@ -341,7 +430,7 @@ const App = () => {
             <input type="text" required placeholder="账号" value={authInput.username} onChange={e => setAuthInput({...authInput, username: e.target.value})} className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none" />
             <input type="password" required placeholder="密码" value={authInput.password} onChange={e => setAuthInput({...authInput, password: e.target.value})} className="w-full border border-slate-300 rounded-lg px-4 py-3 focus:ring-2 focus:ring-indigo-500 outline-none" />
             {authError && <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-center gap-2"><AlertCircle className="w-4 h-4"/>{authError}</div>}
-            <button disabled={connectionStatus !== 'connected'} type="submit" className="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-slate-400 text-white font-bold py-3 rounded-xl transition-all shadow-lg">{authMode === 'login' ? '登录' : '注册'}</button>
+            <button disabled={connectionStatus !== 'connected'} type="submit" className="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 text-white font-bold py-3 rounded-xl transition-all shadow-lg">{authMode === 'login' ? '登录' : '注册'}</button>
           </form>
           <div className="mt-6 text-center text-sm"><button onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }} className="text-indigo-600 hover:underline font-medium">{authMode === 'login' ? '没有账号？注册' : '返回登录'}</button></div>
         </div>
@@ -358,12 +447,17 @@ const App = () => {
       <div className="max-w-7xl mx-auto space-y-8">
         {/* 头部 */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-gray-200">
-          <div>
-            <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-2">
-              <Activity className="text-indigo-600" /> EUU 超级投行
-              {isAdmin && <span className="bg-red-100 text-red-700 text-xs px-2 py-1 rounded font-bold">ADMIN</span>}
-            </h1>
-            <p className="text-slate-500 mt-1 text-sm">当前用户: <span className="font-bold">{currentUser.username}</span></p>
+          <div className="flex items-start gap-4">
+            <div className="flex-shrink-0">
+              <PaperPlaneLogoSvg />
+            </div>
+            <div>
+              <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-2">
+                EUU 超级投行
+                {isAdmin && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">ADMIN</span>}
+              </h1>
+              <p className="text-slate-500 mt-1 text-sm">当前用户: <span className="font-bold">{currentUser.username}</span></p>
+            </div>
           </div>
           <div className="flex flex-col items-end gap-2 mt-4 md:mt-0">
              <div className={`px-4 py-2 rounded-lg font-bold text-lg ${stats.netCashFlow >= -0.001 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
@@ -404,28 +498,30 @@ const App = () => {
             <div className="h-6 w-px bg-gray-300 mx-2"></div>
             <Btn icon={PlusCircle} label="存款" onClick={() => openModal('deposit')} color="purple" />
             <Btn icon={MinusCircle} label="取款" onClick={() => openModal('withdraw_dep')} color="purple" />
+            {isAdmin && <div className="h-6 w-px bg-gray-300 mx-2"></div>}
+            {isAdmin && <Btn icon={PlusCircle} label="结算利息" onClick={autoSettleInterest} color="amber" />}
         </div>
 
         {/* 统计卡片 */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <StatCard title="总资产 (贷款)" value={formatMoney(stats.loanPrincipal)} subtext="已审核通过" icon={<ArrowUpRight className="text-green-500" />} />
+          <StatCard title="总资产 (贷款)" value={formatMoney(stats.loanPrincipal)} subtext="已审核通过" icon={<ArrowUpRight className="text-green-600" />} />
           <StatCard title="总负债 (注资+存款)" value={formatMoney(stats.liabilities)} subtext="已审核通过" icon={<ArrowDownLeft className="text-red-500" />} />
           <StatCard title="闲置资金" value={formatMoney(stats.idleCash)} subtext="可用余额" icon={<Wallet className="text-yellow-500" />} />
-          <StatCard title="审批队列" value={pendingTx.length} subtext="笔待处理" icon={<Shield className="text-indigo-500" />} />
+          <StatCard title="审批队列" value={pendingTx.length} subtext="笔待处理" icon={<Shield className="text-blue-600" />} />
         </div>
 
         {/* 表格区 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-           <TableSection title="贷款资产" color="green" icon={ArrowUpRight} 
+           <TableSection title="贷款资产" color="red" icon={ArrowUpRight} 
              data={displayTx.filter(t => t.type === 'loan')} 
              isAdmin={isAdmin} onEdit={(t) => openModal('loan', t)} onDelete={(id) => handleCRUD('delete', id)} />
            
            <div className="space-y-6">
-             <TableSection title="注资账户" color="blue" icon={ArrowDownLeft} 
+             <TableSection title="注资账户" color="orange" icon={ArrowDownLeft} 
                data={displayTx.filter(t => ['injection', 'withdraw_inj'].includes(t.type))} 
                isAdmin={isAdmin} onEdit={(t) => openModal(t.type, t)} onDelete={(id) => handleCRUD('delete', id)} />
              
-             <TableSection title="存款账户" color="purple" icon={Wallet} 
+             <TableSection title="存款账户" color="blue" icon={Wallet} 
                data={displayTx.filter(t => ['deposit', 'withdraw_dep'].includes(t.type))} 
                isAdmin={isAdmin} onEdit={(t) => openModal(t.type, t)} onDelete={(id) => handleCRUD('delete', id)} />
            </div>
@@ -441,12 +537,12 @@ const App = () => {
                     </div>
                     <form onSubmit={(e) => { e.preventDefault(); handleCRUD(editId ? 'update' : 'create', editId ? { id: editId, ...formData } : { ...formData, type: modalType }); }}>
                         <label className="block text-sm font-medium mb-1">客户/对象</label>
-                        <input type="text" required disabled={!isAdmin && !editId} value={formData.client} onChange={e => setFormData({...formData, client: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-indigo-500 disabled:bg-gray-100" />
+                        <input type="text" required disabled={!isAdmin && !editId} value={formData.client} onChange={e => setFormData({...formData, client: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100" />
                         <label className="block text-sm font-medium mb-1">金额 (m)</label>
-                        <input type="number" step="0.001" required value={formData.principal} onChange={e => setFormData({...formData, principal: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-indigo-500" />
+                        <input type="number" step="0.001" required value={formData.principal} onChange={e => setFormData({...formData, principal: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500" />
                         <label className="block text-sm font-medium mb-1">利率 (%)</label>
-                        <input type="number" step="0.1" required value={formData.rate} onChange={e => setFormData({...formData, rate: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-indigo-500" />
-                        <button type="submit" className="w-full bg-indigo-600 text-white font-bold py-2 rounded hover:bg-indigo-700">提交</button>
+                        <input type="number" step="0.1" required value={formData.rate} onChange={e => setFormData({...formData, rate: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500" />
+                        <button type="submit" className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">提交</button>
                     </form>
                 </div>
             </div>
