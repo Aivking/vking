@@ -280,7 +280,8 @@ const App = () => {
       const calc = (types) => approved
         .filter(t => types.includes(t.type))
         .reduce((acc, cur) => ({
-          total: acc.total + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100 / 52) // 周利息
+          // 周利息 = 本金 * 周利率%
+          total: acc.total + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100)
         }), { total: 0 });
 
       const loanInterest = calc(['loan']).total;
@@ -445,8 +446,8 @@ const App = () => {
     const totalRevenue = loans.i;
     const totalExpense = (injections.i - wInj.i) + (deposits.i - wDep.i);
 
-    // 计算利息池 (每周利息)
-    const interestPool = (totalRevenue - totalExpense) / 52;
+    // 计算利息池 (每周净利息，利率已按周计)
+    const interestPool = (totalRevenue - totalExpense);
 
     return {
       loanPrincipal: loans.p,
@@ -687,7 +688,7 @@ const StatCard = ({ title, value, subtext, icon }) => (
 
 const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete }) => {
     const calculateWeeklyInterest = (principal, rate) => {
-        return (parseFloat(principal || 0) * parseFloat(rate || 0) / 100 / 52).toFixed(4);
+      return (parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4);
     };
 
     return (
