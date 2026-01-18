@@ -700,6 +700,29 @@ const App = () => {
     tx.creatorId === currentUser.id || ['injection', 'withdraw_inj'].includes(tx.type)
   );
 
+  // K线图数据计算
+  const chartData = useMemo(() => {
+    const sorted = [...transactions].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+    const data = [];
+    let totalAsset = 0;
+    sorted.forEach(tx => {
+      if (tx.status === 'approved' && tx.type === 'loan') {
+        totalAsset += parseFloat(tx.principal) || 0;
+        data.push({
+          time: tx.timestamp ? tx.timestamp.split(' ')[0] : '未知',
+          value: totalAsset
+        });
+      }
+    });
+    // 按日期去重，只保留每天最后一条
+    const seen = new Set();
+    return data.reverse().filter(item => {
+      if (seen.has(item.time)) return false;
+      seen.add(item.time);
+      return true;
+    }).reverse().slice(-30);
+  }, [transactions]);
+
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -830,27 +853,7 @@ const App = () => {
             {language === 'zh' ? '总资产趋势 (K线图)' : 'Total Assets Trend (K-Line)'}
           </h2>
           <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={useMemo(() => {
-              const sorted = [...transactions].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
-              const data = [];
-              let totalAsset = 0;
-              sorted.forEach(tx => {
-                if (tx.status === 'approved' && tx.type === 'loan') {
-                  totalAsset += parseFloat(tx.principal) || 0;
-                  data.push({
-                    time: tx.timestamp ? tx.timestamp.split(' ')[0] : '未知',
-                    value: totalAsset
-                  });
-                }
-              });
-              // 按日期去重，只保留每天最后一条
-              const seen = new Set();
-              return data.reverse().filter(item => {
-                if (seen.has(item.time)) return false;
-                seen.add(item.time);
-                return true;
-              }).reverse().slice(-30);
-            }, [transactions])}>
+            <LineChart data={chartData}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
               <XAxis dataKey="time" stroke="#6b7280" style={{ fontSize: '12px' }} />
               <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
