@@ -888,55 +888,33 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
             <div className={`bg-${color}-50 px-6 py-4 border-b border-green-200 flex items-center gap-2`}>
                 <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
             </div>
-            {/* 统一卡片视图 - 避免横向滚动 */}
-            <div className="space-y-3 p-4 overflow-y-auto" style={{ maxHeight: '500px' }}>
-                {data.map(row => {
-                    const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
-                    return (
-                        <div key={row.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                            {/* 第一行：状态、类型、客户 */}
-                            <div className="flex justify-between items-start mb-3 gap-2">
-                                <div className="flex-1">
-                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('type')}</div>
-                                    <span className="font-bold text-blue-600">{getLocalizedTypeLabel(row.type)}</span>
-                                </div>
-                                <div className="flex-1">
-                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('client')}</div>
-                                    <div className="text-sm font-medium text-gray-700">{row.client}</div>
-                                </div>
-                                <div>
-                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('status')}</div>
-                                    {row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">{t('effective')}</span>}
-                                </div>
-                            </div>
-                            {/* 第二行：金额、周利息、时间、操作 */}
-                            <div className="grid grid-cols-4 gap-3 text-sm">
-                                <div>
-                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('amount')}</div>
-                                    <div className={`font-bold font-mono ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</div>
-                                </div>
-                                <div>
-                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('interestPerWeek')}</div>
-                                    <div className="font-mono text-xs text-purple-600">{weeklyInterest}m</div>
-                                </div>
-                                <div>
-                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('time')}</div>
-                                    <div className="text-xs text-gray-600">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</div>
-                                </div>
-                                {isAdmin && (
-                                    <div>
-                                        <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('actions')}</div>
-                                        <div className="flex gap-2">
-                                            <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-4 h-4"/></button>
-                                            <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
+            {/* 缩放表格 - 通过更紧凑的设计避免横向滚动 */}
+            <div className="overflow-y-auto" style={{ maxHeight: '500px', transform: 'scale(0.9)', transformOrigin: 'top left', width: '111.11%' }}>
+                <table className="w-full text-xs text-left">
+                    <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0"><tr><th className="px-2 py-2">{t('status')}</th><th className="px-2 py-2">{t('type')}</th><th className="px-2 py-2">{t('client')}</th><th className="px-2 py-2 text-right">{t('amount')}</th><th className="px-2 py-2 text-right">{t('interestPerWeek')}</th><th className="px-2 py-2">{t('time')}</th>{isAdmin && <th className="px-2 py-2 text-right">{t('actions')}</th>}</tr></thead>
+                    <tbody className="divide-y divide-green-100">
+                        {data.map(row => {
+                            const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
+                            return (
+                                <tr key={row.id} className="hover:bg-gray-50">
+                                    <td className="px-2 py-2">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
+                                    <td className="px-2 py-2 font-medium text-blue-600">{getLocalizedTypeLabel(row.type)}</td>
+                                    <td className="px-2 py-2 font-medium">{row.client}</td>
+                                    <td className={`px-2 py-2 text-right font-mono font-bold ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</td>
+                                    <td className="px-2 py-2 text-right font-mono text-xs text-purple-600">{weeklyInterest}m</td>
+                                    <td className="px-2 py-2 text-xs text-gray-500">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
+                                    {isAdmin && <td className="px-2 py-2 text-right">
+                                        <div className="flex justify-end gap-1">
+                                            <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-3.5 h-3.5"/></button>
+                                            <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5"/></button>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    );
-                })}
-                {data.length === 0 && <div className="text-center text-gray-400 py-8">{t('noData')}</div>}
+                                    </td>}
+                                </tr>
+                            );
+                        })}
+                        {data.length === 0 && <tr><td colSpan={isAdmin ? "7" : "6"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
+                    </tbody>
+                </table>
             </div>
         </div>
     );
