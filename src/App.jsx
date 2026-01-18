@@ -548,6 +548,41 @@ const App = () => {
   const handleCRUD = async (action, payload = null) => {
     try {
       if (action === 'create') {
+        // 验证撤资和取款的额度限制
+        if (payload.type === 'withdraw_inj') {
+          const injections = transactions.filter(tx => tx.status === 'approved' && ['injection'].includes(tx.type))
+            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+          const injInterest = transactions.filter(tx => tx.status === 'approved' && tx.type === 'injection')
+            .reduce((sum, tx) => sum + ((parseFloat(tx.principal) || 0) * (parseFloat(tx.rate) || 0) / 100), 0);
+          const withdrawnInj = transactions.filter(tx => tx.status === 'approved' && tx.type === 'withdraw_inj')
+            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+          const availableInj = injections + injInterest - withdrawnInj;
+          
+          if (injections === 0) {
+            return alert(language === 'zh' ? '没有注资记录，无法撤资！' : 'No injection records, cannot withdraw!');
+          }
+          if (parseFloat(payload.principal) > availableInj) {
+            return alert(language === 'zh' ? `撤资金额不得超过可用金额 ${availableInj.toFixed(3)}m (注资+利息-已撤资)` : `Withdrawal amount cannot exceed available ${availableInj.toFixed(3)}m`);
+          }
+        }
+        
+        if (payload.type === 'withdraw_dep') {
+          const deposits = transactions.filter(tx => tx.status === 'approved' && ['deposit'].includes(tx.type))
+            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+          const depInterest = transactions.filter(tx => tx.status === 'approved' && tx.type === 'deposit')
+            .reduce((sum, tx) => sum + ((parseFloat(tx.principal) || 0) * (parseFloat(tx.rate) || 0) / 100), 0);
+          const withdrawnDep = transactions.filter(tx => tx.status === 'approved' && tx.type === 'withdraw_dep')
+            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+          const availableDep = deposits + depInterest - withdrawnDep;
+          
+          if (deposits === 0) {
+            return alert(language === 'zh' ? '没有存款记录，无法取款！' : 'No deposit records, cannot withdraw!');
+          }
+          if (parseFloat(payload.principal) > availableDep) {
+            return alert(language === 'zh' ? `取款金额不得超过可用金额 ${availableDep.toFixed(3)}m (存款+利息-已取款)` : `Withdrawal amount cannot exceed available ${availableDep.toFixed(3)}m`);
+          }
+        }
+        
         const newItem = {
           ...payload,
           timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
