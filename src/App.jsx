@@ -675,12 +675,18 @@ const App = () => {
     // 计算利息池 (每周净利息，利率已按周计)
     const interestPool = (totalRevenue - totalExpense);
 
+    // 计算注资和存款账户的总余额（本金 - 撤资/取款 + 利息收入）
+    const injectionBalance = (injections.p - wInj.p) + (injections.i - wInj.i);
+    const depositBalance = (deposits.p - wDep.p) + (deposits.i - wDep.i);
+
     return {
       loanPrincipal: loans.p,
       liabilities: totalLiabilities,
       netCashFlow: totalRevenue - totalExpense,
       idleCash: totalLiabilities - loans.p,
-      interestPool: interestPool
+      interestPool: interestPool,
+      injectionBalance: injectionBalance,
+      depositBalance: depositBalance
     };
   }, [transactions]);
 
@@ -753,7 +759,7 @@ const App = () => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800 p-4 md:p-8 font-sans">
+    <div className="min-h-screen bg-[#FFFEF9] text-gray-800 p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
         {/* 头部 */}
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-green-200">
@@ -882,11 +888,33 @@ const App = () => {
              isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
            
            <div className="space-y-6">
+             {/* 注资账户总余额 */}
+             <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
+               <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-2">
+                   <ArrowDownLeft className="w-5 h-5 text-orange-700" />
+                   <span className="text-sm font-medium text-orange-700">{language === 'zh' ? '注资账户总余额' : 'Injection Balance'}</span>
+                 </div>
+                 <span className="text-2xl font-bold text-orange-900">{formatMoney(stats.injectionBalance)}</span>
+               </div>
+             </div>
+
              <TableSection title={t('injectionAccount')} color="orange" icon={ArrowDownLeft} 
-               data={displayTx.filter(tx => ['injection', 'withdraw_inj'].includes(tx.type))} 
+               data={displayTx.filter(tx => ['injection', 'withdraw_inj'].includes(tx.type))}
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
              
-             <TableSection title={t('depositAccount')} color="blue" icon={Wallet} 
+             {/* 存款账户总余额 */}
+             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200">
+               <div className="flex items-center justify-between">
+                 <div className="flex items-center gap-2">
+                   <Wallet className="w-5 h-5 text-blue-700" />
+                   <span className="text-sm font-medium text-blue-700">{language === 'zh' ? '存款账户总余额' : 'Deposit Balance'}</span>
+                 </div>
+                 <span className="text-2xl font-bold text-blue-900">{formatMoney(stats.depositBalance)}</span>
+               </div>
+             </div>
+
+             <TableSection title={t('depositAccount')} color="blue" icon={Wallet}
                data={displayTx.filter(tx => ['deposit', 'withdraw_dep'].includes(tx.type))} 
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
            </div>
