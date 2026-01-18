@@ -684,8 +684,13 @@ const App = () => {
     const personalWInj = calcPersonal(['withdraw_inj']);
     const personalWDep = calcPersonal(['withdraw_dep']);
     
-    const injectionBalance = (personalInjections.p - personalWInj.p) + (personalInjections.i - personalWInj.i);
-    const depositBalance = (personalDeposits.p - personalWDep.p) + (personalDeposits.i - personalWDep.i);
+    // 统计已结算的利息支出（可能有多次结算）
+    const settledInterestExpense = approved
+      .filter(tx => tx.type === 'interest_expense')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    
+    const injectionBalance = (personalInjections.p - personalWInj.p) + settledInterestExpense;
+    const depositBalance = (personalDeposits.p - personalWDep.p) + settledInterestExpense;
 
     return {
       loanPrincipal: loans.p,
