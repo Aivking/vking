@@ -3,6 +3,7 @@ import {
   Activity, Wallet, LogOut, Shield, CheckCircle, XCircle, 
   AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, Settings, PlusCircle, MinusCircle, X
 } from 'lucide-react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, 
@@ -694,7 +695,10 @@ const App = () => {
 
   const isAdmin = currentUser.role === 'admin';
   const pendingTx = transactions.filter(tx => tx.status === 'pending');
-  const displayTx = isAdmin ? transactions : transactions.filter(tx => tx.creatorId === currentUser.id);
+  // 注资账单公开所有人可见，其他账单仅显示自己的
+  const displayTx = isAdmin ? transactions : transactions.filter(tx => 
+    tx.creatorId === currentUser.id || ['injection', 'withdraw_inj'].includes(tx.type)
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 p-4 md:p-8 font-sans">
@@ -819,6 +823,46 @@ const App = () => {
           <StatCard title={t('approvalQueue')} value={pendingTx.length} subtext={t('pendingItems')} icon={<Shield className="text-blue-600" />} />
         </div>
 
+        {/* 资产趋势图 */}
+        <div className="bg-white rounded-xl shadow-sm border border-green-200 p-6">
+          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
+            <Activity className="w-5 h-5 text-green-600" />
+            {language === 'zh' ? '总资产趋势 (K线图)' : 'Total Assets Trend (K-Line)'}
+          </h2>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={useMemo(() => {
+              const sorted = [...transactions].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
+              const data = [];
+              let totalAsset = 0;
+              sorted.forEach(tx => {
+                if (tx.status === 'approved' && tx.type === 'loan') {
+                  totalAsset += parseFloat(tx.principal) || 0;
+                  data.push({
+                    time: tx.timestamp ? tx.timestamp.split(' ')[0] : '未知',
+                    value: totalAsset
+                  });
+                }
+              });
+              // 按日期去重，只保留每天最后一条
+              const seen = new Set();
+              return data.reverse().filter(item => {
+                if (seen.has(item.time)) return false;
+                seen.add(item.time);
+                return true;
+              }).reverse().slice(-30);
+            }, [transactions])}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+              <XAxis dataKey="time" stroke="#6b7280" style={{ fontSize: '12px' }} />
+              <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
+              <Tooltip 
+                contentStyle={{ backgroundColor: '#fff', border: '1px solid #10b981', borderRadius: '8px' }}
+                formatter={(value) => `${value.toFixed(3)}m`}
+              />
+              <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 4 }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
         {/* 表格区 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            <TableSection title={t('loanAssets')} color="red" icon={ArrowUpRight} 
@@ -885,9 +929,10 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
             <div className={`bg-${color}-50 px-6 py-4 border-b border-green-200 flex items-center gap-2`}>
                 <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
             </div>
-            <div className="overflow-x-auto">
+            {/* 桌面端表格视图 */}
+            <div className="hidden md:block overflow-y-auto" style={{ maxHeight: '500px' }}>
                 <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-gray-600 font-medium"><tr><th className="px-4 py-3">{t('status')}</th><th className="px-4 py-3">{t('type')}</th><th className="px-4 py-3">{t('client')}</th><th className="px-4 py-3 text-right">{t('amount')}</th><th className="px-4 py-3 text-right">{t('interestPerWeek')}</th><th className="px-4 py-3">{t('time')}</th><th className="px-4 py-3 text-right">{t('actions')}</th></tr></thead>
+                    <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0"><tr><th className="px-4 py-3">{t('status')}</th><th className="px-4 py-3">{t('type')}</th><th className="px-4 py-3">{t('client')}</th><th className="px-4 py-3 text-right">{t('amount')}</th><th className="px-4 py-3 text-right">{t('interestPerWeek')}</th><th className="px-4 py-3">{t('time')}</th><th className="px-4 py-3 text-right">{t('actions')}</th></tr></thead>
                     <tbody className="divide-y divide-green-100">
                         {data.map(row => {
                             const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
@@ -914,8 +959,37 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                     </tbody>
                 </table>
             </div>
+            {/* 移动端卡片视图 */}
+            <div className="md:hidden space-y-3 p-4 overflow-y-auto" style={{ maxHeight: '500px' }}>
+                {data.map(row => {
+                    const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
+                    return (
+                        <div key={row.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
+                            <div className="flex justify-between items-start mb-2">
+                                <div>
+                                    <span className="font-bold text-blue-600">{getLocalizedTypeLabel(row.type)}</span>
+                                    <span className="ml-2 text-sm font-medium text-gray-600">{row.client}</span>
+                                </div>
+                                {row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">{t('effective')}</span>}
+                            </div>
+                            <div className="grid grid-cols-3 gap-2 text-sm mb-3">
+                                <div><span className="text-gray-500">{t('amount')}</span><div className={`font-bold ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</div></div>
+                                <div><span className="text-gray-500">{t('interestPerWeek')}</span><div className="font-mono text-xs text-purple-600">{weeklyInterest}m</div></div>
+                                <div><span className="text-gray-500">{t('time')}</span><div className="text-xs text-gray-600">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</div></div>
+                            </div>
+                            {isAdmin && (
+                                <div className="flex gap-2 justify-end">
+                                    <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-4 h-4"/></button>
+                                    <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
+                                </div>
+                            )}
+                        </div>
+                    );
+                })}
+                {data.length === 0 && <div className="text-center text-gray-400 py-4">{t('noData')}</div>}
+            </div>
         </div>
     );
-};
+};;
 
 export default App;
