@@ -924,32 +924,14 @@ const App = () => {
            
            <div className="space-y-6">
              {/* 计算并直接传入各账户的结算次数 */}
-             {/* 注资账户总余额 */}
-             <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
-               <div className="flex items-center justify-between">
-                 <div className="flex items-center gap-2">
-                   <ArrowDownLeft className="w-5 h-5 text-orange-700" />
-                   <span className="text-sm font-medium text-orange-700">{language === 'zh' ? '注资账户总余额' : 'Injection Balance'}</span>
-                 </div>
-                 <span className="text-2xl font-bold text-orange-900">{formatMoney(stats.injectionBalance)}</span>
-               </div>
-             </div>
+             {/* 注资账户总余额 - 已按需求移除显示 */}
 
               <TableSection title={t('injectionAccount')} color="orange" icon={ArrowDownLeft} 
                 data={displayTx.filter(tx => ['injection', 'withdraw_inj'].includes(tx.type))}
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
                interestCycles={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出').length} />
              
-             {/* 存款账户总余额 */}
-             <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200">
-               <div className="flex items-center justify-between">
-                 <div className="flex items-center gap-2">
-                   <Wallet className="w-5 h-5 text-blue-700" />
-                   <span className="text-sm font-medium text-blue-700">{language === 'zh' ? '存款账户总余额' : 'Deposit Balance'}</span>
-                 </div>
-                 <span className="text-2xl font-bold text-blue-900">{formatMoney(stats.depositBalance)}</span>
-               </div>
-             </div>
+             {/* 存款账户总余额 - 已按需求移除显示 */}
 
               <TableSection title={t('depositAccount')} color="blue" icon={Wallet}
                 data={displayTx.filter(tx => ['deposit', 'withdraw_dep'].includes(tx.type))} 
