@@ -349,18 +349,8 @@ const App = () => {
       
       // 周三中午12点（检查是否在12:00-12:02分钟内）
       if (dayOfWeek === 3 && hours === 12 && minutes >= 0 && minutes <= 2) {
-        // 检查本周是否已经结算过（查看今天是否有利息结算记录）
-        const today = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
-        const todayStr = today.toLocaleDateString('zh-CN');
-        const hasSettledToday = transactions.some(tx => 
-          (tx.type === 'interest_income' || tx.type === 'interest_expense') && 
-          tx.createdBy === 'System' &&
-          tx.timestamp.includes(todayStr)
-        );
-        
-        if (!hasSettledToday) {
-          await autoSettleInterest();
-        }
+        // 每周三自动结算利息，不检查重复
+        await autoSettleInterest();
       }
     };
 
@@ -991,12 +981,13 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                             const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
                             const isInterestRecord = ['interest_income', 'interest_expense'].includes(row.type);
                             const isIncome = row.type === 'interest_income';
+                            const totalAmount = isInterestRecord ? parseFloat(row.principal) : (parseFloat(row.principal) + weeklyInterest);
                             return (
                                 <tr key={row.id} className={`hover:bg-gray-50 ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
                                     <td className="px-2 py-2">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
                                     <td className={`px-2 py-2 font-bold ${isIncome ? 'text-green-700' : 'text-orange-700'}`}>{getLocalizedTypeLabel(row.type)}</td>
                                     <td className="px-2 py-2 font-medium">{row.client}</td>
-                                    <td className={`px-2 py-2 text-right font-mono font-bold text-lg ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{parseFloat(row.principal).toFixed(3)}m</td>
+                                    <td className={`px-2 py-2 text-right font-mono font-bold text-lg ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{totalAmount.toFixed(3)}m</td>
                                     <td className="px-2 py-2 text-right font-mono text-xs text-purple-600">{isInterestRecord ? '-' : weeklyInterest + 'm'}</td>
                                     <td className="px-2 py-2 text-xs text-gray-500">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
                                     {isAdmin && <td className="px-2 py-2 text-right">
