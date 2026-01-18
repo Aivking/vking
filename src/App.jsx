@@ -919,19 +919,11 @@ const App = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            <TableSection title={t('loanAssets')} color="red" icon={ArrowUpRight} 
              data={displayTx.filter(tx => tx.type === 'loan')} 
-             isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
+             isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel}
+             interestCycles={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_income' && tx.client === '利息收入').length} />
            
            <div className="space-y-6">
-             {/* 计算各账户的结算次数 */}
-             {(() => {
-               // 统计注资/存款的利息结算记录次数（已批准）
-               const injectionInterestCycles = transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出').length;
-               const depositInterestCycles = transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出').length;
-               // 将值挂到闭包作用域外（通过局部常量传入组件）
-               // 使用立即执行函数返回片段以便在 JSX 中使用这些常量
-               window.__interestCycles = { injectionInterestCycles, depositInterestCycles };
-               return null;
-             })()}
+             {/* 计算并直接传入各账户的结算次数 */}
              {/* 注资账户总余额 */}
              <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
                <div className="flex items-center justify-between">
@@ -943,9 +935,10 @@ const App = () => {
                </div>
              </div>
 
-             <TableSection title={t('injectionAccount')} color="orange" icon={ArrowDownLeft} 
-               data={displayTx.filter(tx => ['injection', 'withdraw_inj'].includes(tx.type))}
-               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} interestCycles={window.__interestCycles?.injectionInterestCycles || 0} />
+              <TableSection title={t('injectionAccount')} color="orange" icon={ArrowDownLeft} 
+                data={displayTx.filter(tx => ['injection', 'withdraw_inj'].includes(tx.type))}
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
+               interestCycles={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出').length} />
              
              {/* 存款账户总余额 */}
              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200">
@@ -958,9 +951,10 @@ const App = () => {
                </div>
              </div>
 
-             <TableSection title={t('depositAccount')} color="blue" icon={Wallet}
-               data={displayTx.filter(tx => ['deposit', 'withdraw_dep'].includes(tx.type))} 
-               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} interestCycles={window.__interestCycles?.depositInterestCycles || 0} />
+              <TableSection title={t('depositAccount')} color="blue" icon={Wallet}
+                data={displayTx.filter(tx => ['deposit', 'withdraw_dep'].includes(tx.type))} 
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
+               interestCycles={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出').length} />
            </div>
         </div>
 
