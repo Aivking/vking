@@ -463,6 +463,7 @@ const App = () => {
       const injectionInterest = calc(['injection']);
       const depositInterest = calc(['deposit']);
       
+      let settledAmount = 0;
       let settledCount = 0;
 
       // 生成利息结算记录
@@ -478,6 +479,7 @@ const App = () => {
           status: 'approved',
           remark: '本周贷款利息自动结算'
         });
+        settledAmount += loanInterest;
         settledCount++;
       }
 
@@ -493,11 +495,15 @@ const App = () => {
           status: 'approved',
           remark: '本周注资和存款利息自动结算'
         });
+        settledAmount += (injectionInterest + depositInterest);
         settledCount++;
       }
 
       if (settledCount > 0) {
-        alert(language === 'zh' ? `✅ 结算成功！已生成 ${settledCount} 条利息记录` : `✅ Settlement successful! Generated ${settledCount} interest records`);
+        const msg = language === 'zh' 
+          ? `✅ 结算成功！\n收入: +${loanInterest.toFixed(3)}m\n支出: -${(injectionInterest + depositInterest).toFixed(3)}m\n共生成 ${settledCount} 条记录`
+          : `✅ Settlement successful!\nIncome: +${loanInterest.toFixed(3)}m\nExpense: -${(injectionInterest + depositInterest).toFixed(3)}m\nGenerated ${settledCount} records`;
+        alert(msg);
         console.log('✅ 自动结算利息成功');
       } else {
         alert(language === 'zh' ? '⚠️ 没有可结算的利息' : '⚠️ No interest to settle');
