@@ -300,7 +300,7 @@ const App = () => {
       sessionStorage.setItem('current_bank_user_v2', JSON.stringify(user));
       setAuthInput({ username: '', password: '' });
     } else {
-      setAuthError('账号或密码错误 (管理员: EUU / vkinga79)');
+      setAuthError('账号或密码错误');
     }
   };
 
