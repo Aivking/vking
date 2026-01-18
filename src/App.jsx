@@ -920,7 +920,7 @@ const App = () => {
            <TableSection title={t('loanAssets')} color="red" icon={ArrowUpRight} 
              data={displayTx.filter(tx => tx.type === 'loan')} 
              isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel}
-             interestCycles={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_income' && tx.client === '利息收入').length} />
+             interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_income')} applyInterest={true} />
            
            <div className="space-y-6">
              {/* 计算并直接传入各账户的结算次数 */}
@@ -929,14 +929,14 @@ const App = () => {
               <TableSection title={t('injectionAccount')} color="orange" icon={ArrowDownLeft} 
                 data={displayTx.filter(tx => ['injection', 'withdraw_inj'].includes(tx.type))}
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
-               interestCycles={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出').length} />
+               interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出')} applyInterest={true} />
              
              {/* 存款账户总余额 - 已按需求移除显示 */}
 
               <TableSection title={t('depositAccount')} color="blue" icon={Wallet}
                 data={displayTx.filter(tx => ['deposit', 'withdraw_dep'].includes(tx.type))} 
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
-               interestCycles={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出').length} />
+               interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出')} applyInterest={true} />
            </div>
         </div>
 
@@ -979,7 +979,7 @@ const StatCard = ({ title, value, subtext, icon }) => (
     </div>
 );
 
-const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, language, t, getLocalizedTypeLabel, interestCycles = 0 }) => {
+const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
     const calculateWeeklyInterest = (principal, rate) => {
       return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
     };
@@ -998,12 +998,21 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                             const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
                             const isInterestRecord = ['interest_income', 'interest_expense'].includes(row.type);
                             const isIncome = row.type === 'interest_income';
-                          // 对非利息记录，金额=本金 + 每周利息 * 已结算次数；撤资/取款保持原样
+                          // 计算该条记录参与的结算次数：仅统计在该记录时间之后发生的结算
+                          const rowTime = row.timestamp ? new Date(row.timestamp) : null;
+                          const cyclesForRow = (applyInterest && rowTime)
+                            ? interestRecords.filter(r => {
+                                if (!r.timestamp) return false;
+                                const rt = new Date(r.timestamp);
+                                return rt >= rowTime;
+                              }).length
+                            : 0;
+                          // 对非利息记录：金额 = 本金 + 每周利息 * 结算次数；撤资/取款保持原样
                           const totalAmount = isInterestRecord
                             ? parseFloat(row.principal || 0)
                             : (row.type.includes('withdraw')
                               ? parseFloat(row.principal || 0)
-                              : (parseFloat(row.principal || 0) + weeklyInterest * (parseInt(interestCycles, 10) || 0)));
+                              : (parseFloat(row.principal || 0) + weeklyInterest * cyclesForRow));
                             return (
                                 <tr key={row.id} className={`hover:bg-gray-50 ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
                                     <td className="px-2 py-2">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
