@@ -675,9 +675,22 @@ const App = () => {
     // 计算利息池 (每周净利息，利率已按周计)
     const interestPool = (totalRevenue - totalExpense);
 
-    // 计算注资和存款账户的总余额（本金 - 撤资/取款 + 利息收入）
-    const injectionBalance = (injections.p - wInj.p) + (injections.i - wInj.i);
-    const depositBalance = (deposits.p - wDep.p) + (deposits.i - wDep.i);
+    // 计算个人注资和存款账户的总余额（只统计当前用户的交易）
+    const userApproved = approved.filter(tx => tx.createdBy === currentUser?.username);
+    const calcPersonal = (types) => userApproved
+      .filter(tx => types.includes(tx.type))
+      .reduce((acc, cur) => ({
+        p: acc.p + (parseFloat(cur.principal) || 0),
+        i: acc.i + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100)
+      }), { p: 0, i: 0 });
+    
+    const personalInjections = calcPersonal(['injection']);
+    const personalDeposits = calcPersonal(['deposit']);
+    const personalWInj = calcPersonal(['withdraw_inj']);
+    const personalWDep = calcPersonal(['withdraw_dep']);
+    
+    const injectionBalance = (personalInjections.p - personalWInj.p) + (personalInjections.i - personalWInj.i);
+    const depositBalance = (personalDeposits.p - personalWDep.p) + (personalDeposits.i - personalWDep.i);
 
     return {
       loanPrincipal: loans.p,
@@ -688,7 +701,7 @@ const App = () => {
       injectionBalance: injectionBalance,
       depositBalance: depositBalance
     };
-  }, [transactions]);
+  }, [transactions, currentUser]);
 
   const formatMoney = (val) => `${parseFloat(val || 0).toFixed(3)}m`;
 
