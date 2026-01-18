@@ -481,7 +481,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                 <tbody className="divide-y divide-gray-100">
                     {data.map(row => (
                         <tr key={row.id} className="hover:bg-gray-50">
-                            <td className="px-6 py-3">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">待审</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">生效</span>}</td>
+                            <td className="px-6 py-3">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">待审</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">已拒绝</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">生效</span>}</td>
                             <td className="px-6 py-3 font-medium">{row.client}</td>
                             <td className={`px-6 py-3 text-right font-mono font-bold ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</td>
                             <td className="px-6 py-3 text-right">
