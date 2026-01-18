@@ -260,8 +260,22 @@ const App = () => {
   const [announcementInput, setAnnouncementInput] = useState('');
 
   // 翻译函数
-  const t = (key) => translations[language][key] || key;
-  const getLocalizedTypeLabel = (type) => translations[language].typeLabels[type] || type; 
+  const t = (key) => {
+    try {
+      return translations[language]?.[key] || key;
+    } catch (e) {
+      console.error('Translation error:', e, 'key:', key, 'language:', language);
+      return key;
+    }
+  };
+  const getLocalizedTypeLabel = (type) => {
+    try {
+      return translations[language]?.typeLabels?.[type] || type;
+    } catch (e) {
+      console.error('Type label error:', e, 'type:', type);
+      return type;
+    }
+  }; 
 
   // --- 初始化 Firebase Auth ---
   useEffect(() => {
