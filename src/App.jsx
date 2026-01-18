@@ -477,20 +477,37 @@ const App = () => {
         settledCount++;
       }
 
-      if (injectionInterest + depositInterest > 0) {
+      if (injectionInterest > 0) {
         await addDoc(getCollectionRef('transactions'), {
           type: 'interest_expense',
-          client: '利息支出',
-          principal: injectionInterest + depositInterest,
+          client: '注资利息支出',
+          principal: injectionInterest,
           rate: 0,
           timestamp: settleTime,
           createdBy: 'System',
           creatorId: 'system',
           status: 'approved',
-          settleId: settleId, // 用于标识本次结算
-          remark: '本周注资和存款利息自动结算'
+          settleId: settleId,
+          remark: '注资账户利息自动结算'
         });
-        settledAmount += (injectionInterest + depositInterest);
+        settledAmount += injectionInterest;
+        settledCount++;
+      }
+
+      if (depositInterest > 0) {
+        await addDoc(getCollectionRef('transactions'), {
+          type: 'interest_expense',
+          client: '存款利息支出',
+          principal: depositInterest,
+          rate: 0,
+          timestamp: settleTime,
+          createdBy: 'System',
+          creatorId: 'system',
+          status: 'approved',
+          settleId: settleId,
+          remark: '存款账户利息自动结算'
+        });
+        settledAmount += depositInterest;
         settledCount++;
       }
 
@@ -684,13 +701,17 @@ const App = () => {
     const personalWInj = calcPersonal(['withdraw_inj']);
     const personalWDep = calcPersonal(['withdraw_dep']);
     
-    // 统计已结算的利息支出（可能有多次结算）
-    const settledInterestExpense = approved
-      .filter(tx => tx.type === 'interest_expense')
+    // 统计已结算的利息支出（注资和存款分别统计）
+    const injectionSettledInterest = approved
+      .filter(tx => tx.type === 'interest_expense' && tx.client === '注资利息支出')
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
     
-    const injectionBalance = (personalInjections.p - personalWInj.p) + settledInterestExpense;
-    const depositBalance = (personalDeposits.p - personalWDep.p) + settledInterestExpense;
+    const depositSettledInterest = approved
+      .filter(tx => tx.type === 'interest_expense' && tx.client === '存款利息支出')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    
+    const injectionBalance = (personalInjections.p - personalWInj.p) + injectionSettledInterest;
+    const depositBalance = (personalDeposits.p - personalWDep.p) + depositSettledInterest;
 
     return {
       loanPrincipal: loans.p,
