@@ -455,6 +455,9 @@ const App = () => {
       
       let settledAmount = 0;
       let settledCount = 0;
+      
+      const settleTime = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+      const settleId = Date.now(); // 为本次结算生成唯一ID
 
       // 生成利息结算记录
       if (loanInterest > 0) {
@@ -463,10 +466,11 @@ const App = () => {
           client: '利息收入',
           principal: loanInterest,
           rate: 0,
-          timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+          timestamp: settleTime,
           createdBy: 'System',
           creatorId: 'system',
           status: 'approved',
+          settleId: settleId, // 用于标识本次结算
           remark: '本周贷款利息自动结算'
         });
         settledAmount += loanInterest;
@@ -479,10 +483,11 @@ const App = () => {
           client: '利息支出',
           principal: injectionInterest + depositInterest,
           rate: 0,
-          timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+          timestamp: settleTime,
           createdBy: 'System',
           creatorId: 'system',
           status: 'approved',
+          settleId: settleId, // 用于标识本次结算
           remark: '本周注资和存款利息自动结算'
         });
         settledAmount += (injectionInterest + depositInterest);
