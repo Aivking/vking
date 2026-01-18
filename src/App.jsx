@@ -3,7 +3,6 @@ import {
   Activity, Wallet, LogOut, Shield, CheckCircle, XCircle, 
   AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, Settings, PlusCircle, MinusCircle, X
 } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { initializeApp } from 'firebase/app';
 import { 
   getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, 
@@ -852,18 +851,21 @@ const App = () => {
             <Activity className="w-5 h-5 text-green-600" />
             {language === 'zh' ? '总资产趋势 (K线图)' : 'Total Assets Trend (K-Line)'}
           </h2>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={chartData}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-              <XAxis dataKey="time" stroke="#6b7280" style={{ fontSize: '12px' }} />
-              <YAxis stroke="#6b7280" style={{ fontSize: '12px' }} />
-              <Tooltip 
-                contentStyle={{ backgroundColor: '#fff', border: '1px solid #10b981', borderRadius: '8px' }}
-                formatter={(value) => `${value.toFixed(3)}m`}
-              />
-              <Line type="monotone" dataKey="value" stroke="#10b981" strokeWidth={2} dot={{ fill: '#10b981', r: 4 }} />
-            </LineChart>
-          </ResponsiveContainer>
+          <div className="overflow-x-auto">
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '250px', gap: '4px', paddingBottom: '20px', borderBottom: '2px solid #e5e7eb' }}>
+              {chartData.map((item, idx) => {
+                const maxValue = Math.max(...chartData.map(d => d.value || 0), 1);
+                const height = (item.value / maxValue) * 200;
+                return (
+                  <div key={idx} style={{ textAlign: 'center', flex: 1 }}>
+                    <div style={{ height: `${height}px`, backgroundColor: '#10b981', borderRadius: '4px 4px 0 0', marginBottom: '8px', transition: 'all 0.3s ease' }}></div>
+                    <div style={{ fontSize: '11px', color: '#6b7280', whiteSpace: 'nowrap' }}>{item.time}</div>
+                    <div style={{ fontSize: '10px', color: '#10b981', fontWeight: 'bold' }}>{item.value.toFixed(2)}m</div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* 表格区 */}
