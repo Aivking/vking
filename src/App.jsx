@@ -131,6 +131,8 @@ const translations = {
     client: '客户',
     amount: '金额',
     interestPerWeek: '利息/周',
+    settlementCount: '结算次数',
+    settlementCycles: '已结算次数',
     time: '时间',
     actions: '操作',
     pending: '待审',
@@ -202,6 +204,8 @@ const translations = {
     client: 'Client',
     amount: 'Amount',
     interestPerWeek: 'Interest/Week',
+    settlementCount: 'Settle Count',
+    settlementCycles: 'Settled Cycles',
     time: 'Time',
     actions: 'Actions',
     pending: 'Pending',
@@ -986,13 +990,19 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
 
     return (
         <div className="bg-white rounded-xl shadow-sm border border-green-200 overflow-hidden">
-            <div className={`bg-${color}-50 px-6 py-4 border-b border-green-200 flex items-center gap-2`}>
-                <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
+            <div className={`bg-${color}-50 px-6 py-4 border-b border-green-200 flex items-center justify-between`}>
+                <div className="flex items-center gap-2">
+                  <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-gray-500">{t('settlementCycles')}:</span>
+                  <span className="bg-white text-gray-700 border border-gray-200 text-xs px-2 py-1 rounded">{interestRecords.length}</span>
+                </div>
             </div>
             {/* 缩放表格 - 通过更紧凑的设计避免横向滚动 */}
             <div className="overflow-y-auto" style={{ maxHeight: '500px', transform: 'scale(0.9)', transformOrigin: 'top left', width: '111.11%' }}>
                 <table className="w-full text-xs text-left">
-                    <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0"><tr><th className="px-2 py-2">{t('status')}</th><th className="px-2 py-2">{t('type')}</th><th className="px-2 py-2">{t('client')}</th><th className="px-2 py-2 text-right">{t('amount')}</th><th className="px-2 py-2 text-right">{t('interestPerWeek')}</th><th className="px-2 py-2">{t('time')}</th>{isAdmin && <th className="px-2 py-2 text-right">{t('actions')}</th>}</tr></thead>
+                    <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0"><tr><th className="px-2 py-2">{t('status')}</th><th className="px-2 py-2">{t('type')}</th><th className="px-2 py-2">{t('client')}</th><th className="px-2 py-2 text-right">{t('amount')}</th><th className="px-2 py-2 text-right">{t('interestPerWeek')}</th><th className="px-2 py-2 text-right">{t('settlementCount')}</th><th className="px-2 py-2">{t('time')}</th>{isAdmin && <th className="px-2 py-2 text-right">{t('actions')}</th>}</tr></thead>
                     <tbody className="divide-y divide-green-100">
                         {data.map(row => {
                             const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
@@ -1020,6 +1030,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                                     <td className="px-2 py-2 font-medium">{row.client}</td>
                                     <td className={`px-2 py-2 text-right font-mono font-bold text-lg ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m</td>
                                     <td className="px-2 py-2 text-right font-mono text-xs text-purple-600">{isInterestRecord ? '-' : (weeklyInterest || 0).toFixed(4) + 'm'}</td>
+                                    <td className="px-2 py-2 text-right font-mono text-xs text-gray-600">{cyclesForRow}</td>
                                     <td className="px-2 py-2 text-xs text-gray-500">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
                                     {isAdmin && <td className="px-2 py-2 text-right">
                                         <div className="flex justify-end gap-1">
@@ -1030,7 +1041,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                                 </tr>
                             );
                         })}
-                        {data.length === 0 && <tr><td colSpan={isAdmin ? "7" : "6"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
+                        {data.length === 0 && <tr><td colSpan={isAdmin ? "8" : "7"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
                     </tbody>
                 </table>
             </div>
