@@ -822,17 +822,17 @@ const App = () => {
         {/* 表格区 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            <TableSection title={t('loanAssets')} color="red" icon={ArrowUpRight} 
-             data={displayTx.filter(t => t.type === 'loan')} 
-             isAdmin={isAdmin} onEdit={(t) => openModal('loan', t)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
+             data={displayTx.filter(tx => tx.type === 'loan')} 
+             isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
            
            <div className="space-y-6">
              <TableSection title={t('injectionAccount')} color="orange" icon={ArrowDownLeft} 
-               data={displayTx.filter(t => ['injection', 'withdraw_inj'].includes(t.type))} 
-               isAdmin={isAdmin} onEdit={(t) => openModal(t.type, t)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
+               data={displayTx.filter(tx => ['injection', 'withdraw_inj'].includes(tx.type))} 
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
              
              <TableSection title={t('depositAccount')} color="blue" icon={Wallet} 
-               data={displayTx.filter(t => ['deposit', 'withdraw_dep'].includes(t.type))} 
-               isAdmin={isAdmin} onEdit={(t) => openModal(t.type, t)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
+               data={displayTx.filter(tx => ['deposit', 'withdraw_dep'].includes(tx.type))} 
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
            </div>
         </div>
 
