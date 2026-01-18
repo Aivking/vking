@@ -888,67 +888,58 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
             <div className={`bg-${color}-50 px-6 py-4 border-b border-green-200 flex items-center gap-2`}>
                 <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
             </div>
-            {/* 桌面端表格视图 */}
-            <div className="hidden md:block overflow-y-auto" style={{ maxHeight: '500px' }}>
-                <table className="w-full text-sm text-left">
-                    <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0"><tr><th className="px-4 py-3">{t('status')}</th><th className="px-4 py-3">{t('type')}</th><th className="px-4 py-3">{t('client')}</th><th className="px-4 py-3 text-right">{t('amount')}</th><th className="px-4 py-3 text-right">{t('interestPerWeek')}</th><th className="px-4 py-3">{t('time')}</th><th className="px-4 py-3 text-right">{t('actions')}</th></tr></thead>
-                    <tbody className="divide-y divide-green-100">
-                        {data.map(row => {
-                            const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
-                            return (
-                                <tr key={row.id} className="hover:bg-gray-50">
-                                    <td className="px-4 py-3">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">{t('effective')}</span>}</td>
-                                    <td className="px-4 py-3 font-medium text-blue-600">{getLocalizedTypeLabel(row.type)}</td>
-                                    <td className="px-4 py-3 font-medium">{row.client}</td>
-                                    <td className={`px-4 py-3 text-right font-mono font-bold ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</td>
-                                    <td className="px-4 py-3 text-right font-mono text-xs text-purple-600">{weeklyInterest}m</td>
-                                    <td className="px-4 py-3 text-xs text-gray-500">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
-                                    <td className="px-4 py-3 text-right">
-                                        {isAdmin ? (
-                                            <div className="flex justify-end gap-2">
-                                                <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-4 h-4"/></button>
-                                                <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
-                                            </div>
-                                        ) : <span className="text-gray-300">-</span>}
-                                    </td>
-                                </tr>
-                            );
-                        })}
-                        {data.length === 0 && <tr><td colSpan="7" className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
-                    </tbody>
-                </table>
-            </div>
-            {/* 移动端卡片视图 */}
-            <div className="md:hidden space-y-3 p-4 overflow-y-auto" style={{ maxHeight: '500px' }}>
+            {/* 统一卡片视图 - 避免横向滚动 */}
+            <div className="space-y-3 p-4 overflow-y-auto" style={{ maxHeight: '500px' }}>
                 {data.map(row => {
                     const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
                     return (
                         <div key={row.id} className="border border-gray-200 rounded-lg p-4 bg-gray-50">
-                            <div className="flex justify-between items-start mb-2">
-                                <div>
+                            {/* 第一行：状态、类型、客户 */}
+                            <div className="flex justify-between items-start mb-3 gap-2">
+                                <div className="flex-1">
+                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('type')}</div>
                                     <span className="font-bold text-blue-600">{getLocalizedTypeLabel(row.type)}</span>
-                                    <span className="ml-2 text-sm font-medium text-gray-600">{row.client}</span>
                                 </div>
-                                {row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">{t('effective')}</span>}
-                            </div>
-                            <div className="grid grid-cols-3 gap-2 text-sm mb-3">
-                                <div><span className="text-gray-500">{t('amount')}</span><div className={`font-bold ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</div></div>
-                                <div><span className="text-gray-500">{t('interestPerWeek')}</span><div className="font-mono text-xs text-purple-600">{weeklyInterest}m</div></div>
-                                <div><span className="text-gray-500">{t('time')}</span><div className="text-xs text-gray-600">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</div></div>
-                            </div>
-                            {isAdmin && (
-                                <div className="flex gap-2 justify-end">
-                                    <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-4 h-4"/></button>
-                                    <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
+                                <div className="flex-1">
+                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('client')}</div>
+                                    <div className="text-sm font-medium text-gray-700">{row.client}</div>
                                 </div>
-                            )}
+                                <div>
+                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('status')}</div>
+                                    {row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-2 py-1 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-2 py-1 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-2 py-1 rounded text-xs">{t('effective')}</span>}
+                                </div>
+                            </div>
+                            {/* 第二行：金额、周利息、时间、操作 */}
+                            <div className="grid grid-cols-4 gap-3 text-sm">
+                                <div>
+                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('amount')}</div>
+                                    <div className={`font-bold font-mono ${row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800'}`}>{row.type.includes('withdraw') ? '-' : '+'}{parseFloat(row.principal).toFixed(3)}m</div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('interestPerWeek')}</div>
+                                    <div className="font-mono text-xs text-purple-600">{weeklyInterest}m</div>
+                                </div>
+                                <div>
+                                    <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('time')}</div>
+                                    <div className="text-xs text-gray-600">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</div>
+                                </div>
+                                {isAdmin && (
+                                    <div>
+                                        <div className="text-xs font-semibold text-gray-500 uppercase mb-1">{t('actions')}</div>
+                                        <div className="flex gap-2">
+                                            <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-4 h-4"/></button>
+                                            <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-4 h-4"/></button>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     );
                 })}
-                {data.length === 0 && <div className="text-center text-gray-400 py-4">{t('noData')}</div>}
+                {data.length === 0 && <div className="text-center text-gray-400 py-8">{t('noData')}</div>}
             </div>
         </div>
     );
-};;
+};;;
 
 export default App;
