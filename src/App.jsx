@@ -352,10 +352,10 @@ const App = () => {
         // 检查本周是否已经结算过（查看今天是否有利息结算记录）
         const today = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
         const todayStr = today.toLocaleDateString('zh-CN');
-        const hasSettledToday = transactions.some(t => 
-          (t.type === 'interest_income' || t.type === 'interest_expense') && 
-          t.createdBy === 'System' &&
-          t.timestamp.includes(todayStr)
+        const hasSettledToday = transactions.some(tx => 
+          (tx.type === 'interest_income' || tx.type === 'interest_expense') && 
+          tx.createdBy === 'System' &&
+          tx.timestamp.includes(todayStr)
         );
         
         if (!hasSettledToday) {
@@ -447,11 +447,11 @@ const App = () => {
   // --- 自动结算利息 ---
   const autoSettleInterest = async () => {
     try {
-      const approved = transactions.filter(t => t.status === 'approved');
+      const approved = transactions.filter(tx => tx.status === 'approved');
       
       // 计算各类型利息
       const calc = (types) => approved
-        .filter(t => types.includes(t.type))
+        .filter(tx => types.includes(tx.type))
         .reduce((acc, cur) => ({
           // 周利息 = 本金 * 周利率%
           total: acc.total + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100)
@@ -600,10 +600,10 @@ const App = () => {
 
   // --- 统计 ---
   const stats = useMemo(() => {
-    const approved = transactions.filter(t => t.status === 'approved');
+    const approved = transactions.filter(tx => tx.status === 'approved');
     
     const calc = (types) => approved
-      .filter(t => types.includes(t.type))
+      .filter(tx => types.includes(tx.type))
       .reduce((acc, cur) => ({
         p: acc.p + (parseFloat(cur.principal) || 0),
         i: acc.i + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100)
