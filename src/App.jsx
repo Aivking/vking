@@ -693,8 +693,8 @@ const App = () => {
   }
 
   const isAdmin = currentUser.role === 'admin';
-  const pendingTx = transactions.filter(t => t.status === 'pending');
-  const displayTx = isAdmin ? transactions : transactions.filter(t => t.creatorId === currentUser.id);
+  const pendingTx = transactions.filter(tx => tx.status === 'pending');
+  const displayTx = isAdmin ? transactions : transactions.filter(tx => tx.creatorId === currentUser.id);
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 p-4 md:p-8 font-sans">
@@ -780,15 +780,15 @@ const App = () => {
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 shadow-sm">
              <h3 className="text-lg font-bold text-amber-800 flex items-center gap-2 mb-4"><AlertCircle className="w-5 h-5"/> {t('pendingApproval')} ({pendingTx.length})</h3>
              <div className="grid gap-3">
-                {pendingTx.map(t => (
-                  <div key={t.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
+                {pendingTx.map(tx => (
+                  <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
                      <div>
-                        <span className="font-bold mr-2">[{getLocalizedTypeLabel(t.type)}]</span> {t.client} - {formatMoney(t.principal)}
-                        <span className="text-xs text-gray-500 block">{t('applicant')}: {t.createdBy}</span>
+                        <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type)}]</span> {tx.client} - {formatMoney(tx.principal)}
+                        <span className="text-xs text-gray-500 block">{t('applicant')}: {tx.createdBy}</span>
                      </div>
                      <div className="flex gap-2">
-                        <button onClick={() => handleCRUD('approve', t.id)} className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200"><CheckCircle className="w-4 h-4"/></button>
-                        <button onClick={() => handleCRUD('reject', t.id)} className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"><XCircle className="w-4 h-4"/></button>
+                        <button onClick={() => handleCRUD('approve', tx.id)} className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200"><CheckCircle className="w-4 h-4"/></button>
+                        <button onClick={() => handleCRUD('reject', tx.id)} className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"><XCircle className="w-4 h-4"/></button>
                      </div>
                   </div>
                 ))}
