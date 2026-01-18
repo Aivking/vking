@@ -699,35 +699,6 @@ const App = () => {
     tx.creatorId === currentUser.id || ['injection', 'withdraw_inj'].includes(tx.type)
   );
 
-  // K线图数据计算
-  const chartData = useMemo(() => {
-    try {
-      const sorted = [...transactions].sort((a, b) => (a.timestamp || '').localeCompare(b.timestamp || ''));
-      const data = [];
-      let totalAsset = 0;
-      sorted.forEach(tx => {
-        if (tx && tx.status === 'approved' && tx.type === 'loan') {
-          totalAsset += parseFloat(tx.principal) || 0;
-          data.push({
-            time: tx.timestamp ? tx.timestamp.split(' ')[0] : '未知',
-            value: Math.max(totalAsset, 0)
-          });
-        }
-      });
-      // 按日期去重，只保留每天最后一条
-      const seen = new Set();
-      const filtered = data.reverse().filter(item => {
-        if (seen.has(item.time)) return false;
-        seen.add(item.time);
-        return true;
-      }).reverse().slice(-30);
-      return filtered.length > 0 ? filtered : [{ time: '暂无数据', value: 0 }];
-    } catch (e) {
-      console.error('Chart data error:', e);
-      return [{ time: '错误', value: 0 }];
-    }
-  }, [transactions]);
-
   return (
     <div className="min-h-screen bg-gray-50 text-gray-800 p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -849,36 +820,6 @@ const App = () => {
           <StatCard title={t('idleFunds')} value={formatMoney(stats.idleCash)} subtext={t('availableBalance')} icon={<Wallet className="text-yellow-500" />} />
           <StatCard title={t('interestPool')} value={formatMoney(stats.interestPool)} subtext={t('weeklyNetInterest')} icon={<Activity className="text-purple-600" />} />
           <StatCard title={t('approvalQueue')} value={pendingTx.length} subtext={t('pendingItems')} icon={<Shield className="text-blue-600" />} />
-        </div>
-
-        {/* 资产趋势图 */}
-        <div className="bg-white rounded-xl shadow-sm border border-green-200 p-6">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 flex items-center gap-2">
-            <Activity className="w-5 h-5 text-green-600" />
-            {language === 'zh' ? '总资产趋势 (K线图)' : 'Total Assets Trend (K-Line)'}
-          </h2>
-          {chartData && chartData.length > 0 ? (
-            <div className="overflow-x-auto">
-              <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-around', height: '250px', gap: '4px', paddingBottom: '20px', borderBottom: '2px solid #e5e7eb', minWidth: '100%' }}>
-                {chartData.map((item, idx) => {
-                  if (!item) return null;
-                  const maxValue = Math.max(...chartData.filter(d => d && typeof d.value === 'number').map(d => d.value || 0), 1);
-                  const height = Math.max((item.value / maxValue) * 200, 5);
-                  return (
-                    <div key={`chart-${idx}`} style={{ textAlign: 'center', flex: 1, minWidth: '40px' }}>
-                      <div style={{ height: `${height}px`, backgroundColor: '#10b981', borderRadius: '4px 4px 0 0', marginBottom: '8px' }}></div>
-                      <div style={{ fontSize: '11px', color: '#6b7280' }}>{String(item.time || '-').substring(0, 10)}</div>
-                      <div style={{ fontSize: '10px', color: '#10b981', fontWeight: 'bold' }}>{Number(item.value || 0).toFixed(2)}m</div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ) : (
-            <div style={{ textAlign: 'center', padding: '40px', color: '#9ca3af' }}>
-              {language === 'zh' ? '暂无数据' : 'No Data'}
-            </div>
-          )}
         </div>
 
         {/* 表格区 */}
