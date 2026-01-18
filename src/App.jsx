@@ -449,17 +449,21 @@ const App = () => {
     try {
       const approved = transactions.filter(tx => tx.status === 'approved');
       
-      // 计算各类型利息
-      const calc = (types) => approved
-        .filter(tx => types.includes(tx.type))
-        .reduce((acc, cur) => ({
-          // 周利息 = 本金 * 周利率%
-          total: acc.total + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100)
-        }), { total: 0 });
+      // 计算各类型利息 - 修复累加逻辑
+      const calc = (types) => {
+        const result = approved
+          .filter(tx => types.includes(tx.type))
+          .reduce((acc, cur) => {
+            return acc + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100);
+          }, 0);
+        return result;
+      };
 
-      const loanInterest = calc(['loan']).total;
-      const injectionInterest = calc(['injection']).total;
-      const depositInterest = calc(['deposit']).total;
+      const loanInterest = calc(['loan']);
+      const injectionInterest = calc(['injection']);
+      const depositInterest = calc(['deposit']);
+      
+      let settledCount = 0;
 
       // 生成利息结算记录
       if (loanInterest > 0) {
@@ -474,6 +478,7 @@ const App = () => {
           status: 'approved',
           remark: '本周贷款利息自动结算'
         });
+        settledCount++;
       }
 
       if (injectionInterest + depositInterest > 0) {
@@ -488,11 +493,18 @@ const App = () => {
           status: 'approved',
           remark: '本周注资和存款利息自动结算'
         });
+        settledCount++;
       }
 
-      console.log('✅ 自动结算利息成功');
+      if (settledCount > 0) {
+        alert(language === 'zh' ? `✅ 结算成功！已生成 ${settledCount} 条利息记录` : `✅ Settlement successful! Generated ${settledCount} interest records`);
+        console.log('✅ 自动结算利息成功');
+      } else {
+        alert(language === 'zh' ? '⚠️ 没有可结算的利息' : '⚠️ No interest to settle');
+      }
     } catch (e) {
       console.error("自动结算利息失败:", e);
+      alert(language === 'zh' ? `❌ 结算失败: ${e.message}` : `❌ Settlement failed: ${e.message}`);
     }
   };
 
