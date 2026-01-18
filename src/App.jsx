@@ -922,6 +922,16 @@ const App = () => {
              isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
            
            <div className="space-y-6">
+             {/* 计算各账户的结算次数 */}
+             {(() => {
+               // 统计注资/存款的利息结算记录次数（已批准）
+               const injectionInterestCycles = transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出').length;
+               const depositInterestCycles = transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出').length;
+               // 将值挂到闭包作用域外（通过局部常量传入组件）
+               // 使用立即执行函数返回片段以便在 JSX 中使用这些常量
+               window.__interestCycles = { injectionInterestCycles, depositInterestCycles };
+               return null;
+             })()}
              {/* 注资账户总余额 */}
              <div className="bg-gradient-to-r from-orange-50 to-amber-50 rounded-xl p-4 border-2 border-orange-200">
                <div className="flex items-center justify-between">
@@ -935,7 +945,7 @@ const App = () => {
 
              <TableSection title={t('injectionAccount')} color="orange" icon={ArrowDownLeft} 
                data={displayTx.filter(tx => ['injection', 'withdraw_inj'].includes(tx.type))}
-               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} interestCycles={window.__interestCycles?.injectionInterestCycles || 0} />
              
              {/* 存款账户总余额 */}
              <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border-2 border-blue-200">
@@ -950,7 +960,7 @@ const App = () => {
 
              <TableSection title={t('depositAccount')} color="blue" icon={Wallet}
                data={displayTx.filter(tx => ['deposit', 'withdraw_dep'].includes(tx.type))} 
-               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} />
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} interestCycles={window.__interestCycles?.depositInterestCycles || 0} />
            </div>
         </div>
 
@@ -993,7 +1003,7 @@ const StatCard = ({ title, value, subtext, icon }) => (
     </div>
 );
 
-const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, language, t, getLocalizedTypeLabel }) => {
+const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, language, t, getLocalizedTypeLabel, interestCycles = 0 }) => {
     const calculateWeeklyInterest = (principal, rate) => {
       return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
     };
@@ -1012,7 +1022,12 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                             const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
                             const isInterestRecord = ['interest_income', 'interest_expense'].includes(row.type);
                             const isIncome = row.type === 'interest_income';
-                            const totalAmount = isInterestRecord ? parseFloat(row.principal || 0) : (parseFloat(row.principal || 0) + weeklyInterest);
+                          // 对非利息记录，金额=本金 + 每周利息 * 已结算次数；撤资/取款保持原样
+                          const totalAmount = isInterestRecord
+                            ? parseFloat(row.principal || 0)
+                            : (row.type.includes('withdraw')
+                              ? parseFloat(row.principal || 0)
+                              : (parseFloat(row.principal || 0) + weeklyInterest * (parseInt(interestCycles, 10) || 0)));
                             return (
                                 <tr key={row.id} className={`hover:bg-gray-50 ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
                                     <td className="px-2 py-2">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
