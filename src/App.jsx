@@ -97,7 +97,12 @@ const App = () => {
   const [formData, setFormData] = useState({ client: '', principal: '', rate: '' });
   const [editId, setEditId] = useState(null);
   const [nextSettleTime, setNextSettleTime] = useState('');
-  const [settleCountdown, setSettleCountdown] = useState(''); 
+  const [settleCountdown, setSettleCountdown] = useState('');
+  
+  // 公告栏 State
+  const [announcement, setAnnouncement] = useState({ id: '', content: '' });
+  const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
+  const [announcementInput, setAnnouncementInput] = useState(''); 
 
   // --- 初始化 Firebase Auth ---
   useEffect(() => {
@@ -216,12 +221,25 @@ const App = () => {
       if (data.length === 0) seedAdminUser();
     });
 
+    // 监听公告
+    const announcementQuery = query(getCollectionRef('announcements'));
+    const unsubAnnouncement = onSnapshot(announcementQuery, (snapshot) => {
+      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      if (data.length > 0) {
+        setAnnouncement(data[0]);
+      } else {
+        // 创建默认公告
+        addDoc(getCollectionRef('announcements'), { content: '欢迎使用 EUU 超级投行系统' });
+      }
+    });
+
     const savedUser = sessionStorage.getItem('current_bank_user_v2');
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
 
     return () => { 
       unsubTx(); 
-      unsubUsers(); 
+      unsubUsers();
+      unsubAnnouncement(); 
     };
   }, [firebaseUser]);
 
@@ -235,6 +253,21 @@ const App = () => {
       });
     } catch (e) { 
       console.error("Seeding admin failed:", e); 
+    }
+  };
+
+  // --- 更新公告 ---
+  const handleUpdateAnnouncement = async () => {
+    if (!announcement.id || !announcementInput.trim()) return;
+    try {
+      await updateDoc(doc(db, 'announcements', announcement.id), {
+        content: announcementInput,
+        updatedAt: new Date().toISOString()
+      });
+      setIsEditingAnnouncement(false);
+      setAnnouncementInput('');
+    } catch (e) {
+      console.error('更新公告失败:', e);
     }
   };
 
@@ -498,6 +531,57 @@ const App = () => {
                 净现金流: {stats.netCashFlow > 0 ? '+' : ''}{formatMoney(stats.netCashFlow)} / 周
               </div>
             <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-red-600 flex items-center gap-1"><LogOut className="w-4 h-4" /> 退出登录</button>
+          </div>
+        </div>
+
+        {/* 公告栏 */}
+        <div className="bg-gradient-to-r from-blue-500 to-purple-600 rounded-xl shadow-lg p-4 border-2 border-blue-300">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 flex-1">
+              <div className="bg-white/20 p-2 rounded-lg">
+                <Activity className="w-6 h-6 text-white" />
+              </div>
+              {isEditingAnnouncement ? (
+                <input 
+                  type="text" 
+                  value={announcementInput} 
+                  onChange={(e) => setAnnouncementInput(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && handleUpdateAnnouncement()}
+                  className="flex-1 px-4 py-2 rounded-lg border-2 border-white/30 bg-white/90 text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-white"
+                  placeholder="输入公告内容..."
+                  autoFocus
+                />
+              ) : (
+                <p className="text-white text-lg font-bold flex-1">{announcement.content || '暂无公告'}</p>
+              )}
+            </div>
+            {isAdmin && (
+              <div className="flex gap-2 ml-4">
+                {isEditingAnnouncement ? (
+                  <>
+                    <button 
+                      onClick={handleUpdateAnnouncement}
+                      className="bg-white text-blue-600 px-4 py-2 rounded-lg font-bold hover:bg-blue-50 transition-colors flex items-center gap-2"
+                    >
+                      <CheckCircle className="w-4 h-4" /> 保存
+                    </button>
+                    <button 
+                      onClick={() => { setIsEditingAnnouncement(false); setAnnouncementInput(''); }}
+                      className="bg-white/20 text-white px-4 py-2 rounded-lg font-bold hover:bg-white/30 transition-colors flex items-center gap-2"
+                    >
+                      <XCircle className="w-4 h-4" /> 取消
+                    </button>
+                  </>
+                ) : (
+                  <button 
+                    onClick={() => { setIsEditingAnnouncement(true); setAnnouncementInput(announcement.content || ''); }}
+                    className="bg-white/20 text-white px-4 py-2 rounded-lg font-bold hover:bg-white/30 transition-colors flex items-center gap-2"
+                  >
+                    <Edit className="w-4 h-4" /> 编辑公告
+                  </button>
+                )}
+              </div>
+            )}
           </div>
         </div>
 
