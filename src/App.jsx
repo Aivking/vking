@@ -129,32 +129,18 @@ const App = () => {
     return () => unsubscribe();
   }, []);
 
-  // --- 检查是否需要自动结算利息 (每周三中午12点) ---
+  // 计算下一个周三12点
+  const calculateNextSettle = () => {
+    const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
+    let next = new Date(now);
+    const daysUntilWednesday = (3 - now.getDay() + 7) % 7 || 7;
+    next.setDate(next.getDate() + daysUntilWednesday);
+    next.setHours(12, 0, 0, 0);
+    return next;
+  };
+
+  // --- 倒计时更新 ---
   useEffect(() => {
-    const checkAndSettleInterest = async () => {
-      if (!currentUser || !db) return;
-      
-      const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
-      const dayOfWeek = now.getDay(); // 0=周日，3=周三
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      
-      // 周三中午12点（检查是否在11:59-12:01分钟内）
-      if (dayOfWeek === 3 && hours === 12 && minutes >= 0 && minutes <= 1) {
-        await autoSettleInterest();
-      }
-    };
-
-    // 计算下一个周三12点
-    const calculateNextSettle = () => {
-      const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
-      let next = new Date(now);
-      const daysUntilWednesday = (3 - now.getDay() + 7) % 7 || 7;
-      next.setDate(next.getDate() + daysUntilWednesday);
-      next.setHours(12, 0, 0, 0);
-      return next;
-    };
-
     const updateCountdown = () => {
       const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
       const next = calculateNextSettle();
@@ -168,10 +154,39 @@ const App = () => {
       }
     };
 
-    checkAndSettleInterest();
     updateCountdown();
     const interval = setInterval(updateCountdown, 60000); // 每分钟更新
     return () => clearInterval(interval);
+  }, []);
+
+  // --- 检查是否需要自动结算利息 (每周三中午12点) ---
+  useEffect(() => {
+    const checkAndSettleInterest = async () => {
+      if (!currentUser || !db) return;
+      
+      const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
+      const dayOfWeek = now.getDay(); // 0=周日，3=周三
+      const hours = now.getHours();
+      const minutes = now.getMinutes();
+      
+      // 周三中午12点（检查是否在12:00-12:02分钟内）
+      if (dayOfWeek === 3 && hours === 12 && minutes >= 0 && minutes <= 2) {
+        // 检查本周是否已经结算过（查看今天是否有利息结算记录）
+        const today = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
+        const todayStr = today.toLocaleDateString('zh-CN');
+        const hasSettledToday = transactions.some(t => 
+          (t.type === 'interest_income' || t.type === 'interest_expense') && 
+          t.createdBy === 'System' &&
+          t.timestamp.includes(todayStr)
+        );
+        
+        if (!hasSettledToday) {
+          await autoSettleInterest();
+        }
+      }
+    };
+
+    checkAndSettleInterest();
   }, [currentUser, transactions]);
 
   // --- 数据同步监听 ---
