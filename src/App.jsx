@@ -305,6 +305,14 @@ const App = () => {
 
     const fetchAndListen = async () => {
       try {
+        // 自动删除超过20小时的被拒绝记录
+        const twentyHoursAgo = new Date(Date.now() - 20 * 60 * 60 * 1000).toISOString();
+        await supabase
+          .from('transactions')
+          .delete()
+          .eq('status', 'rejected')
+          .lt('rejected_at', twentyHoursAgo);
+
         // 获取交易数据
         const { data: txData, error: txError } = await supabase
           .from('transactions')
@@ -614,13 +622,20 @@ const App = () => {
           .eq('id', payload);
         if (error) throw error;
       } else if (action === 'approve' || action === 'reject') {
+        const updateData = {
+          status: action === 'approve' ? 'approved' : 'rejected',
+          approved_by: currentUser.username,
+          approved_at: new Date().toLocaleString('zh-CN', { hour12: false })
+        };
+        
+        // 如果是拒绝，记录拒绝时间
+        if (action === 'reject') {
+          updateData.rejected_at = new Date().toISOString();
+        }
+        
         const { error } = await supabase
           .from('transactions')
-          .update({ 
-            status: action === 'approve' ? 'approved' : 'rejected', 
-            approved_by: currentUser.username,
-            approved_at: new Date().toLocaleString('zh-CN', { hour12: false })
-          })
+          .update(updateData)
           .eq('id', payload);
         if (error) throw error;
       }
