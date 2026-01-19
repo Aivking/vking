@@ -229,7 +229,7 @@ const App = () => {
   const [posts, setPosts] = useState([]);
   const [newPostModal, setNewPostModal] = useState(false);
   const [newPostData, setNewPostData] = useState({ title: '', content: '' });
-  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyingTo, setReplyingTo] = useState(null); // { postId, replyId } or postId
   const [replyContent, setReplyContent] = useState('');
 
   // 翻译函数
@@ -482,20 +482,32 @@ const App = () => {
     }
   };
 
-  const handleReply = async (postId) => {
+  const handleReply = async (postId, parentReplyId = null) => {
     if (!replyContent.trim()) return;
     
     try {
       const post = posts.find(p => p.id === postId);
-      const updatedReplies = [
-        ...(post.replies || []),
-        {
-          id: Date.now(),
-          author: currentUser.username,
-          content: replyContent,
-          timestamp: new Date().toISOString()
-        }
-      ];
+      const newReply = {
+        id: Date.now(),
+        author: currentUser.username,
+        content: replyContent,
+        timestamp: new Date().toISOString(),
+        parentId: parentReplyId,
+        replies: []
+      };
+      
+      let updatedReplies;
+      
+      if (parentReplyId) {
+        // 回复评论：需要找到父评论并添加到其replies中
+        updatedReplies = addNestedReply(post.replies || [], parentReplyId, newReply);
+      } else {
+        // 直接回复帖子
+        updatedReplies = [
+          ...(post.replies || []),
+          newReply
+        ];
+      }
       
       const { error } = await supabase
         .from('posts')
@@ -510,6 +522,56 @@ const App = () => {
     } catch (e) {
       console.error('回复失败:', e);
     }
+  };
+  
+  // 递归添加嵌套回复
+  const addNestedReply = (replies, parentId, newReply) => {
+    return replies.map(reply => {
+      if (reply.id === parentId) {
+        return {
+          ...reply,
+          replies: [...(reply.replies || []), newReply]
+        };
+      } else if (reply.replies && reply.replies.length > 0) {
+        return {
+          ...reply,
+          replies: addNestedReply(reply.replies, parentId, newReply)
+        };
+      }
+      return reply;
+    });
+  };
+  
+  const handleDeleteReply = async (postId, replyId) => {
+    if (!window.confirm('确认删除此评论？')) return;
+    
+    try {
+      const post = posts.find(p => p.id === postId);
+      const updatedReplies = deleteReplyById(post.replies || [], replyId);
+      
+      const { error } = await supabase
+        .from('posts')
+        .update({ replies: updatedReplies })
+        .eq('id', postId);
+      
+      if (error) throw error;
+      fetchPosts();
+    } catch (e) {
+      console.error('删除评论失败:', e);
+    }
+  };
+  
+  // 递归删除评论
+  const deleteReplyById = (replies, replyId) => {
+    return replies.filter(reply => reply.id !== replyId).map(reply => {
+      if (reply.replies && reply.replies.length > 0) {
+        return {
+          ...reply,
+          replies: deleteReplyById(reply.replies, replyId)
+        };
+      }
+      return reply;
+    });
   };
 
   const handleDeletePost = async (postId) => {
@@ -1039,19 +1101,23 @@ const App = () => {
                     {post.replies && post.replies.length > 0 && (
                       <div className="mt-4 space-y-3 pl-6 border-l-2 border-gray-200">
                         {post.replies.map(reply => (
-                          <div key={reply.id} className="bg-gray-50 rounded-lg p-3">
-                            <div className="flex items-center gap-2 mb-2">
-                              <span className="font-medium text-sm text-indigo-600">{reply.author}</span>
-                              <span className="text-xs text-gray-400">{new Date(reply.timestamp).toLocaleString('zh-CN')}</span>
-                            </div>
-                            <p className="text-sm text-gray-700">{reply.content}</p>
-                          </div>
+                          <ReplyItem 
+                            key={reply.id} 
+                            reply={reply} 
+                            postId={post.id}
+                            currentUser={currentUser}
+                            isAdmin={isAdmin}
+                            replyingTo={replyingTo}
+                            setReplyingTo={setReplyingTo}
+                            onDelete={handleDeleteReply}
+                            depth={0}
+                          />
                         ))}
                       </div>
                     )}
 
-                    {/* 回复输入框 */}
-                    {replyingTo === post.id && (
+                    {/* 回复输入框 - 直接回复帖子 */}
+                    {typeof replyingTo === 'string' && replyingTo === post.id && (
                       <div className="mt-4 flex gap-2">
                         <input
                           type="text"
@@ -1432,5 +1498,138 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
         </div>
     );
 };;;
+
+// ReplyItem 组件 - 递归渲染评论和嵌套回复
+const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyingTo, onDelete, depth = 0 }) => {
+  const [replyContent, setReplyContent] = React.useState('');
+  const t = (key) => translations['zh']?.[key] || key;
+  
+  const canDelete = isAdmin || reply.author === currentUser.username;
+  const replyKey = `${postId}-${reply.id}`;
+  const isReplying = replyingTo?.postId === postId && replyingTo?.replyId === reply.id;
+  
+  const handleReplySubmit = async () => {
+    if (!replyContent.trim()) return;
+    
+    try {
+      const { data: posts } = await supabase
+        .from('posts')
+        .select('*')
+        .eq('id', postId)
+        .single();
+      
+      if (!posts) throw new Error('帖子不存在');
+      
+      const newReply = {
+        id: Date.now(),
+        author: currentUser.username,
+        content: replyContent,
+        timestamp: new Date().toISOString(),
+        parentId: reply.id,
+        replies: []
+      };
+      
+      const updatedReplies = addNestedReply(posts.replies || [], reply.id, newReply);
+      
+      const { error } = await supabase
+        .from('posts')
+        .update({ replies: updatedReplies })
+        .eq('id', postId);
+      
+      if (error) throw error;
+      
+      setReplyingTo(null);
+      setReplyContent('');
+      window.location.reload();
+    } catch (e) {
+      console.error('回复失败:', e);
+    }
+  };
+  
+  const addNestedReply = (replies, parentId, newReply) => {
+    return replies.map(r => {
+      if (r.id === parentId) {
+        return {
+          ...r,
+          replies: [...(r.replies || []), newReply]
+        };
+      } else if (r.replies && r.replies.length > 0) {
+        return {
+          ...r,
+          replies: addNestedReply(r.replies, parentId, newReply)
+        };
+      }
+      return r;
+    });
+  };
+  
+  return (
+    <div className={`${depth > 0 ? 'ml-6 mt-3' : ''}`}>
+      <div className="bg-gray-50 rounded-lg p-3">
+        <div className="flex items-start justify-between mb-2">
+          <div className="flex items-center gap-2 flex-1">
+            <span className="font-medium text-sm text-indigo-600">{reply.author}</span>
+            <span className="text-xs text-gray-400">{new Date(reply.timestamp).toLocaleString('zh-CN')}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setReplyingTo({ postId, replyId: reply.id })}
+              className="text-xs text-gray-500 hover:text-indigo-600 transition-colors"
+            >
+              <MessageSquare className="w-3.5 h-3.5 inline" /> 回复
+            </button>
+            {canDelete && (
+              <button
+                onClick={() => onDelete(postId, reply.id)}
+                className="text-xs text-gray-400 hover:text-red-600 transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+        </div>
+        <p className="text-sm text-gray-700">{reply.content}</p>
+        
+        {/* 回复输入框 */}
+        {isReplying && (
+          <div className="mt-3 flex gap-2">
+            <input
+              type="text"
+              value={replyContent}
+              onChange={(e) => setReplyContent(e.target.value)}
+              placeholder="写下你的回复..."
+              className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+            />
+            <button
+              onClick={handleReplySubmit}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-1"
+            >
+              <Send className="w-3.5 h-3.5" /> 回复
+            </button>
+          </div>
+        )}
+      </div>
+      
+      {/* 嵌套回复 */}
+      {reply.replies && reply.replies.length > 0 && (
+        <div className="space-y-2">
+          {reply.replies.map(nestedReply => (
+            <ReplyItem
+              key={nestedReply.id}
+              reply={nestedReply}
+              postId={postId}
+              currentUser={currentUser}
+              isAdmin={isAdmin}
+              replyingTo={replyingTo}
+              setReplyingTo={setReplyingTo}
+              onDelete={onDelete}
+              depth={depth + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
 
 export default App;
