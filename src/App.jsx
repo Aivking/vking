@@ -649,6 +649,26 @@ const App = () => {
           .delete()
           .eq('id', payload);
         if (delError) throw delError;
+      } else if (action === 'deleteAll') {
+        // payload 应该是交易类型，如 'withdraw_inj' 或 'withdraw_dep'
+        if (!window.confirm('确认永久删除此账户的所有账单？此操作不可撤销！')) return;
+        
+        const allIds = transactions
+          .filter(tx => tx.type === payload)
+          .map(tx => tx.id);
+        
+        if (allIds.length === 0) return;
+        
+        // 分批删除（避免单次请求过大）
+        for (const id of allIds) {
+          const { error } = await supabase
+            .from('transactions')
+            .delete()
+            .eq('id', id);
+          if (error) throw error;
+        }
+      } else if (action === 'repay') {
+        if (delError) throw delError;
         
         // 创建资金回流记录（可选，用于记录）
         const repayRecord = {
@@ -991,7 +1011,7 @@ const App = () => {
               
               <TableSection title={`${t('injectionAccount')} - ${t('withdrawInj')}`} color="orange" icon={ArrowDownLeft} 
                 data={isAdmin ? displayTx.filter(tx => tx.type === 'withdraw_inj') : displayTx.filter(tx => tx.type === 'withdraw_inj' && (tx.status === 'approved' || tx.created_by === currentUser?.username))}
-               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} applyInterest={false} />
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} onDeleteAll={() => handleCRUD('deleteAll', 'withdraw_inj')} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} applyInterest={false} />
              
              {/* 存款账户总余额 - 已按需求移除显示 */}
 
@@ -1002,7 +1022,7 @@ const App = () => {
               
               <TableSection title={`${t('depositAccount')} - ${t('withdrawDep')}`} color="blue" icon={Wallet}
                 data={isAdmin ? displayTx.filter(tx => tx.type === 'withdraw_dep') : displayTx.filter(tx => tx.type === 'withdraw_dep' && (tx.status === 'approved' || tx.created_by === currentUser?.username))}
-               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} applyInterest={false} />
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} onDeleteAll={() => handleCRUD('deleteAll', 'withdraw_dep')} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} applyInterest={false} />
            </div>
         </div>
 
@@ -1045,7 +1065,7 @@ const StatCard = ({ title, value, subtext, icon }) => (
     </div>
 );
 
-const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, onRepay, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
+const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, onRepay, onDeleteAll, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
     const calculateWeeklyInterest = (principal, rate) => {
       return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
     };
@@ -1059,6 +1079,14 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-gray-500">{t('settlementCycles')}:</span>
                   <span className="bg-white text-gray-700 border border-gray-200 text-xs px-2 py-1 rounded">{interestRecords.length}</span>
+                  {isAdmin && onDeleteAll && data.length > 0 && (
+                    <button 
+                      onClick={onDeleteAll}
+                      className="ml-4 bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded text-xs font-medium transition-colors border border-red-300"
+                    >
+                      删除所有
+                    </button>
+                  )}
                 </div>
             </div>
             {/* 缩放表格 - 通过更紧凑的设计避免横向滚动 */}
