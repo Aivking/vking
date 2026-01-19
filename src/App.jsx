@@ -233,6 +233,9 @@ const App = () => {
   
   // 论坛 State
   const [currentPage, setCurrentPage] = useState('bank'); // 'bank' or 'forum'
+    const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
+      const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
+      const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
   const [posts, setPosts] = useState([]);
   const [newPostModal, setNewPostModal] = useState(false);
   const [newPostData, setNewPostData] = useState({ title: '', content: '' });
@@ -248,12 +251,11 @@ const App = () => {
       return key;
     }
   };
-  const getLocalizedTypeLabel = (type) => {
-    try {
-      return translations[language]?.typeLabels?.[type] || type;
-    } catch (e) {
-      console.error('Type label error:', e, 'type:', type);
-      return type;
+    // 论坛 State
+    const [currentPage, setCurrentPage] = useState('bank'); // 'bank' or 'forum'
+    const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
+    const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
+    const [posts, setPosts] = useState([]);
     }
   }; 
 
@@ -1096,7 +1098,32 @@ const App = () => {
                     </div>
 
                     {/* 帖子内容 */}
-                    <div className="text-gray-700 mb-4 whitespace-pre-wrap">{post.content}</div>
+                    <div className="text-gray-700 mb-4 whitespace-pre-wrap">
+                      {(() => {
+                        const isExpanded = expandedPosts.has(post.id);
+                        const lines = post.content.split('\n');
+                        const shouldTruncate = lines.length > 4;
+                        const displayContent = isExpanded ? post.content : lines.slice(0, 4).join('\n');
+                        return (
+                          <>
+                            <div>{displayContent}</div>
+                            {shouldTruncate && (
+                              <button
+                                onClick={() => {
+                                  const next = new Set(expandedPosts);
+                                  if (next.has(post.id)) next.delete(post.id);
+                                  else next.add(post.id);
+                                  setExpandedPosts(next);
+                                }}
+                                className="text-indigo-600 hover:text-indigo-700 font-medium mt-2"
+                              >
+                                {isExpanded ? '收起' : '查看全文'}
+                              </button>
+                            )}
+                          </>
+                        );
+                      })()}
+                    </div>
 
                     {/* 点赞和回复按钮 */}
                     <div className="flex items-center gap-6 pt-4 border-t border-gray-100">
@@ -1104,8 +1131,33 @@ const App = () => {
                         onClick={() => handleLikePost(post.id, post.likes || 0)}
                         className="flex items-center gap-2 text-gray-500 hover:text-indigo-600 transition-colors"
                       >
-                        <ThumbsUp className="w-4 h-4" />
-                        <span className="text-sm font-medium">{post.likes || 0}</span>
+                                          {/* 帖子内容 */}
+                                          <div className="text-gray-700 mb-4 whitespace-pre-wrap">
+                                            {(() => {
+                                              const isExpanded = expandedPosts.has(post.id);
+                                              const lines = post.content.split('\n');
+                                              const shouldTruncate = lines.length > 4;
+                                              const displayContent = isExpanded ? post.content : lines.slice(0, 4).join('\n');
+                                              return (
+                                                <>
+                                                  <div>{displayContent}</div>
+                                                  {shouldTruncate && (
+                                                    <button
+                                                      onClick={() => {
+                                                        const newExpanded = new Set(expandedPosts);
+                                                        if (newExpanded.has(post.id)) newExpanded.delete(post.id);
+                                                        else newExpanded.add(post.id);
+                                                        setExpandedPosts(newExpanded);
+                                                      }}
+                                                      className="text-indigo-600 hover:text-indigo-700 font-medium mt-2"
+                                                    >
+                                                      {isExpanded ? '收起' : '查看全文'}
+                                                    </button>
+                                                  )}
+                                                </>
+                                              );
+                                            })()}
+                                          </div>
                       </button>
                       <button
                         onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}
@@ -1130,6 +1182,8 @@ const App = () => {
                             setReplyingTo={setReplyingTo}
                             onDelete={handleDeleteReply}
                             depth={0}
+                            expandedReplies={expandedReplies}
+                            setExpandedReplies={setExpandedReplies}
                           />
                         ))}
                       </div>
@@ -1374,7 +1428,7 @@ const App = () => {
             <Btn icon={MinusCircle} label={t('withdrawDep')} onClick={() => openModal('withdraw_dep')} color="purple" />
             {isAdmin && <div className="h-6 w-px bg-green-200 mx-2"></div>}
             <div className="h-6 w-px bg-green-200 mx-2"></div>
-            <Btn icon={MessageSquare} label={t('forum')} onClick={() => setCurrentPage('forum')} color="indigo" />
+            <Btn icon={MessageSquare} label={t('forum')} onClick={() => setCurrentPage('forum')} color="red" className="px-8" />
             {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
         </div>
 
@@ -1500,8 +1554,8 @@ const App = () => {
 };
 
 // --- 内嵌子组件 (Sub-components) ---
-const Btn = ({ icon: Icon, label, onClick, color }) => (
-    <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 bg-${color}-50 text-${color}-700 hover:bg-${color}-100 rounded-lg font-medium border border-${color}-200 transition-colors`}>
+const Btn = ({ icon: Icon, label, onClick, color, className = '' }) => (
+  <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 bg-${color}-50 text-${color}-700 hover:bg-${color}-100 rounded-lg font-medium border border-${color}-200 transition-colors ${className}`}>
         <Icon className="w-4 h-4" /> {label}
     </button>
 );
@@ -1533,17 +1587,19 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                       className="ml-4 bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded text-xs font-medium transition-colors border border-red-300"
                     >
                       删除所有
-                    </button>
-                  )}
-                </div>
-            </div>
-            {/* 缩放表格 - 通过更紧凑的设计避免横向滚动 */}
-            <div className="overflow-y-auto" style={{ maxHeight: '500px', transform: 'scale(0.9)', transformOrigin: 'top left', width: '111.11%' }}>
-                <table className="w-full text-xs text-left">
-                    <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0"><tr><th className="px-2 py-2">{t('status')}</th><th className="px-2 py-2">{t('type')}</th><th className="px-2 py-2">{t('client')}</th><th className="px-2 py-2">{t('productType')}</th><th className="px-2 py-2 text-right">{t('amount')}</th><th className="px-2 py-2 text-right">{t('interestPerWeek')}</th><th className="px-2 py-2 text-right">{t('settlementCount')}</th><th className="px-2 py-2">{t('time')}</th>{isAdmin && <th className="px-2 py-2 text-right">{t('actions')}</th>}</tr></thead>
-                    <tbody className="divide-y divide-green-100">
-                        {data.map(row => {
-                            const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
+                                                <ReplyItem 
+                                                  key={reply.id} 
+                                                  reply={reply} 
+                                                  postId={post.id}
+                                                  currentUser={currentUser}
+                                                  isAdmin={isAdmin}
+                                                  replyingTo={replyingTo}
+                                                  setReplyingTo={setReplyingTo}
+                                                  onDelete={handleDeleteReply}
+                                                  depth={0}
+                                                  expandedReplies={expandedReplies}
+                                                  setExpandedReplies={setExpandedReplies}
+                                                />
                             const isInterestRecord = ['interest_income', 'interest_expense'].includes(row.type);
                             const isIncome = row.type === 'interest_income';
                             
@@ -1602,7 +1658,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
 };;;
 
 // ReplyItem 组件 - 递归渲染评论和嵌套回复
-const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyingTo, onDelete, depth = 0 }) => {
+const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyingTo, onDelete, depth = 0, expandedReplies, setExpandedReplies }) => {
   const [replyContent, setReplyContent] = React.useState('');
   const t = (key) => translations['zh']?.[key] || key;
   
@@ -1690,7 +1746,33 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
             )}
           </div>
         </div>
-        <p className="text-sm text-gray-700">{reply.content}</p>
+        <div className="text-sm text-gray-700">
+          {(() => {
+            const replyKey = `${postId}-${reply.id}`;
+            const isExpanded = expandedReplies.has(replyKey);
+            const lines = reply.content.split('\n');
+            const shouldTruncate = lines.length > 4;
+            const displayContent = isExpanded ? reply.content : lines.slice(0, 4).join('\n');
+            return (
+              <>
+                <div>{displayContent}</div>
+                {shouldTruncate && (
+                  <button
+                    onClick={() => {
+                      const newExpanded = new Set(expandedReplies);
+                      if (newExpanded.has(replyKey)) newExpanded.delete(replyKey);
+                      else newExpanded.add(replyKey);
+                      setExpandedReplies(newExpanded);
+                    }}
+                    className="text-indigo-600 hover:text-indigo-700 font-medium text-xs mt-1"
+                  >
+                    {isExpanded ? '收起' : '查看全文'}
+                  </button>
+                )}
+              </>
+            );
+          })()}
+        </div>
         
         {/* 回复输入框 */}
         {isReplying && (
@@ -1726,6 +1808,8 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
               setReplyingTo={setReplyingTo}
               onDelete={onDelete}
               depth={depth + 1}
+              expandedReplies={expandedReplies}
+              setExpandedReplies={setExpandedReplies}
             />
           ))}
         </div>
