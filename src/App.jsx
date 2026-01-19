@@ -3,63 +3,37 @@ import {
   Activity, Wallet, LogOut, Shield, CheckCircle, XCircle, 
   AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, Settings, PlusCircle, MinusCircle, X
 } from 'lucide-react';
-import { initializeApp } from 'firebase/app';
-import { 
-  getFirestore, collection, addDoc, updateDoc, deleteDoc, doc, 
-  onSnapshot, query 
-} from 'firebase/firestore';
-import { 
-  getAuth, signInAnonymously, onAuthStateChanged, signInWithCustomToken 
-} from 'firebase/auth';
+import { createClient } from '@supabase/supabase-js';
 
 // ==========================================
 // 1. 智能环境配置 (Smart Configuration)
 // ==========================================
 
-let db, auth;
+let supabase = null;
 let isConfigured = false;
 let deployMode = 'standalone';
 
-// 初始化 Firebase 配置
-const initFirebase = () => {
+// 初始化 Supabase 配置
+const initSupabase = () => {
   try {
-    const firebaseConfig = {
-      apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-      authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-      projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-      storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-      messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-      appId: import.meta.env.VITE_FIREBASE_APP_ID
-    };
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-    // 验证所有必需的配置
-    const requiredFields = Object.values(firebaseConfig);
-    if (requiredFields.some(val => !val)) {
-      throw new Error('Firebase 配置不完整');
+    if (!supabaseUrl || !supabaseAnonKey) {
+      throw new Error('Supabase 配置不完整');
     }
 
-    const app = initializeApp(firebaseConfig);
-    db = getFirestore(app);
-    auth = getAuth(app);
+    supabase = createClient(supabaseUrl, supabaseAnonKey);
     isConfigured = true;
     deployMode = 'standalone';
   } catch (e) {
-    console.error("Firebase Init Error:", e);
+    console.error("Supabase Init Error:", e);
     isConfigured = false;
+    supabase = null;
   }
 };
 
-initFirebase();
-
-// 获取 Firestore 集合引用
-const getCollectionRef = (collName) => {
-  return collection(db, collName);
-};
-
-// 获取文档引用
-const getDocRef = (id) => {
-  return doc(db, 'transactions', id);
-};
+initSupabase();
 
 // 事务类型中文映射
 const typeLabels = {
@@ -281,34 +255,18 @@ const App = () => {
     }
   }; 
 
-  // --- 初始化 Firebase Auth ---
+  // --- 初始化 Supabase Auth (简化为会话管理) ---
   useEffect(() => {
     if (!isConfigured) {
       setLoading(false);
       return;
     }
 
-    const initAuth = async () => {
-      try {
-        await signInAnonymously(auth);
-      } catch (error) {
-        console.error("Auth Error:", error);
-        setConnectionStatus('error');
-      }
-    };
-
-    initAuth();
-    
-    const unsubscribe = onAuthStateChanged(auth, (user) => {
-      if (user) {
-        setFirebaseUser(user);
-        setConnectionStatus('connected');
-      } else {
-        setFirebaseUser(null);
-      }
-    });
-
-    return () => unsubscribe();
+    // Supabase Auth 与 RLS：每个用户通过 auth.uid() 与 user_id 字段关联
+    // 由于我们的用户系统基于本地用户表，不使用 Supabase Auth 的登录
+    // 直接设置为已连接状态
+    setConnectionStatus('connected');
+    setLoading(false);
   }, []);
 
   // 计算下一个周三12点
@@ -363,60 +321,81 @@ const App = () => {
 
   // --- 数据同步监听 ---
   useEffect(() => {
-    if (!firebaseUser || !db) {
+    if (!supabase) {
       setLoading(false);
       return;
     }
 
-    // 监听交易
-    const txQuery = query(getCollectionRef('transactions'));
-    const unsubTx = onSnapshot(txQuery, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      data.sort((a, b) => (b.timestamp || '').localeCompare(a.timestamp || ''));
-      setTransactions(data);
-      setLoading(false);
-    }, (err) => {
-      console.error("Tx Sync Error", err);
-      setLoading(false);
-    });
+    const fetchAndListen = async () => {
+      try {
+        // 获取交易数据
+        const { data: txData, error: txError } = await supabase
+          .from('transactions')
+          .select('*')
+          .order('timestamp', { ascending: false });
 
-    // 监听用户
-    const userQuery = query(getCollectionRef('users'));
-    const unsubUsers = onSnapshot(userQuery, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      setRegisteredUsers(data);
-      if (data.length === 0) seedAdminUser();
-    });
+        if (!txError && txData) {
+          setTransactions(txData);
+        }
 
-    // 监听公告
-    const announcementQuery = query(getCollectionRef('announcements'));
-    const unsubAnnouncement = onSnapshot(announcementQuery, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-      if (data.length > 0) {
-        setAnnouncement(data[0]);
-      } else {
-        // 创建默认公告
-        addDoc(getCollectionRef('announcements'), { content: '欢迎使用 EUU 超级投行系统' });
+        // 获取用户数据
+        const { data: usersData, error: usersError } = await supabase
+          .from('users')
+          .select('*');
+
+        if (!usersError && usersData) {
+          setRegisteredUsers(usersData);
+          if (usersData.length === 0) seedAdminUser();
+        }
+
+        // 获取公告数据
+        const { data: announcementData, error: announcementError } = await supabase
+          .from('announcements')
+          .select('*')
+          .limit(1);
+
+        if (!announcementError && announcementData && announcementData.length > 0) {
+          setAnnouncement(announcementData[0]);
+        } else {
+          // 创建默认公告
+          await supabase.from('announcements').insert({
+            title: '公告',
+            content: '欢迎使用 EUU 超级投行系统'
+          });
+        }
+
+        setLoading(false);
+      } catch (err) {
+        console.error("Data Fetch Error:", err);
+        setLoading(false);
       }
-    });
+    };
+
+    fetchAndListen();
+
+    // 订阅实时更新
+    const txSubscription = supabase
+      .from('transactions')
+      .on('*', () => {
+        fetchAndListen(); // 重新获取数据
+      })
+      .subscribe();
 
     const savedUser = sessionStorage.getItem('current_bank_user_v2');
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
 
-    return () => { 
-      unsubTx(); 
-      unsubUsers();
-      unsubAnnouncement(); 
+    return () => {
+      txSubscription.unsubscribe();
     };
-  }, [firebaseUser]);
+  }, []);
 
   const seedAdminUser = async () => {
     try {
-      await addDoc(getCollectionRef('users'), {
+      await supabase.from('users').insert({
         username: 'EUU', 
         password: 'vkinga79', 
         role: 'admin', 
-        createdAt: new Date().toISOString()
+        created_at: new Date().toISOString()
       });
     } catch (e) { 
       console.error("Seeding admin failed:", e); 
@@ -427,10 +406,13 @@ const App = () => {
   const handleUpdateAnnouncement = async () => {
     if (!announcement.id || !announcementInput.trim()) return;
     try {
-      await updateDoc(doc(db, 'announcements', announcement.id), {
-        content: announcementInput,
-        updatedAt: new Date().toISOString()
-      });
+      await supabase
+        .from('announcements')
+        .update({
+          content: announcementInput,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', announcement.id);
       setIsEditingAnnouncement(false);
       setAnnouncementInput('');
     } catch (e) {
@@ -457,65 +439,66 @@ const App = () => {
       const injectionInterest = calc(['injection']);
       const depositInterest = calc(['deposit']);
       
-      let settledAmount = 0;
       let settledCount = 0;
       
       const settleTime = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
       const settleId = Date.now(); // 为本次结算生成唯一ID
 
+      const recordsToInsert = [];
+
       // 生成利息结算记录
       if (loanInterest > 0) {
-        await addDoc(getCollectionRef('transactions'), {
+        recordsToInsert.push({
           type: 'interest_income',
           client: '利息收入',
           principal: loanInterest,
           rate: 0,
           timestamp: settleTime,
-          createdBy: 'System',
-          creatorId: 'system',
+          created_by: 'System',
+          creator_id: 'system',
           status: 'approved',
-          settleId: settleId, // 用于标识本次结算
+          settle_id: settleId,
           remark: '本周贷款利息自动结算'
         });
-        settledAmount += loanInterest;
         settledCount++;
       }
 
       if (injectionInterest > 0) {
-        await addDoc(getCollectionRef('transactions'), {
+        recordsToInsert.push({
           type: 'interest_expense',
           client: '注资利息支出',
           principal: injectionInterest,
           rate: 0,
           timestamp: settleTime,
-          createdBy: 'System',
-          creatorId: 'system',
+          created_by: 'System',
+          creator_id: 'system',
           status: 'approved',
-          settleId: settleId,
+          settle_id: settleId,
           remark: '注资账户利息自动结算'
         });
-        settledAmount += injectionInterest;
         settledCount++;
       }
 
       if (depositInterest > 0) {
-        await addDoc(getCollectionRef('transactions'), {
+        recordsToInsert.push({
           type: 'interest_expense',
           client: '存款利息支出',
           principal: depositInterest,
           rate: 0,
           timestamp: settleTime,
-          createdBy: 'System',
-          creatorId: 'system',
+          created_by: 'System',
+          creator_id: 'system',
           status: 'approved',
-          settleId: settleId,
+          settle_id: settleId,
           remark: '存款账户利息自动结算'
         });
-        settledAmount += depositInterest;
         settledCount++;
       }
 
-      if (settledCount > 0) {
+      if (recordsToInsert.length > 0) {
+        const { error } = await supabase.from('transactions').insert(recordsToInsert);
+        if (error) throw error;
+
         const msg = language === 'zh' 
           ? `✅ 结算成功！\n收入: +${loanInterest.toFixed(3)}m\n支出: -${(injectionInterest + depositInterest).toFixed(3)}m\n共生成 ${settledCount} 条记录`
           : `✅ Settlement successful!\nIncome: +${loanInterest.toFixed(3)}m\nExpense: -${(injectionInterest + depositInterest).toFixed(3)}m\nGenerated ${settledCount} records`;
@@ -567,10 +550,16 @@ const App = () => {
         username: authInput.username, 
         password: authInput.password, 
         role: 'user', 
-        createdAt: new Date().toISOString() 
+        created_at: new Date().toISOString() 
       };
-      const docRef = await addDoc(getCollectionRef('users'), newUser);
-      const userWithId = { ...newUser, id: docRef.id };
+      const { data, error } = await supabase
+        .from('users')
+        .insert([newUser])
+        .select();
+
+      if (error) throw error;
+
+      const userWithId = { ...newUser, id: data[0].id };
       setCurrentUser(userWithId);
       sessionStorage.setItem('current_bank_user_v2', JSON.stringify(userWithId));
       setAuthInput({ username: '', password: '' });
@@ -620,31 +609,46 @@ const App = () => {
         const newItem = {
           ...payload,
           timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
-          createdBy: currentUser.username,
-          creatorId: currentUser.id || 'unknown',
+          created_by: currentUser.username,
+          creator_id: currentUser.id || 'unknown',
           status: currentUser.role === 'admin' ? 'approved' : 'pending' 
         };
-        await addDoc(getCollectionRef('transactions'), newItem);
+        const { error } = await supabase.from('transactions').insert([newItem]);
+        if (error) throw error;
+        
         setModalOpen(false);
         setFormData({ client: '', principal: '', rate: '' });
       } else if (action === 'update') {
         const { id, ...data } = payload;
-        await updateDoc(getDocRef(id), { 
-          ...data, 
-          lastEditedBy: currentUser.username, 
-          lastEditedAt: new Date().toLocaleString('zh-CN', { hour12: false })
-        });
+        const { error } = await supabase
+          .from('transactions')
+          .update({ 
+            ...data, 
+            last_edited_by: currentUser.username, 
+            last_edited_at: new Date().toLocaleString('zh-CN', { hour12: false })
+          })
+          .eq('id', id);
+        if (error) throw error;
+        
         setModalOpen(false);
         setFormData({ client: '', principal: '', rate: '' });
       } else if (action === 'delete') {
         if (!window.confirm('确认从服务器永久删除此记录？')) return;
-        await deleteDoc(getDocRef(payload));
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', payload);
+        if (error) throw error;
       } else if (action === 'approve' || action === 'reject') {
-        await updateDoc(getDocRef(payload), { 
-          status: action === 'approve' ? 'approved' : 'rejected', 
-          approvedBy: currentUser.username,
-          approvedAt: new Date().toLocaleString('zh-CN', { hour12: false })
-        });
+        const { error } = await supabase
+          .from('transactions')
+          .update({ 
+            status: action === 'approve' ? 'approved' : 'rejected', 
+            approved_by: currentUser.username,
+            approved_at: new Date().toLocaleString('zh-CN', { hour12: false })
+          })
+          .eq('id', payload);
+        if (error) throw error;
       }
     } catch (e) {
       alert("操作失败: " + e.message);
@@ -739,16 +743,12 @@ const App = () => {
              <Settings className="w-8 h-8" />
              <h1 className="text-2xl font-bold">应用尚未连接至数据库</h1>
           </div>
-          <p className="mb-4">检测到您正在独立环境 (如 Vercel) 运行此应用，但尚未配置 Firebase 环境变量。</p>
+          <p className="mb-4">检测到您正在独立环境 (如 Vercel) 运行此应用，但尚未配置 Supabase 环境变量。</p>
           
           <div className="bg-slate-900 text-slate-300 p-4 rounded-lg overflow-x-auto mb-6 text-sm font-mono">
             <p className="text-slate-500 mb-2"># 请在 Vercel 项目设置 → Environment Variables 中添加以下变量：</p>
-            <p>VITE_FIREBASE_API_KEY=...</p>
-            <p>VITE_FIREBASE_AUTH_DOMAIN=...</p>
-            <p>VITE_FIREBASE_PROJECT_ID=...</p>
-            <p>VITE_FIREBASE_STORAGE_BUCKET=...</p>
-            <p>VITE_FIREBASE_MESSAGING_SENDER_ID=...</p>
-            <p>VITE_FIREBASE_APP_ID=...</p>
+            <p>VITE_SUPABASE_URL=https://xxx.supabase.co</p>
+            <p>VITE_SUPABASE_ANON_KEY=sb_publishable_...</p>
           </div>
           <p className="text-sm text-gray-600">配置完成后，请在 Vercel 中重新部署 (Redeploy)。</p>
         </div>
