@@ -895,10 +895,16 @@ const App = () => {
       });
     } else {
       setEditId(null);
+      let defaultRate = '';
+      if (type === 'deposit') defaultRate = '2.5';
+      else if (type === 'loan') defaultRate = '3.0';
+      else if (type === 'injection') defaultRate = '3';
+      else defaultRate = '0';
+      
       setFormData({ 
         client: currentUser.role === 'admin' ? '' : currentUser.username, 
         principal: '', 
-        rate: type === 'deposit' ? '2.5' : '3.0',
+        rate: defaultRate,
         product_type: type === 'deposit' ? 'normal' : (type === 'loan' ? 'interest' : '')
       });
     }
@@ -1468,8 +1474,21 @@ const App = () => {
                         
                         <label className="block text-sm font-medium mb-1">{t('amountLabel')}</label>
                         <input type="number" step="0.001" required value={formData.principal} onChange={e => setFormData({...formData, principal: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500" />
-                        <label className="block text-sm font-medium mb-1">{t('rateLabel')}</label>
-                        <input type="number" step="0.1" required value={formData.rate} onChange={e => setFormData({...formData, rate: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500" />
+                        
+                        {/* 利率字段 - 注资显示固定3%禁用，其他可编辑，撤资/取款隐藏 */}
+                        {modalType === 'injection' && (
+                          <>
+                            <label className="block text-sm font-medium mb-1">{t('rateLabel')}</label>
+                            <input type="number" step="0.1" disabled value={formData.rate} className="w-full border rounded p-2 mb-3 outline-none bg-gray-100 cursor-not-allowed" />
+                            <p className="text-xs text-gray-500 mb-3">固定3%，不允许更改</p>
+                          </>
+                        )}
+                        {!['injection', 'withdrawal', 'withdraw_dep', 'withdraw_inj'].includes(modalType) && (
+                          <>
+                            <label className="block text-sm font-medium mb-1">{t('rateLabel')}</label>
+                            <input type="number" step="0.1" required value={formData.rate} onChange={e => setFormData({...formData, rate: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500" />
+                          </>
+                        )}
                         <button type="submit" className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">{t('submit')}</button>
                     </form>
                 </div>
