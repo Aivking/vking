@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Activity, Wallet, LogOut, Shield, CheckCircle, XCircle, 
-  AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, Settings, PlusCircle, MinusCircle, X
+  AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, Settings, PlusCircle, MinusCircle, X, MessageSquare, Send, ThumbsUp
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -48,6 +48,16 @@ const translations = {
     logout: '退出登录',
     // 公告栏
     noAnnouncement: '暂无公告',
+    forum: '论坛',
+    backToBank: '返回银行',
+    newPost: '发帖',
+    postTitle: '标题',
+    postContent: '内容',
+    publish: '发布',
+    reply: '回复',
+    likes: '点赞',
+    noPostsYet: '暂无帖子',
+    replyPlaceholder: '写下你的回复...',
     announcementPlaceholder: '输入公告内容...',
     save: '保存',
     cancel: '取消',
@@ -213,6 +223,14 @@ const App = () => {
   const [announcement, setAnnouncement] = useState({ id: '', content: '' });
   const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
   const [announcementInput, setAnnouncementInput] = useState('');
+  
+  // 论坛 State
+  const [currentPage, setCurrentPage] = useState('bank'); // 'bank' or 'forum'
+  const [posts, setPosts] = useState([]);
+  const [newPostModal, setNewPostModal] = useState(false);
+  const [newPostData, setNewPostData] = useState({ title: '', content: '' });
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyContent, setReplyContent] = useState('');
 
   // 翻译函数
   const t = (key) => {
@@ -399,6 +417,114 @@ const App = () => {
       setAnnouncementInput('');
     } catch (e) {
       console.error('更新公告失败:', e);
+    }
+  };
+
+  // --- 论坛功能 ---
+  // 获取帖子列表
+  useEffect(() => {
+    if (currentPage === 'forum') {
+      fetchPosts();
+    }
+  }, [currentPage]);
+
+  const fetchPosts = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('posts')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      setPosts(data || []);
+    } catch (e) {
+      console.error('获取帖子失败:', e);
+    }
+  };
+
+  const handleCreatePost = async (e) => {
+    e.preventDefault();
+    if (!newPostData.title.trim() || !newPostData.content.trim()) return;
+    
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .insert([{
+          title: newPostData.title,
+          content: newPostData.content,
+          author: currentUser.username,
+          author_id: currentUser.id,
+          likes: 0,
+          replies: [],
+          created_at: new Date().toISOString()
+        }]);
+      
+      if (error) throw error;
+      
+      setNewPostModal(false);
+      setNewPostData({ title: '', content: '' });
+      fetchPosts();
+    } catch (e) {
+      console.error('发帖失败:', e);
+    }
+  };
+
+  const handleLikePost = async (postId, currentLikes) => {
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .update({ likes: currentLikes + 1 })
+        .eq('id', postId);
+      
+      if (error) throw error;
+      fetchPosts();
+    } catch (e) {
+      console.error('点赞失败:', e);
+    }
+  };
+
+  const handleReply = async (postId) => {
+    if (!replyContent.trim()) return;
+    
+    try {
+      const post = posts.find(p => p.id === postId);
+      const updatedReplies = [
+        ...(post.replies || []),
+        {
+          id: Date.now(),
+          author: currentUser.username,
+          content: replyContent,
+          timestamp: new Date().toISOString()
+        }
+      ];
+      
+      const { error } = await supabase
+        .from('posts')
+        .update({ replies: updatedReplies })
+        .eq('id', postId);
+      
+      if (error) throw error;
+      
+      setReplyingTo(null);
+      setReplyContent('');
+      fetchPosts();
+    } catch (e) {
+      console.error('回复失败:', e);
+    }
+  };
+
+  const handleDeletePost = async (postId) => {
+    if (!window.confirm('确认删除此帖子？')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('posts')
+        .delete()
+        .eq('id', postId);
+      
+      if (error) throw error;
+      fetchPosts();
+    } catch (e) {
+      console.error('删除帖子失败:', e);
     }
   };
 
@@ -831,6 +957,171 @@ const App = () => {
     tx.created_by === currentUser?.username || tx.status === 'approved' || ['injection', 'withdraw_inj'].includes(tx.type)
   );
 
+  // 如果当前在论坛页面，渲染论坛
+  if (currentPage === 'forum') {
+    return (
+      <div className="min-h-screen bg-[#FFFEF9] text-gray-800 p-4 md:p-8 font-sans">
+        <div className="max-w-6xl mx-auto space-y-6">
+          {/* 论坛头部 */}
+          <div className="flex justify-between items-center pb-6 border-b border-green-200">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setCurrentPage('bank')}
+                className="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors border border-green-200 flex items-center gap-2"
+              >
+                <ArrowDownLeft className="w-4 h-4" /> {t('backToBank')}
+              </button>
+              <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
+                <MessageSquare className="text-indigo-600" />
+                <span className="text-indigo-600">{t('forum')}</span>
+              </h1>
+            </div>
+            <button
+              onClick={() => setNewPostModal(true)}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold transition-colors flex items-center gap-2"
+            >
+              <PlusCircle className="w-4 h-4" /> {t('newPost')}
+            </button>
+          </div>
+
+          {/* 帖子列表 */}
+          <div className="space-y-4">
+            {posts.length === 0 ? (
+              <div className="bg-white rounded-xl p-12 text-center border border-green-200">
+                <MessageSquare className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-400 text-lg">{t('noPostsYet')}</p>
+              </div>
+            ) : (
+              posts.map(post => (
+                <div key={post.id} className="bg-white rounded-xl border border-green-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                  <div className="p-6">
+                    {/* 帖子头部 */}
+                    <div className="flex justify-between items-start mb-4">
+                      <div className="flex-1">
+                        <h3 className="text-xl font-bold text-gray-800 mb-2">{post.title}</h3>
+                        <div className="flex items-center gap-4 text-sm text-gray-500">
+                          <span className="font-medium text-indigo-600">{post.author}</span>
+                          <span>{new Date(post.created_at).toLocaleString('zh-CN')}</span>
+                        </div>
+                      </div>
+                      {(isAdmin || post.author === currentUser.username) && (
+                        <button
+                          onClick={() => handleDeletePost(post.id)}
+                          className="text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+
+                    {/* 帖子内容 */}
+                    <div className="text-gray-700 mb-4 whitespace-pre-wrap">{post.content}</div>
+
+                    {/* 点赞和回复按钮 */}
+                    <div className="flex items-center gap-6 pt-4 border-t border-gray-100">
+                      <button
+                        onClick={() => handleLikePost(post.id, post.likes || 0)}
+                        className="flex items-center gap-2 text-gray-500 hover:text-indigo-600 transition-colors"
+                      >
+                        <ThumbsUp className="w-4 h-4" />
+                        <span className="text-sm font-medium">{post.likes || 0}</span>
+                      </button>
+                      <button
+                        onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}
+                        className="flex items-center gap-2 text-gray-500 hover:text-indigo-600 transition-colors"
+                      >
+                        <MessageSquare className="w-4 h-4" />
+                        <span className="text-sm font-medium">{(post.replies || []).length} {t('reply')}</span>
+                      </button>
+                    </div>
+
+                    {/* 回复列表 */}
+                    {post.replies && post.replies.length > 0 && (
+                      <div className="mt-4 space-y-3 pl-6 border-l-2 border-gray-200">
+                        {post.replies.map(reply => (
+                          <div key={reply.id} className="bg-gray-50 rounded-lg p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                              <span className="font-medium text-sm text-indigo-600">{reply.author}</span>
+                              <span className="text-xs text-gray-400">{new Date(reply.timestamp).toLocaleString('zh-CN')}</span>
+                            </div>
+                            <p className="text-sm text-gray-700">{reply.content}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 回复输入框 */}
+                    {replyingTo === post.id && (
+                      <div className="mt-4 flex gap-2">
+                        <input
+                          type="text"
+                          value={replyContent}
+                          onChange={(e) => setReplyContent(e.target.value)}
+                          placeholder={t('replyPlaceholder')}
+                          className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                        />
+                        <button
+                          onClick={() => handleReply(post.id)}
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                        >
+                          <Send className="w-4 h-4" /> {t('reply')}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* 发帖Modal */}
+          {newPostModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-4">
+                <div className="flex justify-between items-center border-b pb-4">
+                  <h3 className="font-bold text-xl text-gray-800">{t('newPost')}</h3>
+                  <button onClick={() => setNewPostModal(false)}>
+                    <X className="w-6 h-6 text-gray-400 hover:text-gray-600" />
+                  </button>
+                </div>
+                <form onSubmit={handleCreatePost} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('postTitle')}</label>
+                    <input
+                      type="text"
+                      required
+                      value={newPostData.title}
+                      onChange={(e) => setNewPostData({ ...newPostData, title: e.target.value })}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                      placeholder="请输入标题..."
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('postContent')}</label>
+                    <textarea
+                      required
+                      value={newPostData.content}
+                      onChange={(e) => setNewPostData({ ...newPostData, content: e.target.value })}
+                      rows={6}
+                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
+                      placeholder="写下你想说的..."
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors"
+                  >
+                    {t('publish')}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // 计算按用户分组的净余额数据（用于显示在表格中）
   // 对于 injection/deposit，显示 (total - withdraw/取款)，仅计入已批准的交易
   // 对于 withdraw_inj/withdraw_dep，仍显示原始数据
@@ -983,6 +1274,8 @@ const App = () => {
             <Btn icon={PlusCircle} label={t('deposit')} onClick={() => openModal('deposit')} color="purple" />
             <Btn icon={MinusCircle} label={t('withdrawDep')} onClick={() => openModal('withdraw_dep')} color="purple" />
             {isAdmin && <div className="h-6 w-px bg-green-200 mx-2"></div>}
+            <div className="h-6 w-px bg-green-200 mx-2"></div>
+            <Btn icon={MessageSquare} label={t('forum')} onClick={() => setCurrentPage('forum')} color="indigo" />
             {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
         </div>
 
