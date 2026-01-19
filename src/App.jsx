@@ -669,9 +669,11 @@ const App = () => {
     // 计算利息池 (每周净利息，利率已按周计)
     const interestPool = (totalRevenue - totalExpense);
 
-    // 计算个人注资和存款账户的总余额（只统计当前用户的交易）
-    const userApproved = approved.filter(tx => tx.created_by === currentUser?.username);
-    const calcPersonal = (types) => userApproved
+    // 计算个人注资和存款账户的总余额（包括用户自己的所有记录和已批准的他人记录）
+    const userTransactions = transactions.filter(tx => 
+      tx.created_by === currentUser?.username || tx.status === 'approved'
+    );
+    const calcPersonal = (types) => userTransactions
       .filter(tx => types.includes(tx.type))
       .reduce((acc, cur) => ({
         p: acc.p + (parseFloat(cur.principal) || 0),
@@ -765,9 +767,9 @@ const App = () => {
 
   const isAdmin = currentUser.role === 'admin';
   const pendingTx = transactions.filter(tx => tx.status === 'pending');
-  // 注资账单公开所有人可见，其他账单仅显示自己的
+  // 注资账单公开所有人可见，其他账单显示：自己的所有记录 + 已批准的他人记录
   const displayTx = isAdmin ? transactions : transactions.filter(tx => 
-    tx.creatorId === currentUser.id || ['injection', 'withdraw_inj'].includes(tx.type)
+    tx.created_by === currentUser?.username || tx.status === 'approved' || ['injection', 'withdraw_inj'].includes(tx.type)
   );
 
   return (
