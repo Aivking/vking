@@ -25,6 +25,12 @@ const typeLabels = {
 
 const getTypeLabel = (type) => typeLabels[type] || type;
 
+// 获取本地化的类型标签（支持多语言）
+const getLocalizedTypeLabel = (type, lang = 'zh') => {
+  const labels = translations[lang]?.typeLabels || typeLabels;
+  return labels[type] || type;
+};
+
 // 多语言翻译
 const translations = {
   zh: {
@@ -233,9 +239,8 @@ const App = () => {
   
   // 论坛 State
   const [currentPage, setCurrentPage] = useState('bank'); // 'bank' or 'forum'
-    const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
-      const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
-      const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
+  const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
+  const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
   const [posts, setPosts] = useState([]);
   const [newPostModal, setNewPostModal] = useState(false);
   const [newPostData, setNewPostData] = useState({ title: '', content: '' });
@@ -251,13 +256,6 @@ const App = () => {
       return key;
     }
   };
-    // 论坛 State
-    const [currentPage, setCurrentPage] = useState('bank'); // 'bank' or 'forum'
-    const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
-    const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
-    const [posts, setPosts] = useState([]);
-    }
-  }; 
 
   // --- 初始化 Supabase Auth (简化为会话管理) ---
   useEffect(() => {
@@ -1131,33 +1129,8 @@ const App = () => {
                         onClick={() => handleLikePost(post.id, post.likes || 0)}
                         className="flex items-center gap-2 text-gray-500 hover:text-indigo-600 transition-colors"
                       >
-                                          {/* 帖子内容 */}
-                                          <div className="text-gray-700 mb-4 whitespace-pre-wrap">
-                                            {(() => {
-                                              const isExpanded = expandedPosts.has(post.id);
-                                              const lines = post.content.split('\n');
-                                              const shouldTruncate = lines.length > 4;
-                                              const displayContent = isExpanded ? post.content : lines.slice(0, 4).join('\n');
-                                              return (
-                                                <>
-                                                  <div>{displayContent}</div>
-                                                  {shouldTruncate && (
-                                                    <button
-                                                      onClick={() => {
-                                                        const newExpanded = new Set(expandedPosts);
-                                                        if (newExpanded.has(post.id)) newExpanded.delete(post.id);
-                                                        else newExpanded.add(post.id);
-                                                        setExpandedPosts(newExpanded);
-                                                      }}
-                                                      className="text-indigo-600 hover:text-indigo-700 font-medium mt-2"
-                                                    >
-                                                      {isExpanded ? '收起' : '查看全文'}
-                                                    </button>
-                                                  )}
-                                                </>
-                                              );
-                                            })()}
-                                          </div>
+                        <ThumbsUp className="w-4 h-4" />
+                        <span className="text-sm font-medium">{post.likes || 0}</span>
                       </button>
                       <button
                         onClick={() => setReplyingTo(replyingTo === post.id ? null : post.id)}
@@ -1568,94 +1541,106 @@ const StatCard = ({ title, value, subtext, icon }) => (
 );
 
 const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, onRepay, onDeleteAll, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
-    const calculateWeeklyInterest = (principal, rate) => {
-      return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
-    };
+  const calculateWeeklyInterest = (principal, rate) => {
+    return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
+  };
 
-    return (
-        <div className="bg-white rounded-xl shadow-sm border border-green-200 overflow-hidden">
-            <div className={`bg-${color}-50 px-6 py-4 border-b border-green-200 flex items-center justify-between`}>
-                <div className="flex items-center gap-2">
-                  <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-gray-500">{t('settlementCycles')}:</span>
-                  <span className="bg-white text-gray-700 border border-gray-200 text-xs px-2 py-1 rounded">{interestRecords.length}</span>
-                  {isAdmin && onDeleteAll && data.length > 0 && (
-                    <button 
-                      onClick={onDeleteAll}
-                      className="ml-4 bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded text-xs font-medium transition-colors border border-red-300"
-                    >
-                      删除所有
-                                                <ReplyItem 
-                                                  key={reply.id} 
-                                                  reply={reply} 
-                                                  postId={post.id}
-                                                  currentUser={currentUser}
-                                                  isAdmin={isAdmin}
-                                                  replyingTo={replyingTo}
-                                                  setReplyingTo={setReplyingTo}
-                                                  onDelete={handleDeleteReply}
-                                                  depth={0}
-                                                  expandedReplies={expandedReplies}
-                                                  setExpandedReplies={setExpandedReplies}
-                                                />
-                            const isInterestRecord = ['interest_income', 'interest_expense'].includes(row.type);
-                            const isIncome = row.type === 'interest_income';
-                            
-                            // 获取产品类型标签
-                            const getProductTypeLabel = (row) => {
-                              if (row.type === 'deposit') {
-                                return row.product_type === 'risk' ? t('riskDeposit') : t('normalDeposit');
-                              } else if (row.type === 'loan') {
-                                return row.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
-                              }
-                              return '-';
-                            };
-                            const productTypeLabel = getProductTypeLabel(row);
-                            
-                          // 计算该条记录参与的结算次数：仅统计在该记录时间之后发生的结算
-                          const rowTime = row.timestamp ? new Date(row.timestamp) : null;
-                          const cyclesForRow = (applyInterest && rowTime)
-                            ? interestRecords.filter(r => {
-                                if (!r.timestamp) return false;
-                                const rt = new Date(r.timestamp);
-                                return rt >= rowTime;
-                              }).length
-                            : 0;
-                          // 对非利息记录：金额 = 本金 + 每周利息 * 结算次数；撤资/取款保持原样
-                          const totalAmount = isInterestRecord
-                            ? parseFloat(row.principal || 0)
-                            : (row.type.includes('withdraw')
-                              ? parseFloat(row.principal || 0)
-                              : (parseFloat(row.principal || 0) + weeklyInterest * cyclesForRow));
-                            return (
-                                <tr key={row.id} className={`hover:bg-gray-50 ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
-                                    <td className="px-2 py-2">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
-                                    <td className={`px-2 py-2 font-bold ${isIncome ? 'text-green-700' : 'text-orange-700'}`}>{getLocalizedTypeLabel(row.type)}</td>
-                                    <td className="px-2 py-2 font-medium">{row.client}</td>
-                                    <td className="px-2 py-2 text-xs"><span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span></td>
-                                    <td className={`px-2 py-2 text-right font-mono font-bold text-lg ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m</td>
-                                    <td className="px-2 py-2 text-right font-mono text-xs text-purple-600">{isInterestRecord ? '-' : (weeklyInterest || 0).toFixed(4) + 'm'}</td>
-                                    <td className="px-2 py-2 text-right font-mono text-xs text-gray-600">{cyclesForRow}</td>
-                                    <td className="px-2 py-2 text-xs text-gray-500">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
-                                    {isAdmin && <td className="px-2 py-2 text-right">
-                                        <div className="flex justify-end gap-1">
-                                            <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-3.5 h-3.5"/></button>
-                                            {onRepay && row.type === 'loan' && <button onClick={() => onRepay(row.id)} className="text-blue-500 hover:text-blue-700" title="还款">{t('repay') || '还款'}</button>}
-                                            <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5"/></button>
-                                        </div>
-                                    </td>}
-                                </tr>
-                            );
-                        })}
-                        {data.length === 0 && <tr><td colSpan={isAdmin ? "9" : "8"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
-                    </tbody>
-                </table>
-            </div>
+  const getProductTypeLabel = (row) => {
+    if (row.type === 'deposit') {
+      return row.product_type === 'risk' ? t('riskDeposit') : t('normalDeposit');
+    } else if (row.type === 'loan') {
+      return row.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
+    }
+    return '-';
+  };
+
+  return (
+    <div className="bg-white rounded-xl shadow-sm border border-green-200 overflow-hidden">
+      <div className={`bg-${color}-50 px-6 py-4 border-b border-green-200 flex items-center justify-between`}>
+        <div className="flex items-center gap-2">
+          <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
         </div>
-    );
-};;;
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">{t('settlementCycles')}:</span>
+          <span className="bg-white text-gray-700 border border-gray-200 text-xs px-2 py-1 rounded">{interestRecords.length}</span>
+          {isAdmin && onDeleteAll && data.length > 0 && (
+            <button 
+              onClick={onDeleteAll}
+              className="ml-4 bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded text-xs font-medium transition-colors border border-red-300"
+            >
+              删除所有
+            </button>
+          )}
+        </div>
+      </div>
+
+      <div className="overflow-x-auto">
+        <table className="min-w-full">
+          <thead className="bg-gray-50">
+            <tr>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">{t('status')}</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">{t('type')}</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">{t('clientLabel')}</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">{t('productType')}</th>
+              <th className="px-2 py-2 text-right text-xs font-semibold text-gray-500">{t('amountLabel')}</th>
+              <th className="px-2 py-2 text-right text-xs font-semibold text-gray-500">每周利息</th>
+              <th className="px-2 py-2 text-right text-xs font-semibold text-gray-500">结算次数</th>
+              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">日期</th>
+              {isAdmin && <th className="px-2 py-2 text-right text-xs font-semibold text-gray-500">操作</th>}
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-100">
+            {data.map((row) => {
+              const isInterestRecord = ['interest_income', 'interest_expense'].includes(row.type);
+              const isIncome = row.type === 'interest_income';
+              const weeklyInterest = applyInterest && !isInterestRecord && !row.type.includes('withdraw')
+                ? calculateWeeklyInterest(row.principal, row.rate)
+                : 0;
+
+              const productTypeLabel = getProductTypeLabel(row);
+
+              const rowTime = row.timestamp ? new Date(row.timestamp) : null;
+              const cyclesForRow = (applyInterest && rowTime)
+                ? interestRecords.filter(r => {
+                    if (!r.timestamp) return false;
+                    const rt = new Date(r.timestamp);
+                    return rt >= rowTime;
+                  }).length
+                : 0;
+
+              const totalAmount = isInterestRecord
+                ? parseFloat(row.principal || 0)
+                : (row.type.includes('withdraw')
+                  ? parseFloat(row.principal || 0)
+                  : (parseFloat(row.principal || 0) + weeklyInterest * cyclesForRow));
+
+              return (
+                <tr key={row.id} className={`hover:bg-gray-50 ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
+                  <td className="px-2 py-2">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
+                  <td className={`px-2 py-2 font-bold ${isIncome ? 'text-green-700' : 'text-orange-700'}`}>{getLocalizedTypeLabel(row.type)}</td>
+                  <td className="px-2 py-2 font-medium">{row.client}</td>
+                  <td className="px-2 py-2 text-xs"><span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span></td>
+                  <td className={`px-2 py-2 text-right font-mono font-bold text-lg ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m</td>
+                  <td className="px-2 py-2 text-right font-mono text-xs text-purple-600">{isInterestRecord ? '-' : (weeklyInterest || 0).toFixed(4) + 'm'}</td>
+                  <td className="px-2 py-2 text-right font-mono text-xs text-gray-600">{cyclesForRow}</td>
+                  <td className="px-2 py-2 text-xs text-gray-500">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
+                  {isAdmin && <td className="px-2 py-2 text-right">
+                    <div className="flex justify-end gap-1">
+                      <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-3.5 h-3.5"/></button>
+                      {onRepay && row.type === 'loan' && <button onClick={() => onRepay(row.id)} className="text-blue-500 hover:text-blue-700" title="还款">{t('repay') || '还款'}</button>}
+                      <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5"/></button>
+                    </div>
+                  </td>}
+                </tr>
+              );
+            })}
+            {data.length === 0 && <tr><td colSpan={isAdmin ? "9" : "8"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+};
 
 // ReplyItem 组件 - 递归渲染评论和嵌套回复
 const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyingTo, onDelete, depth = 0, expandedReplies, setExpandedReplies }) => {
