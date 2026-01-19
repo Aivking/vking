@@ -811,6 +811,47 @@ const App = () => {
     tx.created_by === currentUser?.username || tx.status === 'approved' || ['injection', 'withdraw_inj'].includes(tx.type)
   );
 
+  // 计算按用户分组的净余额数据（用于显示在表格中）
+  // 对于 injection/deposit，显示 (total - withdraw/取款)
+  // 对于 withdraw_inj/withdraw_dep，仍显示原始数据
+  const getNetBalanceData = (txList, types, withdrawType = null) => {
+    const approved = txList.filter(tx => types.includes(tx.type) && tx.status === 'approved');
+    
+    if (!withdrawType) {
+      // 直接返回原始数据（用于撤资/取款）
+      return approved;
+    }
+    
+    // 按创建人分组计算净余额
+    const userBalances = {};
+    approved.forEach(tx => {
+      const user = tx.created_by || 'unknown';
+      if (!userBalances[user]) {
+        userBalances[user] = { ...tx, principal: 0, userBalanceTotal: 0 };
+      }
+      userBalances[user].principal += parseFloat(tx.principal) || 0;
+      userBalances[user].userBalanceTotal = userBalances[user].principal;
+    });
+    
+    // 从撤资/取款中扣除
+    if (withdrawType) {
+      const withdrawn = txList.filter(tx => tx.type === withdrawType && tx.status === 'approved');
+      withdrawn.forEach(w => {
+        const user = w.created_by || 'unknown';
+        if (userBalances[user]) {
+          userBalances[user].userBalanceTotal -= parseFloat(w.principal) || 0;
+        }
+      });
+    }
+    
+    // 将净余额更新到 principal 中供显示
+    return Object.values(userBalances).map(item => ({
+      ...item,
+      principal: item.userBalanceTotal,
+      isNetBalance: true // 标记为净余额数据
+    })).filter(item => item.principal > 0); // 只显示余额 > 0 的用户
+  };
+
   return (
     <div className="min-h-screen bg-[#FFFEF9] text-gray-800 p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -944,7 +985,7 @@ const App = () => {
            <div className="space-y-6">
              {/* 注资账户 - 分开显示 */}
               <TableSection title={`${t('injectionAccount')} - ${t('injection')}`} color="orange" icon={ArrowDownLeft} 
-                data={displayTx.filter(tx => tx.type === 'injection' && tx.status === 'approved')}
+                data={getNetBalanceData(displayTx, ['injection'], 'withdraw_inj')}
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
                interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出')} applyInterest={true} />
               
@@ -955,7 +996,7 @@ const App = () => {
              {/* 存款账户总余额 - 已按需求移除显示 */}
 
               <TableSection title={`${t('depositAccount')} - ${t('deposit')}`} color="blue" icon={Wallet}
-                data={displayTx.filter(tx => tx.type === 'deposit' && tx.status === 'approved')} 
+                data={getNetBalanceData(displayTx, ['deposit'], 'withdraw_dep')} 
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
                interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出')} applyInterest={true} />
               
