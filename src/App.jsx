@@ -100,6 +100,13 @@ const translations = {
     rejected: '已拒绝',
     effective: '生效',
     noData: '暂无数据',
+    repay: '还款',
+    productType: '产品类型',
+    normalDeposit: '普通存款 (2.5%/周)',
+    riskDeposit: '风险理财 (9%/周)',
+    riskNote: '风险理财只保本不保利息',
+    interestLoan: '利息贷款',
+    stableLoan: '稳定贷款',
     // 模态框
     create: '新建',
     edit: '编辑',
@@ -214,7 +221,7 @@ const App = () => {
   // UI State
   const [modalOpen, setModalOpen] = useState(false);
   const [modalType, setModalType] = useState('loan'); 
-  const [formData, setFormData] = useState({ client: '', principal: '', rate: '' });
+  const [formData, setFormData] = useState({ client: '', principal: '', rate: '', product_type: '' });
   const [editId, setEditId] = useState(null);
   const [nextSettleTime, setNextSettleTime] = useState('');
   const [settleCountdown, setSettleCountdown] = useState('');
@@ -880,13 +887,19 @@ const App = () => {
     setModalType(type);
     if (editItem) {
       setEditId(editItem.id);
-      setFormData({ client: editItem.client, principal: editItem.principal, rate: editItem.rate });
+      setFormData({ 
+        client: editItem.client, 
+        principal: editItem.principal, 
+        rate: editItem.rate,
+        product_type: editItem.product_type || ''
+      });
     } else {
       setEditId(null);
       setFormData({ 
         client: currentUser.role === 'admin' ? '' : currentUser.username, 
         principal: '', 
-        rate: type === 'deposit' ? '2.5' : '3.0' 
+        rate: type === 'deposit' ? '2.5' : '3.0',
+        product_type: type === 'deposit' ? 'normal' : (type === 'loan' ? 'interest' : '')
       });
     }
     setModalOpen(true);
@@ -1313,18 +1326,32 @@ const App = () => {
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 shadow-sm">
              <h3 className="text-lg font-bold text-amber-800 flex items-center gap-2 mb-4"><AlertCircle className="w-5 h-5"/> {t('pendingApproval')} ({pendingTx.length})</h3>
              <div className="grid gap-3">
-                {pendingTx.map(tx => (
+                {pendingTx.map(tx => {
+                  const getProductTypeLabel = (tx) => {
+                    if (tx.type === 'deposit') {
+                      return tx.product_type === 'risk' ? t('riskDeposit') : t('normalDeposit');
+                    } else if (tx.type === 'loan') {
+                      return tx.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
+                    }
+                    return '';
+                  };
+                  const productTypeLabel = getProductTypeLabel(tx);
+                  
+                  return (
                   <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
                      <div>
-                        <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type)}]</span> {tx.client} - {formatMoney(tx.principal)}
-                        <span className="text-xs text-gray-500 block">{t('applicant')}: {tx.createdBy}</span>
+                        <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type)}]</span> 
+                        {tx.client} - {formatMoney(tx.principal)}
+                        {productTypeLabel && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span>}
+                        <span className="text-xs text-gray-500 block">{t('applicant')}: {tx.created_by}</span>
                      </div>
                      <div className="flex gap-2">
                         <button onClick={() => handleCRUD('approve', tx.id)} className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200"><CheckCircle className="w-4 h-4"/></button>
                         <button onClick={() => handleCRUD('reject', tx.id)} className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"><XCircle className="w-4 h-4"/></button>
                      </div>
                   </div>
-                ))}
+                  );
+                })}
              </div>
           </div>
         )}
@@ -1396,6 +1423,49 @@ const App = () => {
                     <form onSubmit={(e) => { e.preventDefault(); handleCRUD(editId ? 'update' : 'create', editId ? { id: editId, ...formData } : { ...formData, type: modalType }); }}>
                         <label className="block text-sm font-medium mb-1">{t('clientLabel')}</label>
                         <input type="text" required disabled={!isAdmin && !editId} value={formData.client} onChange={e => setFormData({...formData, client: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100" />
+                        
+                        {/* 产品类型选择 - 存款 */}
+                        {modalType === 'deposit' && (
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium mb-1">{t('productType')}</label>
+                            <select 
+                              required 
+                              value={formData.product_type} 
+                              onChange={e => {
+                                const newType = e.target.value;
+                                setFormData({
+                                  ...formData, 
+                                  product_type: newType,
+                                  rate: newType === 'risk' ? '9' : '2.5'
+                                });
+                              }} 
+                              className="w-full border rounded p-2 outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="normal">{t('normalDeposit')}</option>
+                              <option value="risk">{t('riskDeposit')}</option>
+                            </select>
+                            {formData.product_type === 'risk' && (
+                              <p className="text-xs text-orange-600 mt-1">{t('riskNote')}</p>
+                            )}
+                          </div>
+                        )}
+                        
+                        {/* 产品类型选择 - 贷款 */}
+                        {modalType === 'loan' && (
+                          <div className="mb-3">
+                            <label className="block text-sm font-medium mb-1">{t('productType')}</label>
+                            <select 
+                              required 
+                              value={formData.product_type} 
+                              onChange={e => setFormData({...formData, product_type: e.target.value})} 
+                              className="w-full border rounded p-2 outline-none focus:ring-2 focus:ring-blue-500"
+                            >
+                              <option value="interest">{t('interestLoan')}</option>
+                              <option value="stable">{t('stableLoan')}</option>
+                            </select>
+                          </div>
+                        )}
+                        
                         <label className="block text-sm font-medium mb-1">{t('amountLabel')}</label>
                         <input type="number" step="0.001" required value={formData.principal} onChange={e => setFormData({...formData, principal: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500" />
                         <label className="block text-sm font-medium mb-1">{t('rateLabel')}</label>
@@ -1451,12 +1521,24 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
             {/* 缩放表格 - 通过更紧凑的设计避免横向滚动 */}
             <div className="overflow-y-auto" style={{ maxHeight: '500px', transform: 'scale(0.9)', transformOrigin: 'top left', width: '111.11%' }}>
                 <table className="w-full text-xs text-left">
-                    <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0"><tr><th className="px-2 py-2">{t('status')}</th><th className="px-2 py-2">{t('type')}</th><th className="px-2 py-2">{t('client')}</th><th className="px-2 py-2 text-right">{t('amount')}</th><th className="px-2 py-2 text-right">{t('interestPerWeek')}</th><th className="px-2 py-2 text-right">{t('settlementCount')}</th><th className="px-2 py-2">{t('time')}</th>{isAdmin && <th className="px-2 py-2 text-right">{t('actions')}</th>}</tr></thead>
+                    <thead className="bg-gray-50 text-gray-600 font-medium sticky top-0"><tr><th className="px-2 py-2">{t('status')}</th><th className="px-2 py-2">{t('type')}</th><th className="px-2 py-2">{t('client')}</th><th className="px-2 py-2">{t('productType')}</th><th className="px-2 py-2 text-right">{t('amount')}</th><th className="px-2 py-2 text-right">{t('interestPerWeek')}</th><th className="px-2 py-2 text-right">{t('settlementCount')}</th><th className="px-2 py-2">{t('time')}</th>{isAdmin && <th className="px-2 py-2 text-right">{t('actions')}</th>}</tr></thead>
                     <tbody className="divide-y divide-green-100">
                         {data.map(row => {
                             const weeklyInterest = calculateWeeklyInterest(row.principal, row.rate);
                             const isInterestRecord = ['interest_income', 'interest_expense'].includes(row.type);
                             const isIncome = row.type === 'interest_income';
+                            
+                            // 获取产品类型标签
+                            const getProductTypeLabel = (row) => {
+                              if (row.type === 'deposit') {
+                                return row.product_type === 'risk' ? t('riskDeposit') : t('normalDeposit');
+                              } else if (row.type === 'loan') {
+                                return row.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
+                              }
+                              return '-';
+                            };
+                            const productTypeLabel = getProductTypeLabel(row);
+                            
                           // 计算该条记录参与的结算次数：仅统计在该记录时间之后发生的结算
                           const rowTime = row.timestamp ? new Date(row.timestamp) : null;
                           const cyclesForRow = (applyInterest && rowTime)
@@ -1477,6 +1559,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                                     <td className="px-2 py-2">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
                                     <td className={`px-2 py-2 font-bold ${isIncome ? 'text-green-700' : 'text-orange-700'}`}>{getLocalizedTypeLabel(row.type)}</td>
                                     <td className="px-2 py-2 font-medium">{row.client}</td>
+                                    <td className="px-2 py-2 text-xs"><span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span></td>
                                     <td className={`px-2 py-2 text-right font-mono font-bold text-lg ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m</td>
                                     <td className="px-2 py-2 text-right font-mono text-xs text-purple-600">{isInterestRecord ? '-' : (weeklyInterest || 0).toFixed(4) + 'm'}</td>
                                     <td className="px-2 py-2 text-right font-mono text-xs text-gray-600">{cyclesForRow}</td>
@@ -1491,7 +1574,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                                 </tr>
                             );
                         })}
-                        {data.length === 0 && <tr><td colSpan={isAdmin ? "8" : "7"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
+                        {data.length === 0 && <tr><td colSpan={isAdmin ? "9" : "8"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
                     </tbody>
                 </table>
             </div>
