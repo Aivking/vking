@@ -3,37 +3,14 @@ import {
   Activity, Wallet, LogOut, Shield, CheckCircle, XCircle, 
   AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, Settings, PlusCircle, MinusCircle, X
 } from 'lucide-react';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from './supabaseClient';
 
 // ==========================================
-// 1. 智能环境配置 (Smart Configuration)
+// 1. Supabase 配置
 // ==========================================
 
-let supabase = null;
-let isConfigured = false;
+let isConfigured = true;
 let deployMode = 'standalone';
-
-// 初始化 Supabase 配置
-const initSupabase = () => {
-  try {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-    const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-    if (!supabaseUrl || !supabaseAnonKey) {
-      throw new Error('Supabase 配置不完整');
-    }
-
-    supabase = createClient(supabaseUrl, supabaseAnonKey);
-    isConfigured = true;
-    deployMode = 'standalone';
-  } catch (e) {
-    console.error("Supabase Init Error:", e);
-    isConfigured = false;
-    supabase = null;
-  }
-};
-
-initSupabase();
 
 // 事务类型中文映射
 const typeLabels = {
