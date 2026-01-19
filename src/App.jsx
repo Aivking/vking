@@ -787,6 +787,25 @@ const App = () => {
     tx.created_by === currentUser?.username || tx.status === 'approved' || ['injection', 'withdraw_inj'].includes(tx.type)
   );
 
+  // 合并同类生效账单（相同用户名 + 类型 + 状态为已批准）
+  const mergeApprovedBills = (txList, type) => {
+    const filtered = txList.filter(tx => 
+      (Array.isArray(type) ? type.includes(tx.type) : tx.type === type) && 
+      tx.status === 'approved'
+    );
+    
+    const grouped = {};
+    filtered.forEach(tx => {
+      const key = `${tx.created_by || 'unknown'}_${tx.type}`;
+      if (!grouped[key]) {
+        grouped[key] = { ...tx, principal: 0 };
+      }
+      grouped[key].principal += parseFloat(tx.principal) || 0;
+    });
+    
+    return Object.values(grouped);
+  };
+
   return (
     <div className="min-h-screen bg-[#FFFEF9] text-gray-800 p-4 md:p-8 font-sans">
       <div className="max-w-7xl mx-auto space-y-8">
@@ -913,7 +932,7 @@ const App = () => {
         {/* 表格区 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            <TableSection title={t('loanAssets')} color="red" icon={ArrowUpRight} 
-             data={displayTx.filter(tx => tx.type === 'loan')} 
+             data={mergeApprovedBills(displayTx, 'loan')} 
              isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel}
              interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_income')} applyInterest={true} />
            
@@ -922,14 +941,14 @@ const App = () => {
              {/* 注资账户总余额 - 已按需求移除显示 */}
 
               <TableSection title={t('injectionAccount')} color="orange" icon={ArrowDownLeft} 
-                data={displayTx.filter(tx => ['injection', 'withdraw_inj'].includes(tx.type))}
+                data={mergeApprovedBills(displayTx, ['injection', 'withdraw_inj'])}
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
                interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出')} applyInterest={true} />
              
              {/* 存款账户总余额 - 已按需求移除显示 */}
 
               <TableSection title={t('depositAccount')} color="blue" icon={Wallet}
-                data={displayTx.filter(tx => ['deposit', 'withdraw_dep'].includes(tx.type))} 
+                data={mergeApprovedBills(displayTx, ['deposit', 'withdraw_dep'])} 
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
                interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出')} applyInterest={true} />
            </div>
