@@ -1578,15 +1578,15 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
         <table className="min-w-full">
           <thead className="bg-gray-50">
             <tr>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">{t('status')}</th>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">{t('type')}</th>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">{t('clientLabel')}</th>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">{t('productType')}</th>
-              <th className="px-2 py-2 text-right text-xs font-semibold text-gray-500">{t('amountLabel')}</th>
-              <th className="px-2 py-2 text-right text-xs font-semibold text-gray-500">每周利息</th>
-              <th className="px-2 py-2 text-right text-xs font-semibold text-gray-500">结算次数</th>
-              <th className="px-2 py-2 text-left text-xs font-semibold text-gray-500">日期</th>
-              {isAdmin && <th className="px-2 py-2 text-right text-xs font-semibold text-gray-500">操作</th>}
+              <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{t('status')}</th>
+              <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{t('type')}</th>
+              <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{t('clientLabel')}</th>
+              <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{t('productType')}</th>
+              <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">{t('amountLabel')}</th>
+              <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">周利息</th>
+              <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">次数</th>
+              <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">日期</th>
+              {isAdmin && <th className="px-1.5 py-1.5 text-center text-xs font-semibold text-gray-500 whitespace-nowrap">操作</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -1614,21 +1614,35 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                   ? parseFloat(row.principal || 0)
                   : (parseFloat(row.principal || 0) + weeklyInterest * cyclesForRow));
 
+              const [showActions, setShowActions] = React.useState(false);
               return (
-                <tr key={row.id} className={`hover:bg-gray-50 ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
-                  <td className="px-2 py-2">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1.5 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1.5 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1.5 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
-                  <td className={`px-2 py-2 font-bold ${isIncome ? 'text-green-700' : 'text-orange-700'}`}>{getLocalizedTypeLabel(row.type)}</td>
-                  <td className="px-2 py-2 font-medium">{row.client}</td>
-                  <td className="px-2 py-2 text-xs"><span className="bg-blue-50 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span></td>
-                  <td className={`px-2 py-2 text-right font-mono font-bold text-lg ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m</td>
-                  <td className="px-2 py-2 text-right font-mono text-xs text-purple-600">{isInterestRecord ? '-' : (weeklyInterest || 0).toFixed(4) + 'm'}</td>
-                  <td className="px-2 py-2 text-right font-mono text-xs text-gray-600">{cyclesForRow}</td>
-                  <td className="px-2 py-2 text-xs text-gray-500">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
-                  {isAdmin && <td className="px-2 py-2 text-right">
-                    <div className="flex justify-end gap-1">
-                      <button onClick={() => onEdit(row)} className="text-indigo-500 hover:text-indigo-700"><Edit className="w-3.5 h-3.5"/></button>
-                      {onRepay && row.type === 'loan' && <button onClick={() => onRepay(row.id)} className="text-blue-500 hover:text-blue-700" title="还款">{t('repay') || '还款'}</button>}
-                      <button onClick={() => onDelete(row.id)} className="text-gray-400 hover:text-red-600"><Trash2 className="w-3.5 h-3.5"/></button>
+                <tr key={row.id} className={`hover:bg-gray-50 text-xs ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
+                  <td className="px-1.5 py-1.5 whitespace-nowrap">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
+                  <td className={`px-1.5 py-1.5 font-bold whitespace-nowrap ${isIncome ? 'text-green-700' : 'text-orange-700'}`}>{getLocalizedTypeLabel(row.type)}</td>
+                  <td className="px-1.5 py-1.5 font-medium truncate max-w-xs">{row.client}</td>
+                  <td className="px-1.5 py-1.5 text-xs whitespace-nowrap"><span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded inline-block text-xs">{productTypeLabel}</span></td>
+                  <td className={`px-1.5 py-1.5 text-right font-mono font-bold whitespace-nowrap ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m</td>
+                  <td className="px-1.5 py-1.5 text-right font-mono text-xs text-purple-600 whitespace-nowrap">{isInterestRecord ? '-' : (weeklyInterest || 0).toFixed(3) + 'm'}</td>
+                  <td className="px-1.5 py-1.5 text-right font-mono text-xs text-gray-600 whitespace-nowrap">{cyclesForRow}</td>
+                  <td className="px-1.5 py-1.5 text-xs text-gray-500 whitespace-nowrap">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
+                  {isAdmin && <td className="px-1.5 py-1.5 text-center relative">
+                    <div className="relative inline-block">
+                      <button onClick={() => setShowActions(!showActions)} className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-200" title="操作">
+                        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z" /></svg>
+                      </button>
+                      {showActions && (
+                        <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-300 rounded shadow-lg z-10">
+                          <button onClick={() => { onEdit(row); setShowActions(false); }} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-indigo-600 flex items-center gap-2">
+                            <Edit className="w-3 h-3" /> 编辑
+                          </button>
+                          {onRepay && row.type === 'loan' && <button onClick={() => { onRepay(row.id); setShowActions(false); }} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-blue-600">
+                            还款
+                          </button>}
+                          <button onClick={() => { onDelete(row.id); setShowActions(false); }} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2">
+                            <Trash2 className="w-3 h-3" /> 删除
+                          </button>
+                        </div>
+                      )}
                     </div>
                   </td>}
                 </tr>
