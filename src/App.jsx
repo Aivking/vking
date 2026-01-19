@@ -302,7 +302,7 @@ const App = () => {
   // --- 检查是否需要自动结算利息 (每周三中午12点) ---
   useEffect(() => {
     const checkAndSettleInterest = async () => {
-      if (!currentUser || !db) return;
+      if (!currentUser || !supabase) return;
       
       const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
       const dayOfWeek = now.getDay(); // 0=周日，3=周三
@@ -375,8 +375,8 @@ const App = () => {
 
     // 订阅实时更新
     const txSubscription = supabase
-      .from('transactions')
-      .on('*', () => {
+      .channel('transactions_channel')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
         fetchAndListen(); // 重新获取数据
       })
       .subscribe();
@@ -696,7 +696,7 @@ const App = () => {
     const interestPool = (totalRevenue - totalExpense);
 
     // 计算个人注资和存款账户的总余额（只统计当前用户的交易）
-    const userApproved = approved.filter(tx => tx.createdBy === currentUser?.username);
+    const userApproved = approved.filter(tx => tx.created_by === currentUser?.username);
     const calcPersonal = (types) => userApproved
       .filter(tx => types.includes(tx.type))
       .reduce((acc, cur) => ({
