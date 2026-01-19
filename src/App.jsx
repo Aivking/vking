@@ -947,6 +947,10 @@ const App = () => {
                 data={displayTx.filter(tx => tx.type === 'injection' && tx.status === 'approved')}
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
                interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出')} applyInterest={true} />
+              
+              <TableSection title={`${t('injectionAccount')} - ${t('withdrawInj')}`} color="orange" icon={ArrowDownLeft} 
+                data={displayTx.filter(tx => tx.type === 'withdraw_inj' && tx.status === 'approved')}
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} applyInterest={false} />
              
              {/* 存款账户总余额 - 已按需求移除显示 */}
 
@@ -954,6 +958,10 @@ const App = () => {
                 data={displayTx.filter(tx => tx.type === 'deposit' && tx.status === 'approved')} 
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
                interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出')} applyInterest={true} />
+              
+              <TableSection title={`${t('depositAccount')} - ${t('withdrawDep')}`} color="blue" icon={Wallet}
+                data={displayTx.filter(tx => tx.type === 'withdraw_dep' && tx.status === 'approved')}
+               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} applyInterest={false} />
            </div>
         </div>
 
