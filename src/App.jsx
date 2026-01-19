@@ -373,19 +373,16 @@ const App = () => {
 
     fetchAndListen();
 
-    // 订阅实时更新
-    const txSubscription = supabase
-      .channel('transactions_channel')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'transactions' }, () => {
-        fetchAndListen(); // 重新获取数据
-      })
-      .subscribe();
+    // 轮询方式获取更新（而不是 WebSocket 实时订阅）
+    const pollInterval = setInterval(() => {
+      fetchAndListen();
+    }, 5000); // 每 5 秒更新一次
 
     const savedUser = sessionStorage.getItem('current_bank_user_v2');
     if (savedUser) setCurrentUser(JSON.parse(savedUser));
 
     return () => {
-      txSubscription.unsubscribe();
+      clearInterval(pollInterval);
     };
   }, []);
 
