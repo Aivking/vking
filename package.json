@@ -10,6 +10,7 @@
     "lint": "eslint . --ext .js,.jsx"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.90.1",
     "firebase": "^10.7.1",
     "lucide-react": "^0.292.0",
     "react": "^18.2.0",
