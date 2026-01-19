@@ -812,7 +812,7 @@ const App = () => {
   );
 
   // 计算按用户分组的净余额数据（用于显示在表格中）
-  // 对于 injection/deposit，显示 (total - withdraw/取款)
+  // 对于 injection/deposit，显示 (total - withdraw/取款)，仅计入已批准的交易
   // 对于 withdraw_inj/withdraw_dep，仍显示原始数据
   const getNetBalanceData = (txList, types, withdrawType = null) => {
     const approved = txList.filter(tx => types.includes(tx.type) && tx.status === 'approved');
@@ -833,7 +833,7 @@ const App = () => {
       userBalances[user].userBalanceTotal = userBalances[user].principal;
     });
     
-    // 从撤资/取款中扣除
+    // 从撤资/取款中扣除（仅计入已批准的撤资/取款）
     if (withdrawType) {
       const withdrawn = txList.filter(tx => tx.type === withdrawType && tx.status === 'approved');
       withdrawn.forEach(w => {
@@ -978,30 +978,30 @@ const App = () => {
         {/* 表格区 */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            <TableSection title={t('loanAssets')} color="red" icon={ArrowUpRight} 
-             data={displayTx.filter(tx => tx.type === 'loan' && tx.status === 'approved')} 
+             data={isAdmin ? displayTx.filter(tx => tx.type === 'loan') : displayTx.filter(tx => tx.type === 'loan' && (tx.status === 'approved' || tx.created_by === currentUser?.username))} 
              isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} onRepay={(id) => {if(window.confirm('确认还款此笔贷款？')) handleCRUD('repay', id)}} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel}
              interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_income')} applyInterest={true} />
            
            <div className="space-y-6">
              {/* 注资账户 - 分开显示 */}
               <TableSection title={`${t('injectionAccount')} - ${t('injection')}`} color="orange" icon={ArrowDownLeft} 
-                data={getNetBalanceData(displayTx, ['injection'], 'withdraw_inj')}
+                data={isAdmin ? displayTx.filter(tx => tx.type === 'injection') : displayTx.filter(tx => tx.type === 'injection' && (tx.status === 'approved' || tx.created_by === currentUser?.username))} 
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
                interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出')} applyInterest={true} />
               
               <TableSection title={`${t('injectionAccount')} - ${t('withdrawInj')}`} color="orange" icon={ArrowDownLeft} 
-                data={displayTx.filter(tx => tx.type === 'withdraw_inj' && tx.status === 'approved')}
+                data={isAdmin ? displayTx.filter(tx => tx.type === 'withdraw_inj') : displayTx.filter(tx => tx.type === 'withdraw_inj' && (tx.status === 'approved' || tx.created_by === currentUser?.username))}
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} applyInterest={false} />
              
              {/* 存款账户总余额 - 已按需求移除显示 */}
 
               <TableSection title={`${t('depositAccount')} - ${t('deposit')}`} color="blue" icon={Wallet}
-                data={getNetBalanceData(displayTx, ['deposit'], 'withdraw_dep')} 
+                data={isAdmin ? displayTx.filter(tx => tx.type === 'deposit') : displayTx.filter(tx => tx.type === 'deposit' && (tx.status === 'approved' || tx.created_by === currentUser?.username))} 
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
                interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出')} applyInterest={true} />
               
               <TableSection title={`${t('depositAccount')} - ${t('withdrawDep')}`} color="blue" icon={Wallet}
-                data={displayTx.filter(tx => tx.type === 'withdraw_dep' && tx.status === 'approved')}
+                data={isAdmin ? displayTx.filter(tx => tx.type === 'withdraw_dep') : displayTx.filter(tx => tx.type === 'withdraw_dep' && (tx.status === 'approved' || tx.created_by === currentUser?.username))}
                isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} applyInterest={false} />
            </div>
         </div>
