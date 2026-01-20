@@ -36,7 +36,7 @@ const translations = {
   zh: {
     // 登录页
     loginTitle: 'EUU',
-    loginSubtitle: '超级投行',
+    loginSubtitle: 'Investment Bank',
     serverConnected: '服务器已连接',
     connecting: '正在连接...',
     connectionFailed: '连接失败',
@@ -126,7 +126,7 @@ const translations = {
   en: {
     // Login page
     loginTitle: 'EUU',
-    loginSubtitle: 'Super Investment Bank',
+    loginSubtitle: 'Investment Bank',
     serverConnected: 'Server Connected',
     connecting: 'Connecting...',
     connectionFailed: 'Connection Failed',
@@ -1010,7 +1010,7 @@ const App = () => {
             {language === 'zh' ? 'EN' : '中文'}
           </button>
         </div>
-        <div className="bg-white w-full max-w-md p-8 rounded-2xl shadow-2xl animate-in fade-in zoom-in-95 duration-300">
+        <div className="bg-white w-full max-w-md p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-300">
           <div className="text-center mb-8">
             <h1 className="text-4xl font-bold bg-gradient-to-r from-green-600 to-emerald-600 bg-clip-text text-transparent mb-2">{t('loginTitle')}</h1>
             <p className="text-xl text-gray-700 font-semibold">{t('loginSubtitle')}</p>
@@ -1020,10 +1020,10 @@ const App = () => {
             </p>
           </div>
           <form onSubmit={authMode === 'login' ? handleLogin : handleRegister} className="space-y-4">
-            <input type="text" required placeholder={t('accountPlaceholder')} value={authInput.username} onChange={e => setAuthInput({...authInput, username: e.target.value})} className="w-full border-2 border-green-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none" />
-            <input type="password" required placeholder={t('passwordPlaceholder')} value={authInput.password} onChange={e => setAuthInput({...authInput, password: e.target.value})} className="w-full border-2 border-green-200 rounded-lg px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none" />
+            <input type="text" required placeholder={t('accountPlaceholder')} value={authInput.username} onChange={e => setAuthInput({...authInput, username: e.target.value})} className="w-full border-2 border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none" />
+            <input type="password" required placeholder={t('passwordPlaceholder')} value={authInput.password} onChange={e => setAuthInput({...authInput, password: e.target.value})} className="w-full border-2 border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none" />
             {authError && <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-center gap-2 border border-red-200"><AlertCircle className="w-4 h-4"/>{authError}</div>}
-            <button disabled={connectionStatus !== 'connected'} type="submit" className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:bg-slate-400 text-white font-bold py-3 rounded-xl transition-all shadow-lg">{authMode === 'login' ? t('loginButton') : t('registerButton')}</button>
+            <button disabled={connectionStatus !== 'connected'} type="submit" className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:bg-slate-400 text-white font-bold py-3 transition-all shadow-lg">{authMode === 'login' ? t('loginButton') : t('registerButton')}</button>
           </form>
           <div className="mt-6 text-center text-sm"><button onClick={() => { setAuthMode(authMode === 'login' ? 'register' : 'login'); setAuthError(''); }} className="text-green-600 hover:text-green-700 hover:underline font-medium">{authMode === 'login' ? t('noAccount') : t('backToLogin')}</button></div>
         </div>
@@ -1282,7 +1282,7 @@ const App = () => {
         <div className="flex flex-col md:flex-row justify-between items-start md:items-center pb-6 border-b border-green-200">
           <div>
             <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
-              <span className="text-blue-600 text-4xl font-bold">{t('loginTitle')}</span> {t('loginSubtitle')}
+              <span className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-emerald-500 to-blue-600 bg-clip-text text-transparent animate-gradient">{t('loginTitle')}</span> {t('loginSubtitle')}
               {isAdmin && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">ADMIN</span>}
             </h1>
             <p className="text-slate-500 mt-1 text-sm">{t('currentUser')}: <span className="font-bold">{currentUser.username}</span></p>
@@ -1291,11 +1291,11 @@ const App = () => {
              <div className="flex items-center gap-3">
                <button 
                  onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
-                 className="bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 rounded-lg font-medium transition-colors border border-green-200 text-sm"
+                 className="bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 font-medium transition-colors border border-green-200 text-sm"
                >
                  {language === 'zh' ? 'EN' : '中文'}
                </button>
-               <div className={`px-4 py-2 rounded-lg font-bold text-lg ${stats.netCashFlow >= -0.001 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+               <div className={`px-4 py-2 font-bold text-lg ${stats.netCashFlow >= -0.001 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                   {t('netCashFlow')}: {stats.netCashFlow > 0 ? '+' : ''}{formatMoney(stats.netCashFlow)} {t('perWeek')}
                 </div>
              </div>
@@ -1304,10 +1304,10 @@ const App = () => {
         </div>
 
         {/* 公告栏 */}
-        <div className="bg-gradient-to-r from-green-50 via-green-100 to-green-50 rounded-xl shadow-sm p-4 border-2 border-green-200">
+        <div className="bg-green-50 shadow-sm p-4 border border-green-200">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3 flex-1">
-              <div className="bg-green-100 p-2 rounded-lg border border-green-200">
+              <div className="bg-green-100 p-2 border border-green-200">
                 <Activity className="w-6 h-6 text-green-700" />
               </div>
               {isEditingAnnouncement ? (
@@ -1390,7 +1390,7 @@ const App = () => {
         )}
 
         {/* 操作栏 */}
-        <div className="bg-white p-4 rounded-xl border border-green-200 shadow-sm flex flex-wrap gap-4 items-center">
+        <div className="bg-white p-4 border border-green-200 shadow-sm flex flex-wrap gap-4 items-center">
             <span className="font-bold text-gray-700 mr-2 flex items-center gap-2"><Lock className="w-4 h-4 text-gray-400"/> {t('operations')}:</span>
             <Btn icon={PlusCircle} label={t('loan')} onClick={() => openModal('loan')} color="green" />
             <div className="h-6 w-px bg-green-200 mx-2"></div>
@@ -1528,13 +1528,13 @@ const App = () => {
 
 // --- 内嵌子组件 (Sub-components) ---
 const Btn = ({ icon: Icon, label, onClick, color, className = '' }) => (
-  <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 bg-${color}-50 text-${color}-700 hover:bg-${color}-100 rounded-lg font-medium border border-${color}-200 transition-colors ${className}`}>
+  <button onClick={onClick} className={`flex items-center gap-2 px-4 py-2 bg-${color}-50 text-${color}-700 hover:bg-${color}-100 font-medium border border-${color}-200 transition-colors ${className}`}>
         <Icon className="w-4 h-4" /> {label}
     </button>
 );
 
 const StatCard = ({ title, value, subtext, icon }) => (
-    <div className="bg-white p-6 rounded-xl shadow-sm border border-green-200 flex flex-col justify-between h-32">
+    <div className="bg-white p-6 shadow-sm border border-green-200 flex flex-col justify-between h-32">
         <div className="flex justify-between items-start"><h3 className="text-sm font-medium text-gray-500 uppercase">{title}</h3><div className="p-2 bg-gray-50 rounded-lg">{icon}</div></div>
         <div><div className="text-2xl font-bold text-gray-900">{value}</div><div className="text-xs font-medium text-gray-500 mt-1">{subtext}</div></div>
     </div>
@@ -1555,8 +1555,8 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
   };
 
   return (
-    <div className="bg-white rounded-xl shadow-sm border border-green-200 overflow-hidden">
-      <div className={`bg-${color}-50 px-6 py-4 border-b border-green-200 flex items-center justify-between`}>
+    <div className="bg-white shadow-sm border border-green-200 overflow-hidden">
+      <div className="bg-green-50 px-6 py-4 border-b border-green-200 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
         </div>
