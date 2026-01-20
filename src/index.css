@@ -48,6 +48,15 @@ body {
   }
 }
 
+@keyframes progress-flow {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 200% 50%;
+  }
+}
+
 .animate-in {
   animation: fade-in 0.3s ease-in-out, zoom-in-95 0.3s ease-in-out;
 }
@@ -55,4 +64,9 @@ body {
 .animate-gradient {
   background-size: 200% 200%;
   animation: gradient-shift 3s ease infinite;
+}
+
+.animate-progress {
+  background-size: 200% 100%;
+  animation: progress-flow 2s linear infinite;
 }

@@ -20,7 +20,9 @@ const typeLabels = {
   'deposit': '存款',
   'withdraw_dep': '取款',
   'interest_income': '利息收入',
-  'interest_expense': '利息支出'
+  'interest_expense': '利息支出',
+  'planet_fund': '星星开发资金',
+  'planet_card': '星星名片'
 };
 
 const getTypeLabel = (type) => typeLabels[type] || type;
@@ -68,6 +70,27 @@ const translations = {
     save: '保存',
     cancel: '取消',
     editAnnouncement: '编辑公告',
+    // 星星开发
+    planetDev: '星星开发',
+    planetCard: '星星名片',
+    planetName: '星星名称',
+    planetDesc: '星星描述',
+    devProgress: '开发进度',
+    planetFund: '星星开发资金',
+    totalFund: '资金总余额',
+    fundForDev: '为星星开发注资',
+    fundAmount: '注资金额',
+    submitFundRequest: '提交注资申请',
+    namePlaceholder: '输入星星名称...',
+    descPlaceholder: '输入星星描述内容...',
+    updateCard: '更新名片',
+    setProgress: '设置进度',
+    progressValue: '进度值(%)',
+    createCard: '创建名片',
+    newCard: '新建星星名片',
+    cardFund: '专项资金',
+    fundingList: '注资名单',
+    noFundingYet: '暂无注资记录',
     // 审批
     pendingApproval: '待审批',
     applicant: '申请人',
@@ -148,6 +171,27 @@ const translations = {
     save: 'Save',
     cancel: 'Cancel',
     editAnnouncement: 'Edit Announcement',
+    // Star Development
+    planetDev: 'Star Dev',
+    planetCard: 'Star Card',
+    planetName: 'Star Name',
+    planetDesc: 'Description',
+    devProgress: 'Progress',
+    planetFund: 'Star Fund',
+    totalFund: 'Total Fund',
+    fundForDev: 'Fund for Development',
+    fundAmount: 'Amount',
+    submitFundRequest: 'Submit Request',
+    namePlaceholder: 'Enter star name...',
+    descPlaceholder: 'Enter description...',
+    updateCard: 'Update',
+    setProgress: 'Set Progress',
+    progressValue: 'Progress (%)',
+    createCard: 'Create Card',
+    newCard: 'New Star Card',
+    cardFund: 'Dedicated Fund',
+    fundingList: 'Funding List',
+    noFundingYet: 'No funding records yet',
     // Approval
     pendingApproval: 'Pending Approval',
     applicant: 'Applicant',
@@ -201,7 +245,9 @@ const translations = {
       'deposit': 'Deposit',
       'withdraw_dep': 'Withdraw Dep.',
       'interest_income': 'Interest Income',
-      'interest_expense': 'Interest Expense'
+      'interest_expense': 'Interest Expense',
+      'planet_fund': 'Star Fund',
+      'planet_card': 'Star Card'
     }
   }
 };
@@ -238,7 +284,7 @@ const App = () => {
   const [announcementInput, setAnnouncementInput] = useState('');
   
   // 论坛 State
-  const [currentPage, setCurrentPage] = useState('bank'); // 'bank' or 'forum'
+  const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum' or 'planet'
   const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
   const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
   const [posts, setPosts] = useState([]);
@@ -246,6 +292,15 @@ const App = () => {
   const [newPostData, setNewPostData] = useState({ title: '', content: '' });
   const [replyingTo, setReplyingTo] = useState(null); // { postId, replyId } or postId
   const [replyContent, setReplyContent] = useState('');
+  
+  // 星星开发 State
+  const [planetCards, setPlanetCards] = useState([]);
+  const [newCardModal, setNewCardModal] = useState(false);
+  const [newCardData, setNewCardData] = useState({ name: '', description: '', progress: 0 });
+  const [editingCardId, setEditingCardId] = useState(null);
+  const [editCardData, setEditCardData] = useState({ name: '', description: '', progress: 0 });
+  const [fundingCardId, setFundingCardId] = useState(null);
+  const [fundAmount, setFundAmount] = useState('');
 
   // 翻译函数
   const t = (key) => {
@@ -596,6 +651,123 @@ const App = () => {
       console.error('删除帖子失败:', e);
     }
   };
+
+  // --- 星星开发相关函数 ---
+  const handleCreateCard = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const cardRecord = {
+        type: 'planet_card',
+        client: newCardData.name,
+        principal: 0, // 初始资金为0
+        rate: newCardData.progress,
+        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+        created_by: currentUser.username,
+        creator_id: currentUser.id || currentUser.username,
+        status: isAdmin ? 'approved' : 'pending',
+        remark: newCardData.description
+      };
+
+      const { error } = await supabase
+        .from('transactions')
+        .insert([cardRecord]);
+
+      if (error) throw error;
+
+      if (isAdmin) {
+        alert('星星名片创建成功');
+      } else {
+        alert('星星名片申请已提交，等待管理员审批');
+      }
+      
+      setNewCardModal(false);
+      setNewCardData({ name: '', description: '', progress: 0 });
+      fetchTransactions();
+    } catch (e) {
+      alert('创建失败: ' + e.message);
+    }
+  };
+
+  const handleUpdateCard = async (cardId) => {
+    try {
+      const updateData = {
+        client: editCardData.name,
+        rate: editCardData.progress,
+        remark: editCardData.description
+      };
+
+      const { error } = await supabase
+        .from('transactions')
+        .update(updateData)
+        .eq('id', cardId);
+
+      if (error) throw error;
+
+      alert('名片更新成功');
+      setEditingCardId(null);
+      fetchTransactions();
+    } catch (e) {
+      alert('更新失败: ' + e.message);
+    }
+  };
+
+  const handlePlanetFundRequest = async (cardId) => {
+    const amount = parseFloat(fundAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert('请输入有效金额');
+      return;
+    }
+
+    try {
+      const card = planetCards.find(c => c.id === cardId);
+      
+      const fundRecord = {
+        type: 'planet_fund',
+        client: card.client, // 星星名称
+        principal: amount,
+        rate: 0,
+        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+        created_by: currentUser.username,
+        creator_id: currentUser.id || currentUser.username,
+        status: 'pending',
+        remark: `为 ${card.client} 注入资金`
+      };
+
+      const { error } = await supabase
+        .from('transactions')
+        .insert([fundRecord]);
+
+      if (error) throw error;
+
+      alert('星星开发资金申请已提交，等待管理员审批');
+      setFundAmount('');
+      setFundingCardId(null);
+      fetchTransactions();
+    } catch (e) {
+      alert('提交失败: ' + e.message);
+    }
+  };
+
+  // 计算每个星星的资金总额
+  const getCardFund = (cardName) => {
+    return transactions
+      .filter(tx => tx.type === 'planet_fund' && tx.client === cardName && tx.status === 'approved')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+  };
+
+  // 获取注资记录列表
+  const getCardFundingList = (cardName) => {
+    return transactions
+      .filter(tx => tx.type === 'planet_fund' && tx.client === cardName && tx.status === 'approved')
+      .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+  };
+
+  // 获取所有星星名片
+  useEffect(() => {
+    const cards = transactions.filter(tx => tx.type === 'planet_card' && tx.status === 'approved');
+    setPlanetCards(cards);
+  }, [transactions]);
 
   // --- 自动结算利息 ---
   const autoSettleInterest = async () => {
@@ -1234,6 +1406,258 @@ const App = () => {
     );
   }
 
+  // 如果当前在星星开发页面，渲染星星开发
+  if (currentPage === 'planet') {
+    return (
+      <div className="min-h-screen bg-[#FFFEF9] text-gray-800 p-4 md:p-8 font-sans">
+        <div className="max-w-7xl mx-auto space-y-6">
+          {/* 星星开发头部 */}
+          <div className="flex justify-between items-center pb-6 border-b border-green-200">
+            <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setCurrentPage('bank')}
+                className="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-medium transition-colors border border-green-200 flex items-center gap-2"
+              >
+                <ArrowDownLeft className="w-4 h-4" /> {t('backToBank')}
+              </button>
+              <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
+                <Activity className="text-blue-700" />
+                <span className="bg-gradient-to-r from-blue-600 via-emerald-500 to-blue-600 bg-clip-text text-transparent animate-gradient">{t('planetDev')}</span>
+              </h1>
+            </div>
+            <button
+              onClick={() => setNewCardModal(true)}
+              className="bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300 text-blue-700 px-6 py-2 font-bold transition-all flex items-center gap-2 border border-blue-300"
+            >
+              <PlusCircle className="w-4 h-4" /> {t('createCard')}
+            </button>
+          </div>
+
+          {/* 星星名片列表 */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {planetCards.length === 0 ? (
+              <div className="col-span-full bg-white border border-blue-200 p-12 text-center">
+                <Activity className="w-16 h-16 mx-auto text-gray-300 mb-4" />
+                <p className="text-gray-400 text-lg">暂无星星名片</p>
+              </div>
+            ) : (
+              planetCards.map(card => {
+                const cardFund = getCardFund(card.client);
+                const isEditing = editingCardId === card.id;
+                const isFunding = fundingCardId === card.id;
+
+                return (
+                  <div key={card.id} className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 p-4 shadow-md hover:shadow-lg transition-shadow">
+                    {/* 名片标题 */}
+                    <div className="mb-3">
+                      {isEditing && isAdmin ? (
+                        <input
+                          type="text"
+                          value={editCardData.name}
+                          onChange={(e) => setEditCardData({ ...editCardData, name: e.target.value })}
+                          className="w-full text-lg font-bold border-2 border-blue-300 px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none"
+                        />
+                      ) : (
+                        <h3 className="text-lg font-bold text-blue-700">{card.client}</h3>
+                      )}
+                    </div>
+
+                    {/* 描述 */}
+                    <div className="mb-3 min-h-[60px]">
+                      {isEditing && (isAdmin || currentUser.role === 'global_admin') ? (
+                        <textarea
+                          value={editCardData.description}
+                          onChange={(e) => setEditCardData({ ...editCardData, description: e.target.value })}
+                          className="w-full text-sm border-2 border-blue-300 px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none resize-none"
+                          rows={2}
+                        />
+                      ) : (
+                        <p className="text-sm text-gray-700 line-clamp-3">{card.remark || '暂无描述'}</p>
+                      )}
+                    </div>
+
+                    {/* 进度条 */}
+                    <div className="mb-3">
+                      <div className="flex justify-between items-center mb-1">
+                        <span className="text-xs font-medium text-gray-600">{t('devProgress')}</span>
+                        <span className="text-sm font-bold text-blue-500">{card.rate}%</span>
+                      </div>
+                      <div className="w-full bg-gray-200 h-3">
+                        <div 
+                          className="bg-gradient-to-r from-green-300 via-emerald-400 to-green-300 h-full transition-all duration-500 animate-progress"
+                          style={{ width: `${card.rate}%` }}
+                        ></div>
+                      </div>
+                      {isEditing && isAdmin && (
+                        <input
+                          type="number"
+                          min="0"
+                          max="100"
+                          value={editCardData.progress}
+                          onChange={(e) => setEditCardData({ ...editCardData, progress: parseInt(e.target.value) || 0 })}
+                          className="w-full mt-2 text-sm border-2 border-blue-300 px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none"
+                        />
+                      )}
+                    </div>
+
+                    {/* 资金显示 */}
+                    <div className="bg-white border border-green-200 p-3 mb-3">
+                      <p className="text-xs text-gray-600 mb-1">{t('cardFund')}</p>
+                      <p className="text-xl font-bold text-green-600">{formatMoney(cardFund)}</p>
+                    </div>
+
+                    {/* 注资名单 */}
+                    <div className="bg-gray-50 border border-gray-200 p-3 mb-3 max-h-40 overflow-y-auto">
+                      <p className="text-xs font-medium text-gray-700 mb-2">{t('fundingList')}</p>
+                      {(() => {
+                        const fundingList = getCardFundingList(card.client);
+                        return fundingList.length > 0 ? (
+                          <div className="space-y-1">
+                            {fundingList.map((fund, idx) => (
+                              <div key={idx} className="flex justify-between items-center text-xs bg-white px-2 py-1 border border-gray-100">
+                                <span className="text-gray-700 font-medium">{fund.created_by || '匿名'}</span>
+                                <span className="text-green-600 font-bold">{formatMoney(fund.principal)}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <p className="text-xs text-gray-400 text-center py-2">{t('noFundingYet')}</p>
+                        );
+                      })()}
+                    </div>
+
+                    {/* 注资功能 */}
+                    {isFunding ? (
+                      <div className="space-y-2">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={fundAmount}
+                          onChange={(e) => setFundAmount(e.target.value)}
+                          className="w-full border-2 border-green-300 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                          placeholder="输入金额..."
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handlePlanetFundRequest(card.id)}
+                            className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 text-sm font-bold transition-colors"
+                          >
+                            {t('submit')}
+                          </button>
+                          <button
+                            onClick={() => { setFundingCardId(null); setFundAmount(''); }}
+                            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 text-sm font-bold transition-colors"
+                          >
+                            {t('cancel')}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setFundingCardId(card.id)}
+                          className="flex-1 bg-green-100 hover:bg-green-200 text-green-700 px-3 py-2 text-sm font-bold transition-colors border border-green-300"
+                        >
+                          {t('fundForDev')}
+                        </button>
+                        {(isAdmin || currentUser.role === 'global_admin') && (
+                          isEditing ? (
+                            <>
+                              <button
+                                onClick={() => handleUpdateCard(card.id)}
+                                className="bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300 text-blue-700 px-3 py-2 text-sm font-bold transition-all border border-blue-300"
+                              >
+                                <CheckCircle className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setEditingCardId(null)}
+                                className="bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 text-sm font-bold transition-colors"
+                              >
+                                <XCircle className="w-4 h-4" />
+                              </button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => {
+                                setEditingCardId(card.id);
+                                setEditCardData({ name: card.client, description: card.remark, progress: card.rate });
+                              }}
+                              className="bg-blue-100 hover:bg-blue-200 text-blue-600 px-3 py-2 text-sm font-bold transition-colors border border-blue-300"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                          )
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* 创建名片 Modal */}
+          {newCardModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white shadow-2xl max-w-md w-full p-6 space-y-4">
+                <div className="flex justify-between items-center border-b pb-4">
+                  <h3 className="font-bold text-xl text-gray-800">{t('newCard')}</h3>
+                  <button onClick={() => setNewCardModal(false)}>
+                    <X className="w-6 h-6 text-gray-400 hover:text-gray-600" />
+                  </button>
+                </div>
+                <form onSubmit={handleCreateCard} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('planetName')}</label>
+                    <input
+                      type="text"
+                      required
+                      value={newCardData.name}
+                      onChange={(e) => setNewCardData({ ...newCardData, name: e.target.value })}
+                      className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none"
+                      placeholder={t('namePlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('planetDesc')}</label>
+                    <textarea
+                      required
+                      value={newCardData.description}
+                      onChange={(e) => setNewCardData({ ...newCardData, description: e.target.value })}
+                      rows={4}
+                      className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none resize-none"
+                      placeholder={t('descPlaceholder')}
+                    />
+                  </div>
+                  {isAdmin && (
+                    <div>
+                      <label className="block text-sm font-medium mb-2 text-gray-700">{t('progressValue')}</label>
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        value={newCardData.progress}
+                        onChange={(e) => setNewCardData({ ...newCardData, progress: parseInt(e.target.value) || 0 })}
+                        className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-blue-400 focus:border-blue-400 outline-none"
+                      />
+                    </div>
+                  )}
+                  <button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300 text-blue-700 font-bold py-3 transition-all border border-blue-300"
+                  >
+                    {t('createCard')}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   // 计算按用户分组的净余额数据（用于显示在表格中）
   // 对于 injection/deposit，显示 (total - withdraw/取款)，仅计入已批准的交易
   // 对于 withdraw_inj/withdraw_dep，仍显示原始数据
@@ -1397,11 +1821,21 @@ const App = () => {
             <Btn icon={PlusCircle} label={t('injection')} onClick={() => openModal('injection')} color="blue" />
             <Btn icon={MinusCircle} label={t('withdrawInj')} onClick={() => openModal('withdraw_inj')} color="blue" />
             <div className="h-6 w-px bg-green-200 mx-2"></div>
-            <Btn icon={PlusCircle} label={t('deposit')} onClick={() => openModal('deposit')} color="purple" />
-            <Btn icon={MinusCircle} label={t('withdrawDep')} onClick={() => openModal('withdraw_dep')} color="purple" />
+            <button onClick={() => openModal('deposit')} className="bg-gradient-to-r from-green-50 to-emerald-50 hover:from-green-100 hover:to-emerald-100 text-green-700 px-4 py-2 font-bold transition-all flex items-center gap-2 border border-green-200">
+              <PlusCircle className="w-4 h-4" />
+              {t('deposit')}
+            </button>
+            <button onClick={() => openModal('withdraw_dep')} className="bg-gradient-to-r from-yellow-50 to-amber-50 hover:from-yellow-100 hover:to-amber-100 text-yellow-700 px-4 py-2 font-bold transition-all flex items-center gap-2 border border-yellow-200">
+              <MinusCircle className="w-4 h-4" />
+              {t('withdrawDep')}
+            </button>
             {isAdmin && <div className="h-6 w-px bg-green-200 mx-2"></div>}
             <div className="h-6 w-px bg-green-200 mx-2"></div>
             <Btn icon={MessageSquare} label={t('forum')} onClick={() => setCurrentPage('forum')} color="red" className="px-8" />
+            <button onClick={() => setCurrentPage('planet')} className="bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300 text-blue-700 px-8 py-2 font-bold transition-all flex items-center gap-2 border border-blue-300">
+              <Activity className="w-4 h-4" />
+              {t('planetDev')}
+            </button>
             {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
         </div>
 
