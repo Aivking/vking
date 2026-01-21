@@ -2487,9 +2487,44 @@ const StatCard = ({ title, value, subtext, icon }) => (
 const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, onRepay, onDeleteAll, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
   // 使用单个state管理所有行的展开状态
   const [openActionsId, setOpenActionsId] = React.useState(null);
+  const [editingCell, setEditingCell] = React.useState(null); // { id, field, value }
   
   const calculateWeeklyInterest = (principal, rate) => {
     return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
+  };
+  
+  const handleCellEdit = async (rowId, field, newValue) => {
+    try {
+      const numValue = parseFloat(newValue);
+      if (isNaN(numValue) || numValue < 0) {
+        alert('请输入有效的数字');
+        setEditingCell(null);
+        return;
+      }
+      
+      if (field === 'settlement_count') {
+        // 对于利息次数，存储在备注字段中
+        const { error } = await supabase
+          .from('transactions')
+          .update({ remark: `利息次数:${Math.round(numValue)}` })
+          .eq('id', rowId);
+        
+        if (error) throw error;
+      } else {
+        // 其他字段正常更新
+        const { error } = await supabase
+          .from('transactions')
+          .update({ [field]: numValue })
+          .eq('id', rowId);
+        
+        if (error) throw error;
+      }
+      
+      setEditingCell(null);
+    } catch (e) {
+      alert('更新失败: ' + e.message);
+      setEditingCell(null);
+    }
   };
 
   const getProductTypeLabel = (row) => {
@@ -2547,13 +2582,20 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
               const productTypeLabel = getProductTypeLabel(row);
 
               const rowTime = row.timestamp ? new Date(row.timestamp) : null;
-              const cyclesForRow = (applyInterest && rowTime)
-                ? interestRecords.filter(r => {
-                    if (!r.timestamp) return false;
-                    const rt = new Date(r.timestamp);
-                    return rt >= rowTime;
-                  }).length
-                : 0;
+              // 先尝试从 remark 中解析 settlement_count，如果没有则计算
+              let cyclesForRow = 0;
+              if (row.remark && row.remark.includes('利息次数:')) {
+                const match = row.remark.match(/利息次数:(\d+)/);
+                cyclesForRow = match ? parseInt(match[1]) : 0;
+              } else {
+                cyclesForRow = (applyInterest && rowTime)
+                  ? interestRecords.filter(r => {
+                      if (!r.timestamp) return false;
+                      const rt = new Date(r.timestamp);
+                      return rt >= rowTime;
+                    }).length
+                  : 0;
+              }
 
               const totalAmount = isInterestRecord
                 ? parseFloat(row.principal || 0)
@@ -2562,15 +2604,76 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                   : (parseFloat(row.principal || 0) + weeklyInterest * cyclesForRow));
 
               const showActions = openActionsId === row.id;
+              
+              // 判断是否正在编辑金额单元格
+              const isEditingPrincipal = editingCell?.id === row.id && editingCell?.field === 'principal';
+              const isEditingCycles = editingCell?.id === row.id && editingCell?.field === 'settlement_count';
+              
               return (
                 <tr key={row.id} className={`hover:bg-gray-50 text-xs ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
                   <td className="px-1.5 py-1.5 whitespace-nowrap">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
                   <td className={`px-1.5 py-1.5 font-bold whitespace-nowrap ${isIncome ? 'text-green-700' : 'text-orange-700'}`}>{getLocalizedTypeLabel(row.type)}</td>
                   <td className="px-1.5 py-1.5 font-medium truncate max-w-xs">{row.client}</td>
                   <td className="px-1.5 py-1.5 text-xs whitespace-nowrap"><span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded inline-block text-xs">{productTypeLabel}</span></td>
-                  <td className={`px-1.5 py-1.5 text-right font-mono font-bold whitespace-nowrap ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m</td>
+                  <td className={`px-1.5 py-1.5 text-right font-mono font-bold whitespace-nowrap ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>
+                    {isAdmin && !isInterestRecord ? (
+                      isEditingPrincipal ? (
+                        <input
+                          type="number"
+                          step="0.001"
+                          defaultValue={row.principal}
+                          onBlur={(e) => handleCellEdit(row.id, 'principal', e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleCellEdit(row.id, 'principal', e.target.value);
+                            }
+                          }}
+                          autoFocus
+                          className="w-20 px-1 py-0.5 border border-blue-300 rounded text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      ) : (
+                        <span 
+                          onClick={() => setEditingCell({ id: row.id, field: 'principal', value: row.principal })}
+                          className="cursor-pointer hover:bg-blue-100 px-1 rounded"
+                          title="点击编辑"
+                        >
+                          {isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m
+                        </span>
+                      )
+                    ) : (
+                      <span>{isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m</span>
+                    )}
+                  </td>
                   <td className="px-1.5 py-1.5 text-right font-mono text-xs text-purple-600 whitespace-nowrap">{isInterestRecord ? '-' : (weeklyInterest || 0).toFixed(3) + 'm'}</td>
-                  <td className="px-1.5 py-1.5 text-right font-mono text-xs text-gray-600 whitespace-nowrap">{cyclesForRow}</td>
+                  <td className="px-1.5 py-1.5 text-right font-mono text-xs text-gray-600 whitespace-nowrap">
+                    {isAdmin && !isInterestRecord ? (
+                      isEditingCycles ? (
+                        <input
+                          type="number"
+                          step="1"
+                          defaultValue={cyclesForRow}
+                          onBlur={(e) => handleCellEdit(row.id, 'settlement_count', e.target.value)}
+                          onKeyPress={(e) => {
+                            if (e.key === 'Enter') {
+                              handleCellEdit(row.id, 'settlement_count', e.target.value);
+                            }
+                          }}
+                          autoFocus
+                          className="w-12 px-1 py-0.5 border border-blue-300 rounded text-right focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                        />
+                      ) : (
+                        <span 
+                          onClick={() => setEditingCell({ id: row.id, field: 'settlement_count', value: cyclesForRow })}
+                          className="cursor-pointer hover:bg-blue-100 px-1 rounded"
+                          title="点击编辑"
+                        >
+                          {cyclesForRow}
+                        </span>
+                      )
+                    ) : (
+                      <span>{cyclesForRow}</span>
+                    )}
+                  </td>
                   <td className="px-1.5 py-1.5 text-xs text-gray-500 whitespace-nowrap">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
                   {isAdmin && <td className="px-1.5 py-1.5 text-center relative">
                     <div className="relative inline-block">
