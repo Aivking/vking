@@ -301,6 +301,9 @@ const App = () => {
   const [editCardData, setEditCardData] = useState({ name: '', description: '', progress: 0 });
   const [fundingCardId, setFundingCardId] = useState(null);
   const [fundAmount, setFundAmount] = useState('');
+  
+  // 利息管理 State
+  const [interestManageModal, setInterestManageModal] = useState(false);
 
   // 翻译函数
   const t = (key) => {
@@ -1661,6 +1664,87 @@ const App = () => {
       </div>
     );
   }
+  
+  // 利息管理Modal
+  if (interestManageModal) {
+    const interestTx = transactions.filter(tx => ['interest_income', 'interest_expense'].includes(tx.type));
+    const settleIds = {};
+    interestTx.forEach(tx => {
+      const sid = tx.settle_id || 'unknown';
+      if (!settleIds[sid]) settleIds[sid] = [];
+      settleIds[sid].push(tx);
+    });
+    
+    const handleDeleteSettlement = async (settleId) => {
+      if (!window.confirm(`确认删除结算周期的 ${settleIds[settleId].length} 条记录？此操作不可撤销！`)) return;
+      
+      try {
+        for (const tx of settleIds[settleId]) {
+          await supabase.from('transactions').delete().eq('id', tx.id);
+        }
+        alert('删除成功！');
+        setInterestManageModal(false);
+      } catch (e) {
+        alert('删除失败: ' + e.message);
+      }
+    };
+    
+    return (
+      <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+        <div className="bg-white shadow-2xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="flex justify-between items-center border-b pb-4">
+            <h3 className="font-bold text-xl text-gray-800">利息结算记录管理</h3>
+            <button onClick={() => setInterestManageModal(false)}>
+              <X className="w-6 h-6 text-gray-400 hover:text-gray-600" />
+            </button>
+          </div>
+          
+          <div className="space-y-3">
+            {Object.keys(settleIds).sort().reverse().map((sid, idx) => {
+              const records = settleIds[sid];
+              const time = records[0]?.timestamp || 'N/A';
+              const incomeRecords = records.filter(r => r.type === 'interest_income');
+              const expenseRecords = records.filter(r => r.type === 'interest_expense');
+              const totalIncome = incomeRecords.reduce((sum, r) => sum + (parseFloat(r.principal) || 0), 0);
+              const totalExpense = expenseRecords.reduce((sum, r) => sum + (parseFloat(r.principal) || 0), 0);
+              
+              return (
+                <div key={sid} className="border border-gray-200 rounded-lg p-4 bg-gray-50 hover:bg-gray-100 transition-colors">
+                  <div className="flex justify-between items-start">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-sm font-semibold text-gray-700">结算 #{idx + 1}</span>
+                        <span className="text-xs text-gray-500">ID: {sid}</span>
+                      </div>
+                      <div className="text-sm text-gray-600 space-y-1">
+                        <div>⏰ 时间: {time}</div>
+                        <div>📊 记录数: {records.length}条</div>
+                        <div className="flex gap-4">
+                          <span className="text-green-600">💰 收入: +{totalIncome.toFixed(3)}m</span>
+                          <span className="text-red-600">💸 支出: -{totalExpense.toFixed(3)}m</span>
+                          <span className="font-semibold text-purple-600">净利: {(totalIncome - totalExpense).toFixed(3)}m</span>
+                        </div>
+                      </div>
+                    </div>
+                    <button
+                      onClick={() => handleDeleteSettlement(sid)}
+                      className="flex items-center gap-1 px-3 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors text-sm font-medium"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      删除
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {Object.keys(settleIds).length === 0 && (
+              <div className="text-center text-gray-400 py-8">暂无利息结算记录</div>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   // 计算按用户分组的净余额数据（用于显示在表格中）
   // 对于 injection/deposit，显示 (total - withdraw/取款)，仅计入已批准的交易
@@ -1842,34 +1926,7 @@ const App = () => {
             </button>
             {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
             {isAdmin && <button
-              onClick={() => {
-                const interestTx = transactions.filter(tx => ['interest_income', 'interest_expense'].includes(tx.type));
-                const settleIds = {};
-                interestTx.forEach(tx => {
-                  const sid = tx.settle_id || 'unknown';
-                  if (!settleIds[sid]) settleIds[sid] = [];
-                  settleIds[sid].push(tx);
-                });
-                
-                let msg = '结算周期记录：\n\n';
-                Object.keys(settleIds).sort().reverse().forEach((sid, idx) => {
-                  const records = settleIds[sid];
-                  const time = records[0]?.timestamp || 'N/A';
-                  msg += `[${idx + 1}] 结算ID: ${sid}\n`;
-                  msg += `    时间: ${time}\n`;
-                  msg += `    记录数: ${records.length}条\n\n`;
-                });
-                
-                const choice = prompt(msg + '\n输入结算ID来删除该周期的所有利息记录（谨慎操作！）：');
-                if (choice && settleIds[choice]) {
-                  if (window.confirm(`确认删除结算周期 ${choice} 的 ${settleIds[choice].length} 条记录？`)) {
-                    settleIds[choice].forEach(async (tx) => {
-                      await supabase.from('transactions').delete().eq('id', tx.id);
-                    });
-                    alert('删除成功！');
-                  }
-                }
-              }}
+              onClick={() => setInterestManageModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
             >
               <Trash2 className="w-4 h-4" />
