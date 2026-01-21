@@ -1371,18 +1371,18 @@ const App = () => {
             <div className="flex items-center gap-4">
               <button 
                 onClick={() => setCurrentPage('bank')}
-                className="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors border border-green-200 flex items-center gap-2"
+                className="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-medium transition-colors border border-green-200 flex items-center gap-2"
               >
                 <ArrowDownLeft className="w-4 h-4" /> {t('backToBank')}
               </button>
               <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
-                <MessageSquare className="text-indigo-600" />
-                <span className="text-indigo-600">{t('forum')}</span>
+                <MessageSquare className="text-blue-400 animate-bounce" />
+                <span className="bg-gradient-to-r from-blue-400 to-blue-500 bg-clip-text text-transparent font-black">{t('forum')}</span>
               </h1>
             </div>
             <button
               onClick={() => setNewPostModal(true)}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-2 rounded-lg font-bold transition-colors flex items-center gap-2"
+              className="bg-gradient-to-r from-blue-400 to-blue-500 hover:from-blue-500 hover:to-blue-600 text-white px-6 py-2 font-bold transition-all duration-300 flex items-center gap-2 hover:shadow-lg hover:shadow-blue-300 active:scale-95"
             >
               <PlusCircle className="w-4 h-4" /> {t('newPost')}
             </button>
@@ -1391,13 +1391,13 @@ const App = () => {
           {/* 帖子列表 */}
           <div className="space-y-4">
             {posts.length === 0 ? (
-              <div className="bg-white rounded-xl p-12 text-center border border-green-200">
+              <div className="bg-white p-12 text-center border border-green-200">
                 <MessageSquare className="w-16 h-16 mx-auto text-gray-300 mb-4" />
                 <p className="text-gray-400 text-lg">{t('noPostsYet')}</p>
               </div>
             ) : (
               posts.map(post => (
-                <div key={post.id} className="bg-white rounded-xl border border-green-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
+                <div key={post.id} className="bg-white border border-green-200 shadow-sm overflow-hidden hover:shadow-md transition-shadow">
                   <div className="p-6">
                     {/* 帖子头部 */}
                     <div className="flex justify-between items-start mb-4">
@@ -1493,11 +1493,11 @@ const App = () => {
                           value={replyContent}
                           onChange={(e) => setReplyContent(e.target.value)}
                           placeholder={t('replyPlaceholder')}
-                          className="flex-1 border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                          className="flex-1 border border-green-200 px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
                         />
                         <button
                           onClick={() => handleReply(post.id)}
-                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
+                          className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 font-medium transition-colors flex items-center gap-2"
                         >
                           <Send className="w-4 h-4" /> {t('reply')}
                         </button>
@@ -1511,9 +1511,9 @@ const App = () => {
 
           {/* 发帖Modal */}
           {newPostModal && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-              <div className="bg-white rounded-xl shadow-2xl max-w-2xl w-full p-6 space-y-4">
-                <div className="flex justify-between items-center border-b pb-4">
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+              <div className="bg-white border-2 border-green-200 shadow-2xl max-w-2xl w-full p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                <div className="flex justify-between items-center border-b border-green-200 pb-4">
                   <h3 className="font-bold text-xl text-gray-800">{t('newPost')}</h3>
                   <button onClick={() => setNewPostModal(false)}>
                     <X className="w-6 h-6 text-gray-400 hover:text-gray-600" />
@@ -1521,30 +1521,30 @@ const App = () => {
                 </div>
                 <form onSubmit={handleCreatePost} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('postTitle')}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{t('postTitle')}</label>
                     <input
                       type="text"
                       required
                       value={newPostData.title}
                       onChange={(e) => setNewPostData({ ...newPostData, title: e.target.value })}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+                      className="w-full border-2 border-green-200 px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all"
                       placeholder="请输入标题..."
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('postContent')}</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{t('postContent')}</label>
                     <textarea
                       required
                       value={newPostData.content}
                       onChange={(e) => setNewPostData({ ...newPostData, content: e.target.value })}
                       rows={6}
-                      className="w-full border border-gray-300 rounded-lg px-4 py-2 focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none resize-none"
+                      className="w-full border-2 border-green-200 px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all resize-none"
                       placeholder="写下你想说的..."
                     />
                   </div>
                   <button
                     type="submit"
-                    className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-3 rounded-lg transition-colors"
+                    className="w-full bg-gradient-to-r from-indigo-600 to-indigo-700 hover:from-indigo-700 hover:to-indigo-800 text-white font-bold py-3 transition-all shadow-md hover:shadow-lg"
                   >
                     {t('publish')}
                   </button>
@@ -2391,20 +2391,40 @@ const App = () => {
 
         {/* Modal */}
         {modalOpen && (
-            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
-                <div className="bg-white rounded-xl shadow-2xl max-w-md w-full p-6 space-y-4">
-                    <div className="flex justify-between items-center border-b pb-4">
-                        <h3 className="font-bold text-lg">{editId ? t('edit') : t('create')} {getLocalizedTypeLabel(modalType)}</h3>
-                        <button onClick={() => setModalOpen(false)}><X className="w-6 h-6 text-gray-400"/></button>
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+                <div className="bg-white border-2 border-green-200 shadow-2xl max-w-md w-full p-8 space-y-6 animate-in fade-in zoom-in-95 duration-200 transition-all hover:border-green-300 hover:shadow-green-200/50">
+                    {/* Header */}
+                    <div className="flex justify-between items-center">
+                        <div>
+                            <h3 className="font-bold text-xl text-gray-900">{editId ? t('edit') : t('create')}</h3>
+                            <p className="text-sm text-gray-500 mt-1">{getLocalizedTypeLabel(modalType)}</p>
+                        </div>
+                        <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
+                            <X className="w-6 h-6"/>
+                        </button>
                     </div>
-                    <form onSubmit={(e) => { e.preventDefault(); handleCRUD(editId ? 'update' : 'create', editId ? { id: editId, ...formData } : { ...formData, type: modalType }); }}>
-                        <label className="block text-sm font-medium mb-1">{t('clientLabel')}</label>
-                        <input type="text" required disabled={!isAdmin && !editId} value={formData.client} onChange={e => setFormData({...formData, client: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500 disabled:bg-gray-100" />
+
+                    {/* Form */}
+                    <form onSubmit={(e) => { e.preventDefault(); handleCRUD(editId ? 'update' : 'create', editId ? { id: editId, ...formData } : { ...formData, type: modalType }); }} className="space-y-4">
+                        
+                        {/* 客户/对象 */}
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('clientLabel')}</label>
+                            <input 
+                                type="text" 
+                                required 
+                                disabled={!isAdmin && !editId} 
+                                value={formData.client} 
+                                onChange={e => setFormData({...formData, client: e.target.value})} 
+                                className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 disabled:bg-gray-100 disabled:cursor-not-allowed transition-all hover:border-green-300" 
+                                placeholder="输入客户或对象名称"
+                            />
+                        </div>
                         
                         {/* 产品类型选择 - 存款 */}
                         {modalType === 'deposit' && (
-                          <div className="mb-3">
-                            <label className="block text-sm font-medium mb-1">{t('productType')}</label>
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('productType')}</label>
                             <select 
                               required 
                               value={formData.product_type} 
@@ -2416,26 +2436,26 @@ const App = () => {
                                   rate: newType === 'risk' ? '9' : '2.5'
                                 });
                               }} 
-                              className="w-full border rounded p-2 outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all hover:border-green-300"
                             >
                               <option value="normal">{t('normalDeposit')}</option>
                               <option value="risk">{t('riskDeposit')}</option>
                             </select>
                             {formData.product_type === 'risk' && (
-                              <p className="text-xs text-orange-600 mt-1">{t('riskNote')}</p>
+                              <p className="text-xs text-orange-600 mt-2 bg-orange-50 p-2">{t('riskNote')}</p>
                             )}
                           </div>
                         )}
                         
                         {/* 产品类型选择 - 贷款 */}
                         {modalType === 'loan' && (
-                          <div className="mb-3">
-                            <label className="block text-sm font-medium mb-1">{t('productType')}</label>
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('productType')}</label>
                             <select 
                               required 
                               value={formData.product_type} 
                               onChange={e => setFormData({...formData, product_type: e.target.value})} 
-                              className="w-full border rounded p-2 outline-none focus:ring-2 focus:ring-blue-500"
+                              className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all hover:border-green-300"
                             >
                               <option value="interest">{t('interestLoan')}</option>
                               <option value="stable">{t('stableLoan')}</option>
@@ -2443,24 +2463,65 @@ const App = () => {
                           </div>
                         )}
                         
-                        <label className="block text-sm font-medium mb-1">{t('amountLabel')}</label>
-                        <input type="number" step="0.001" required value={formData.principal} onChange={e => setFormData({...formData, principal: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500" />
+                        {/* 金额 */}
+                        <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('amountLabel')}</label>
+                            <input 
+                                type="number" 
+                                step="0.001" 
+                                required 
+                                value={formData.principal} 
+                                onChange={e => setFormData({...formData, principal: e.target.value})} 
+                                className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all hover:border-green-300" 
+                                placeholder="0.000"
+                            />
+                        </div>
                         
-                        {/* 利率字段 - 注资显示固定3%禁用，其他可编辑，撤资/取款隐藏 */}
+                        {/* 利率字段 */}
                         {modalType === 'injection' && (
-                          <>
-                            <label className="block text-sm font-medium mb-1">{t('rateLabel')}</label>
-                            <input type="number" step="0.1" disabled value={formData.rate} className="w-full border rounded p-2 mb-3 outline-none bg-gray-100 cursor-not-allowed" />
-                            <p className="text-xs text-gray-500 mb-3">固定3%，不允许更改</p>
-                          </>
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('rateLabel')}</label>
+                            <input 
+                                type="number" 
+                                step="0.1" 
+                                disabled 
+                                value={formData.rate} 
+                                className="w-full border-2 border-green-200 px-3 py-2.5 outline-none bg-gray-100 cursor-not-allowed text-gray-500" 
+                            />
+                            <p className="text-xs text-gray-500 mt-2 bg-blue-50 p-2">💡 固定 3%，不允许更改</p>
+                          </div>
                         )}
                         {!['injection', 'withdrawal', 'withdraw_dep', 'withdraw_inj'].includes(modalType) && (
-                          <>
-                            <label className="block text-sm font-medium mb-1">{t('rateLabel')}</label>
-                            <input type="number" step="0.1" required value={formData.rate} onChange={e => setFormData({...formData, rate: e.target.value})} className="w-full border rounded p-2 mb-3 outline-none focus:ring-2 focus:ring-blue-500" />
-                          </>
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('rateLabel')}</label>
+                            <input 
+                                type="number" 
+                                step="0.1" 
+                                required 
+                                value={formData.rate} 
+                                onChange={e => setFormData({...formData, rate: e.target.value})} 
+                                className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all hover:border-green-300" 
+                                placeholder="0.0"
+                            />
+                          </div>
                         )}
-                        <button type="submit" className="w-full bg-blue-600 text-white font-bold py-2 rounded hover:bg-blue-700">{t('submit')}</button>
+
+                        {/* 按钮组 */}
+                        <div className="flex gap-3 pt-4">
+                            <button 
+                                type="submit" 
+                                className="flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold py-3 px-4 transition-all shadow-md hover:shadow-lg active:scale-95"
+                            >
+                                {t('submit')}
+                            </button>
+                            <button 
+                                type="button"
+                                onClick={() => setModalOpen(false)} 
+                                className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 px-4 transition-colors active:scale-95"
+                            >
+                                {t('cancel')}
+                            </button>
+                        </div>
                     </form>
                 </div>
             </div>
@@ -2772,7 +2833,7 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
   
   return (
     <div className={`${depth > 0 ? 'ml-6 mt-3' : ''}`}>
-      <div className="bg-gray-50 rounded-lg p-3">
+      <div className="bg-gray-50 p-3">
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2 flex-1">
             <span className="font-medium text-sm text-indigo-600">{reply.author}</span>
@@ -2831,11 +2892,11 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
               value={replyContent}
               onChange={(e) => setReplyContent(e.target.value)}
               placeholder="写下你的回复..."
-              className="flex-1 border border-gray-300 rounded px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
+              className="flex-1 border border-green-200 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
             />
             <button
               onClick={handleReplySubmit}
-              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 rounded text-sm font-medium transition-colors flex items-center gap-1"
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1"
             >
               <Send className="w-3.5 h-3.5" /> 回复
             </button>

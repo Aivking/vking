@@ -47,7 +47,7 @@ ALTER TABLE posts DISABLE ROW LEVEL SECURITY;
 ### posts 表
 
 | 字段 | 类型 | 说明 |
-|------|------|------|
+| ------ | ------ | ------ |
 | id | uuid | 主键，自动生成 |
 | title | text | 帖子标题 |
 | content | text | 帖子内容 |
@@ -73,7 +73,7 @@ ALTER TABLE posts DISABLE ROW LEVEL SECURITY;
 
 ## 执行步骤
 
-1. 登录 Supabase Dashboard: https://app.supabase.com
+1. 登录 [Supabase Dashboard](https://app.supabase.com)
 2. 选择你的项目 (pcdlexmdvqrkyjqbjzkl)
 3. 点击左侧菜单的 "SQL Editor"
 4. 点击 "New query"
