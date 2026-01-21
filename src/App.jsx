@@ -6,6 +6,56 @@ import {
 import { supabase } from './supabaseClient';
 
 // ==========================================
+// 错误边界组件
+// ==========================================
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
+          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
+            <div className="flex items-center gap-3 text-red-600 mb-4">
+              <AlertCircle className="w-8 h-8" />
+              <h2 className="text-2xl font-bold">渲染出错</h2>
+            </div>
+            <p className="text-gray-600 mb-4">
+              页面渲染时发生了错误，请刷新页面重试。
+            </p>
+            <details className="mb-4 text-xs text-gray-500">
+              <summary className="cursor-pointer font-medium">错误详情</summary>
+              <pre className="mt-2 p-2 bg-gray-50 rounded overflow-auto">
+                {this.state.error?.toString()}
+              </pre>
+            </details>
+            <button
+              onClick={() => window.location.reload()}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
+            >
+              刷新页面
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+
+// ==========================================
 // 1. Supabase 配置
 // ==========================================
 
@@ -2233,33 +2283,48 @@ const App = () => {
              <h3 className="text-lg font-bold text-amber-800 flex items-center gap-2 mb-4"><AlertCircle className="w-5 h-5"/> {t('pendingApproval')} ({pendingTx.length})</h3>
              <div className="grid gap-3">
                 {pendingTx.map(tx => {
-                  const getProductTypeLabel = (tx) => {
-                    if (tx.type === 'deposit') {
-                      return tx.product_type === 'risk' ? t('riskDeposit') : t('normalDeposit');
-                    } else if (tx.type === 'loan') {
-                      return tx.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
-                    } else if (tx.type === 'bank_asset') {
-                      return `${tx.remark} x ${tx.principal}`;
-                    }
-                    return '';
-                  };
-                  const productTypeLabel = getProductTypeLabel(tx);
+                  // 安全检查：确保tx对象存在
+                  if (!tx || !tx.id) return null;
                   
-                  return (
-                  <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
-                     <div>
-                        <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type)}]</span> 
-                        {tx.type === 'bank_asset' ? `${tx.client} - ${tx.remark}` : `${tx.client} - ${formatMoney(tx.principal)}`}
-                        {productTypeLabel && tx.type !== 'bank_asset' && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span>}
-                        {tx.type === 'bank_asset' && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">数量: {tx.principal}</span>}
-                        <span className="text-xs text-gray-500 block">{t('applicant')}: {tx.created_by}</span>
-                     </div>
-                     <div className="flex gap-2">
-                        <button onClick={() => handleCRUD('approve', tx.id)} className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200"><CheckCircle className="w-4 h-4"/></button>
-                        <button onClick={() => handleCRUD('reject', tx.id)} className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"><XCircle className="w-4 h-4"/></button>
-                     </div>
-                  </div>
-                  );
+                  const getProductTypeLabel = (tx) => {
+                    try {
+                      if (tx.type === 'deposit') {
+                        return tx.product_type === 'risk' ? t('riskDeposit') : t('normalDeposit');
+                      } else if (tx.type === 'loan') {
+                        return tx.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
+                      } else if (tx.type === 'bank_asset') {
+                        return `${tx.remark || '未知物品'} x ${tx.principal || 0}`;
+                      }
+                      return '';
+                    } catch (err) {
+                      console.error('Error in getProductTypeLabel:', err, tx);
+                      return '';
+                    }
+                  };
+                  
+                  try {
+                    const productTypeLabel = getProductTypeLabel(tx);
+                    const typeLabel = getLocalizedTypeLabel(tx.type) || tx.type || '未知类型';
+                    
+                    return (
+                    <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
+                       <div>
+                          <span className="font-bold mr-2">[{typeLabel}]</span> 
+                          {tx.type === 'bank_asset' ? `${tx.client || '未知星球'} - ${tx.remark || '未知物品'}` : `${tx.client || '未知客户'} - ${formatMoney(tx.principal || 0)}`}
+                          {productTypeLabel && tx.type !== 'bank_asset' && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span>}
+                          {tx.type === 'bank_asset' && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">数量: {tx.principal || 0}</span>}
+                          <span className="text-xs text-gray-500 block">{t('applicant')}: {tx.created_by || '未知'}</span>
+                       </div>
+                       <div className="flex gap-2">
+                          <button onClick={() => handleCRUD('approve', tx.id)} className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200"><CheckCircle className="w-4 h-4"/></button>
+                          <button onClick={() => handleCRUD('reject', tx.id)} className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"><XCircle className="w-4 h-4"/></button>
+                       </div>
+                    </div>
+                    );
+                  } catch (err) {
+                    console.error('Error rendering pending transaction:', err, tx);
+                    return null;
+                  }
                 })}
              </div>
           </div>
@@ -2715,4 +2780,11 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
   );
 };
 
-export default App;
+// 使用错误边界包裹App组件
+const AppWithErrorBoundary = () => (
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);
+
+export default AppWithErrorBoundary;
