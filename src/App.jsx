@@ -98,13 +98,15 @@ const translations = {
     planetNameAsset: '星球名称',
     dailyOutput: '每日产出',
     itemName: '物品名称',
-    quantity: '数量',
+    quantity: '日产',
+    assetValue: '资产价值',
     registerAsset: '登记资产',
     assetList: '资产列表',
-    totalAssetValue: '总资产价值',
+    totalAssetValue: '不动产总价值',
     newAsset: '新增资产',
     itemPlaceholder: '输入物品名称...',
-    quantityPlaceholder: '输入数量...',
+    quantityPlaceholder: '输入日产量...',
+    valuePlaceholder: '输入资产价值(m)...',
     submitAsset: '提交资产登记',
     noAssetsYet: '暂无资产记录',
     // 审批
@@ -321,7 +323,9 @@ const App = () => {
   // 银行资产 State
   const [bankAssets, setBankAssets] = useState([]);
   const [newAssetModal, setNewAssetModal] = useState(false);
-  const [newAssetData, setNewAssetData] = useState({ planetName: '', itemName: '', quantity: '' });
+  const [newAssetData, setNewAssetData] = useState({ planetName: '', itemName: '', quantity: '', value: '' });
+  const [editingAssetId, setEditingAssetId] = useState(null);
+  const [editAssetData, setEditAssetData] = useState({ planetName: '', itemName: '', quantity: '', value: '' });
   
   // 利息管理 State
   const [interestManageModal, setInterestManageModal] = useState(false);
@@ -806,11 +810,11 @@ const App = () => {
         type: 'bank_asset',
         client: newAssetData.planetName, // 星球名称
         principal: parseFloat(newAssetData.quantity) || 0, // 使用principal存储数量
-        rate: 0,
+        rate: parseFloat(newAssetData.value) || 0, // 使用rate存储价值
         timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
         created_by: currentUser.username,
         creator_id: currentUser.id || currentUser.username,
-        status: isAdmin ? 'approved' : 'pending',
+        status: 'approved', // 直接批准，不需要管理员审批
         remark: newAssetData.itemName, // 使用remark存储物品名称
         product_type: 'daily_output' // 标记为每日产出
       };
@@ -821,14 +825,10 @@ const App = () => {
 
       if (error) throw error;
 
-      if (isAdmin) {
-        alert('银行资产登记成功');
-      } else {
-        alert('资产登记申请已提交，等待管理员审批');
-      }
+      alert('银行资产登记成功');
       
       setNewAssetModal(false);
-      setNewAssetData({ planetName: '', itemName: '', quantity: '' });
+      setNewAssetData({ planetName: '', itemName: '', quantity: '', value: '' });
     } catch (e) {
       alert('登记失败: ' + e.message);
     }
@@ -839,6 +839,30 @@ const App = () => {
     const assets = transactions.filter(tx => tx.type === 'bank_asset' && tx.status === 'approved');
     setBankAssets(assets);
   }, [transactions]);
+  
+  // 编辑资产
+  const handleUpdateAsset = async (assetId) => {
+    try {
+      const updateData = {
+        client: editAssetData.planetName,
+        remark: editAssetData.itemName,
+        principal: parseFloat(editAssetData.quantity) || 0,
+        rate: parseFloat(editAssetData.value) || 0
+      };
+
+      const { error } = await supabase
+        .from('transactions')
+        .update(updateData)
+        .eq('id', assetId);
+
+      if (error) throw error;
+
+      alert('资产更新成功');
+      setEditingAssetId(null);
+    } catch (e) {
+      alert('更新失败: ' + e.message);
+    }
+  };
 
   // --- 自动结算利息 ---
   const autoSettleInterest = async () => {
@@ -1206,6 +1230,11 @@ const App = () => {
     const injectionBalance = (personalInjections.p - personalWInj.p) + injectionSettledInterest;
     const depositBalance = (personalDeposits.p - personalWDep.p) + depositSettledInterest;
 
+    // 计算不动产总价值（银行资产）
+    const bankAssetsValue = approved
+      .filter(tx => tx.type === 'bank_asset')
+      .reduce((sum, tx) => sum + (parseFloat(tx.rate) || 0), 0); // rate字段存储资产价值
+
     return {
       loanPrincipal: loans.p,
       liabilities: totalLiabilities,
@@ -1213,7 +1242,8 @@ const App = () => {
       idleCash: totalLiabilities - loans.p,
       interestPool: interestPool,
       injectionBalance: injectionBalance,
-      depositBalance: depositBalance
+      depositBalance: depositBalance,
+      bankAssetsValue: bankAssetsValue
     };
   }, [transactions, currentUser]);
 
@@ -1514,6 +1544,9 @@ const App = () => {
             ) : (
               planetCards.map(card => {
                 const cardFund = getCardFund(card.client);
+                const cardAssetValue = bankAssets
+                  .filter(asset => asset.client === card.client)
+                  .reduce((sum, asset) => sum + (parseFloat(asset.rate) || 0), 0);
                 const isEditing = editingCardId === card.id;
                 const isFunding = fundingCardId === card.id;
 
@@ -1576,6 +1609,14 @@ const App = () => {
                       <p className="text-xs text-gray-600 mb-1">{t('cardFund')}</p>
                       <p className="text-xl font-bold text-green-600">{formatMoney(cardFund)}</p>
                     </div>
+
+                    {/* 资产价值显示 */}
+                    {cardAssetValue > 0 && (
+                      <div className="bg-white border border-purple-200 p-3 mb-3">
+                        <p className="text-xs text-gray-600 mb-1">{t('totalAssetValue')}</p>
+                        <p className="text-xl font-bold text-purple-600">{formatMoney(cardAssetValue)}</p>
+                      </div>
+                    )}
 
                     {/* 注资名单 */}
                     <div className="bg-gray-50 border border-gray-200 p-3 mb-3 max-h-40 overflow-y-auto">
@@ -1732,9 +1773,20 @@ const App = () => {
   // 银行资产管理页面
   if (currentPage === 'assets') {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50">
+      <div className="min-h-screen bg-gradient-to-br from-purple-100/20 via-pink-50/20 to-blue-50/20 animate-gradient-slow">
+        <style>{`
+          @keyframes gradient-slow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+          .animate-gradient-slow {
+            background-size: 200% 200%;
+            animation: gradient-slow 15s ease infinite;
+          }
+        `}</style>
         {/* 头部 */}
-        <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6 shadow-xl">
+        <div className="bg-gradient-to-r from-purple-500 to-pink-500 text-white p-6 shadow-xl">
           <div className="max-w-7xl mx-auto flex justify-between items-center">
             <div>
               <h2 className="text-4xl font-black tracking-wider mb-2 flex items-center gap-3">
@@ -1784,35 +1836,115 @@ const App = () => {
                         <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('planetNameAsset')}</th>
                         <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('itemName')}</th>
                         <th className="px-4 py-3 text-right text-sm font-bold text-purple-700">{t('quantity')}</th>
+                        <th className="px-4 py-3 text-right text-sm font-bold text-purple-700">{t('assetValue')}</th>
                         <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('time')}</th>
                         <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('applicant')}</th>
                         {isAdmin && <th className="px-4 py-3 text-center text-sm font-bold text-purple-700">{t('actions')}</th>}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-purple-100">
-                      {bankAssets.map((asset) => (
+                      {bankAssets.map((asset) => {
+                        const isEditing = editingAssetId === asset.id;
+                        return (
                         <tr key={asset.id} className="hover:bg-purple-50 transition-colors">
-                          <td className="px-4 py-3 font-semibold text-purple-700">{asset.client}</td>
-                          <td className="px-4 py-3 text-gray-700">{asset.remark}</td>
-                          <td className="px-4 py-3 text-right font-mono font-bold text-purple-600">{asset.principal}</td>
+                          <td className="px-4 py-3 font-semibold text-purple-700">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editAssetData.planetName}
+                                onChange={(e) => setEditAssetData({ ...editAssetData, planetName: e.target.value })}
+                                className="w-full border border-purple-300 px-2 py-1 rounded focus:ring-2 focus:ring-purple-400 outline-none"
+                              />
+                            ) : asset.client}
+                          </td>
+                          <td className="px-4 py-3 text-gray-700">
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editAssetData.itemName}
+                                onChange={(e) => setEditAssetData({ ...editAssetData, itemName: e.target.value })}
+                                className="w-full border border-purple-300 px-2 py-1 rounded focus:ring-2 focus:ring-purple-400 outline-none"
+                              />
+                            ) : asset.remark}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                step="0.001"
+                                value={editAssetData.quantity}
+                                onChange={(e) => setEditAssetData({ ...editAssetData, quantity: e.target.value })}
+                                className="w-full border border-purple-300 px-2 py-1 rounded focus:ring-2 focus:ring-purple-400 outline-none text-right"
+                              />
+                            ) : asset.principal}
+                          </td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-purple-600">
+                            {isEditing ? (
+                              <input
+                                type="number"
+                                step="0.001"
+                                value={editAssetData.value}
+                                onChange={(e) => setEditAssetData({ ...editAssetData, value: e.target.value })}
+                                className="w-full border border-purple-300 px-2 py-1 rounded focus:ring-2 focus:ring-purple-400 outline-none text-right"
+                              />
+                            ) : `${(asset.rate || 0).toFixed(3)}m`}
+                          </td>
                           <td className="px-4 py-3 text-sm text-gray-500">{asset.timestamp?.split(' ')[0] || '-'}</td>
                           <td className="px-4 py-3 text-sm text-gray-600">{asset.created_by}</td>
                           {isAdmin && (
                             <td className="px-4 py-3 text-center">
-                              <button
-                                onClick={() => {
-                                  if (window.confirm('确认删除此资产记录？')) {
-                                    handleCRUD('delete', asset.id);
-                                  }
-                                }}
-                                className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors"
-                              >
-                                <Trash2 className="w-4 h-4" />
-                              </button>
+                              {isEditing ? (
+                                <div className="flex gap-2 justify-center">
+                                  <button
+                                    onClick={() => handleUpdateAsset(asset.id)}
+                                    className="text-green-600 hover:text-green-800 p-2 hover:bg-green-50 rounded transition-colors"
+                                    title="保存"
+                                  >
+                                    <CheckCircle className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => setEditingAssetId(null)}
+                                    className="text-gray-600 hover:text-gray-800 p-2 hover:bg-gray-100 rounded transition-colors"
+                                    title="取消"
+                                  >
+                                    <X className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="flex gap-2 justify-center">
+                                  <button
+                                    onClick={() => {
+                                      setEditingAssetId(asset.id);
+                                      setEditAssetData({
+                                        planetName: asset.client,
+                                        itemName: asset.remark,
+                                        quantity: asset.principal,
+                                        value: asset.rate
+                                      });
+                                    }}
+                                    className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded transition-colors"
+                                    title="编辑"
+                                  >
+                                    <Edit className="w-4 h-4" />
+                                  </button>
+                                  <button
+                                    onClick={() => {
+                                      if (window.confirm('确认删除此资产记录？')) {
+                                        handleCRUD('delete', asset.id);
+                                      }
+                                    }}
+                                    className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors"
+                                    title="删除"
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                </div>
+                              )}
                             </td>
                           )}
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>
@@ -1864,6 +1996,19 @@ const App = () => {
                       onChange={(e) => setNewAssetData({ ...newAssetData, quantity: e.target.value })}
                       className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
                       placeholder={t('quantityPlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('assetValue')}</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.001"
+                      value={newAssetData.value}
+                      onChange={(e) => setNewAssetData({ ...newAssetData, value: e.target.value })}
+                      className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
+                      placeholder={t('valuePlaceholder')}
                     />
                   </div>
                   <button
@@ -2158,10 +2303,11 @@ const App = () => {
         </div>
 
         {/* 统计卡片 */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
-          <StatCard title={t('totalAssets')} value={formatMoney(stats.loanPrincipal)} subtext={t('approved')} icon={<ArrowUpRight className="text-green-600" />} />
+        <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
+          <StatCard title={t('totalAssets')} value={formatMoney(stats.loanPrincipal + stats.bankAssetsValue)} subtext={`贷款+不动产`} icon={<ArrowUpRight className="text-green-600" />} />
           <StatCard title={t('totalLiabilities')} value={formatMoney(stats.liabilities)} subtext={t('approved')} icon={<ArrowDownLeft className="text-red-500" />} />
           <StatCard title={t('idleFunds')} value={formatMoney(stats.idleCash)} subtext={t('availableBalance')} icon={<Wallet className="text-yellow-500" />} />
+          <StatCard title={t('totalAssetValue')} value={formatMoney(stats.bankAssetsValue)} subtext="不动产" icon={<Wallet className="text-purple-600" />} />
           <StatCard title={t('interestPool')} value={formatMoney(stats.interestPool)} subtext={t('weeklyNetInterest')} icon={<Activity className="text-purple-600" />} />
           <StatCard title={t('approvalQueue')} value={pendingTx.length} subtext={t('pendingItems')} icon={<Shield className="text-blue-600" />} />
         </div>
