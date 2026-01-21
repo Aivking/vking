@@ -22,7 +22,8 @@ const typeLabels = {
   'interest_income': '利息收入',
   'interest_expense': '利息支出',
   'planet_fund': '星星开发资金',
-  'planet_card': '星星名片'
+  'planet_card': '星星名片',
+  'bank_asset': '银行资产'
 };
 
 const getTypeLabel = (type) => typeLabels[type] || type;
@@ -91,6 +92,21 @@ const translations = {
     cardFund: '专项资金',
     fundingList: '注资名单',
     noFundingYet: '暂无注资记录',
+    // 银行资产
+    bankAssets: '银行资产',
+    assetManagement: '资产管理',
+    planetNameAsset: '星球名称',
+    dailyOutput: '每日产出',
+    itemName: '物品名称',
+    quantity: '数量',
+    registerAsset: '登记资产',
+    assetList: '资产列表',
+    totalAssetValue: '总资产价值',
+    newAsset: '新增资产',
+    itemPlaceholder: '输入物品名称...',
+    quantityPlaceholder: '输入数量...',
+    submitAsset: '提交资产登记',
+    noAssetsYet: '暂无资产记录',
     // 审批
     pendingApproval: '待审批',
     applicant: '申请人',
@@ -284,7 +300,7 @@ const App = () => {
   const [announcementInput, setAnnouncementInput] = useState('');
   
   // 论坛 State
-  const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum' or 'planet'
+  const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum', 'planet', 'assets'
   const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
   const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
   const [posts, setPosts] = useState([]);
@@ -301,6 +317,11 @@ const App = () => {
   const [editCardData, setEditCardData] = useState({ name: '', description: '', progress: 0 });
   const [fundingCardId, setFundingCardId] = useState(null);
   const [fundAmount, setFundAmount] = useState('');
+  
+  // 银行资产 State
+  const [bankAssets, setBankAssets] = useState([]);
+  const [newAssetModal, setNewAssetModal] = useState(false);
+  const [newAssetData, setNewAssetData] = useState({ planetName: '', itemName: '', quantity: '' });
   
   // 利息管理 State
   const [interestManageModal, setInterestManageModal] = useState(false);
@@ -774,6 +795,49 @@ const App = () => {
   useEffect(() => {
     const cards = transactions.filter(tx => tx.type === 'planet_card' && tx.status === 'approved');
     setPlanetCards(cards);
+  }, [transactions]);
+  
+  // --- 银行资产管理相关函数 ---
+  const handleCreateAsset = async (e) => {
+    e.preventDefault();
+    
+    try {
+      const assetRecord = {
+        type: 'bank_asset',
+        client: newAssetData.planetName, // 星球名称
+        principal: parseFloat(newAssetData.quantity) || 0, // 使用principal存储数量
+        rate: 0,
+        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+        created_by: currentUser.username,
+        creator_id: currentUser.id || currentUser.username,
+        status: isAdmin ? 'approved' : 'pending',
+        remark: newAssetData.itemName, // 使用remark存储物品名称
+        product_type: 'daily_output' // 标记为每日产出
+      };
+
+      const { error } = await supabase
+        .from('transactions')
+        .insert([assetRecord]);
+
+      if (error) throw error;
+
+      if (isAdmin) {
+        alert('银行资产登记成功');
+      } else {
+        alert('资产登记申请已提交，等待管理员审批');
+      }
+      
+      setNewAssetModal(false);
+      setNewAssetData({ planetName: '', itemName: '', quantity: '' });
+    } catch (e) {
+      alert('登记失败: ' + e.message);
+    }
+  };
+  
+  // 获取所有银行资产
+  useEffect(() => {
+    const assets = transactions.filter(tx => tx.type === 'bank_asset' && tx.status === 'approved');
+    setBankAssets(assets);
   }, [transactions]);
 
   // --- 自动结算利息 ---
@@ -1665,6 +1729,158 @@ const App = () => {
     );
   }
   
+  // 银行资产管理页面
+  if (currentPage === 'assets') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-purple-50 via-white to-pink-50">
+        {/* 头部 */}
+        <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white p-6 shadow-xl">
+          <div className="max-w-7xl mx-auto flex justify-between items-center">
+            <div>
+              <h2 className="text-4xl font-black tracking-wider mb-2 flex items-center gap-3">
+                <Wallet className="w-10 h-10" />
+                <span className="bg-gradient-to-r from-white via-purple-100 to-white bg-clip-text text-transparent animate-gradient">{t('bankAssets')}</span>
+              </h2>
+              <p className="text-purple-100 font-medium">{t('assetManagement')}</p>
+            </div>
+            <div>
+              <button onClick={() => setCurrentPage('bank')} className="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-6 py-3 font-bold transition-all border border-white/30">
+                {t('backToBank')}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 主体内容 */}
+        <div className="max-w-7xl mx-auto p-6 space-y-6">
+          {/* 新增资产按钮 */}
+          <div className="flex justify-end">
+            <button
+              onClick={() => setNewAssetModal(true)}
+              className="bg-gradient-to-r from-purple-100 to-purple-200 hover:from-purple-200 hover:to-purple-300 text-purple-700 px-6 py-3 font-bold transition-all flex items-center gap-2 border border-purple-300 shadow-lg"
+            >
+              <PlusCircle className="w-5 h-5" />
+              {t('registerAsset')}
+            </button>
+          </div>
+
+          {/* 资产列表 */}
+          <div className="bg-white shadow-2xl border-2 border-purple-200">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-4 flex items-center gap-3">
+              <Wallet className="w-6 h-6" />
+              <h3 className="text-xl font-bold">{t('assetList')}</h3>
+            </div>
+            <div className="p-6">
+              {bankAssets.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <Wallet className="w-16 h-16 mx-auto mb-4 opacity-30" />
+                  <p className="text-lg">{t('noAssetsYet')}</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full">
+                    <thead className="bg-purple-50">
+                      <tr>
+                        <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('planetNameAsset')}</th>
+                        <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('itemName')}</th>
+                        <th className="px-4 py-3 text-right text-sm font-bold text-purple-700">{t('quantity')}</th>
+                        <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('time')}</th>
+                        <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('applicant')}</th>
+                        {isAdmin && <th className="px-4 py-3 text-center text-sm font-bold text-purple-700">{t('actions')}</th>}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-purple-100">
+                      {bankAssets.map((asset) => (
+                        <tr key={asset.id} className="hover:bg-purple-50 transition-colors">
+                          <td className="px-4 py-3 font-semibold text-purple-700">{asset.client}</td>
+                          <td className="px-4 py-3 text-gray-700">{asset.remark}</td>
+                          <td className="px-4 py-3 text-right font-mono font-bold text-purple-600">{asset.principal}</td>
+                          <td className="px-4 py-3 text-sm text-gray-500">{asset.timestamp?.split(' ')[0] || '-'}</td>
+                          <td className="px-4 py-3 text-sm text-gray-600">{asset.created_by}</td>
+                          {isAdmin && (
+                            <td className="px-4 py-3 text-center">
+                              <button
+                                onClick={() => {
+                                  if (window.confirm('确认删除此资产记录？')) {
+                                    handleCRUD('delete', asset.id);
+                                  }
+                                }}
+                                className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </td>
+                          )}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 新增资产 Modal */}
+          {newAssetModal && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+              <div className="bg-white shadow-2xl max-w-md w-full p-6 space-y-4">
+                <div className="flex justify-between items-center border-b pb-4">
+                  <h3 className="font-bold text-xl text-gray-800">{t('newAsset')}</h3>
+                  <button onClick={() => setNewAssetModal(false)}>
+                    <X className="w-6 h-6 text-gray-400 hover:text-gray-600" />
+                  </button>
+                </div>
+                <form onSubmit={handleCreateAsset} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('planetNameAsset')}</label>
+                    <input
+                      type="text"
+                      required
+                      value={newAssetData.planetName}
+                      onChange={(e) => setNewAssetData({ ...newAssetData, planetName: e.target.value })}
+                      className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
+                      placeholder={t('namePlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('itemName')}</label>
+                    <input
+                      type="text"
+                      required
+                      value={newAssetData.itemName}
+                      onChange={(e) => setNewAssetData({ ...newAssetData, itemName: e.target.value })}
+                      className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
+                      placeholder={t('itemPlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('quantity')}</label>
+                    <input
+                      type="number"
+                      required
+                      min="0"
+                      step="0.001"
+                      value={newAssetData.quantity}
+                      onChange={(e) => setNewAssetData({ ...newAssetData, quantity: e.target.value })}
+                      className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
+                      placeholder={t('quantityPlaceholder')}
+                    />
+                  </div>
+                  <button
+                    type="submit"
+                    className="w-full bg-gradient-to-r from-purple-100 to-purple-200 hover:from-purple-200 hover:to-purple-300 text-purple-700 font-bold py-3 transition-all border border-purple-300"
+                  >
+                    {t('submitAsset')}
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+  
   // 利息管理Modal
   if (interestManageModal) {
     const interestTx = transactions.filter(tx => ['interest_income', 'interest_expense'].includes(tx.type));
@@ -1877,6 +2093,8 @@ const App = () => {
                       return tx.product_type === 'risk' ? t('riskDeposit') : t('normalDeposit');
                     } else if (tx.type === 'loan') {
                       return tx.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
+                    } else if (tx.type === 'bank_asset') {
+                      return `${tx.remark} x ${tx.principal}`;
                     }
                     return '';
                   };
@@ -1886,8 +2104,9 @@ const App = () => {
                   <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
                      <div>
                         <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type)}]</span> 
-                        {tx.client} - {formatMoney(tx.principal)}
-                        {productTypeLabel && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span>}
+                        {tx.type === 'bank_asset' ? `${tx.client} - ${tx.remark}` : `${tx.client} - ${formatMoney(tx.principal)}`}
+                        {productTypeLabel && tx.type !== 'bank_asset' && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span>}
+                        {tx.type === 'bank_asset' && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">数量: {tx.principal}</span>}
                         <span className="text-xs text-gray-500 block">{t('applicant')}: {tx.created_by}</span>
                      </div>
                      <div className="flex gap-2">
@@ -1923,6 +2142,10 @@ const App = () => {
             <button onClick={() => setCurrentPage('planet')} className="bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300 text-blue-700 px-8 py-2 font-bold transition-all flex items-center gap-2 border border-blue-300">
               <Activity className="w-4 h-4" />
               {t('planetDev')}
+            </button>
+            <button onClick={() => setCurrentPage('assets')} className="bg-gradient-to-r from-purple-100 to-purple-200 hover:from-purple-200 hover:to-purple-300 text-purple-700 px-8 py-2 font-bold transition-all flex items-center gap-2 border border-purple-300">
+              <Wallet className="w-4 h-4" />
+              {t('bankAssets')}
             </button>
             {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
             {isAdmin && <button
