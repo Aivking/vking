@@ -1355,7 +1355,7 @@ const App = () => {
   }
 
   const isAdmin = currentUser.role === 'admin';
-  const pendingTx = transactions.filter(tx => tx.status === 'pending');
+  const pendingTx = Array.isArray(transactions) ? transactions.filter(tx => tx && tx.id && tx.status === 'pending') : [];
   // 注资账单公开所有人可见，其他账单显示：自己的所有记录 + 已批准的他人记录
   const displayTx = isAdmin ? transactions : transactions.filter(tx => 
     tx.created_by === currentUser?.username || tx.status === 'approved' || ['injection', 'withdraw_inj'].includes(tx.type)
@@ -2278,54 +2278,35 @@ const App = () => {
         </div>
 
         {/* 管理员审批 */}
-        {isAdmin && pendingTx.length > 0 && (
+        {isAdmin && pendingTx && pendingTx.length > 0 && (
           <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 shadow-sm">
-             <h3 className="text-lg font-bold text-amber-800 flex items-center gap-2 mb-4"><AlertCircle className="w-5 h-5"/> {t('pendingApproval')} ({pendingTx.length})</h3>
+             <h3 className="text-lg font-bold text-amber-800 flex items-center gap-2 mb-4">
+               <AlertCircle className="w-5 h-5"/> {t('pendingApproval')} ({pendingTx.length})
+             </h3>
              <div className="grid gap-3">
-                {pendingTx.map(tx => {
-                  // 安全检查：确保tx对象存在
-                  if (!tx || !tx.id) return null;
-                  
-                  const getProductTypeLabel = (tx) => {
-                    try {
-                      if (tx.type === 'deposit') {
-                        return tx.product_type === 'risk' ? t('riskDeposit') : t('normalDeposit');
-                      } else if (tx.type === 'loan') {
-                        return tx.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
-                      } else if (tx.type === 'bank_asset') {
-                        return `${tx.remark || '未知物品'} x ${tx.principal || 0}`;
-                      }
-                      return '';
-                    } catch (err) {
-                      console.error('Error in getProductTypeLabel:', err, tx);
-                      return '';
-                    }
-                  };
-                  
-                  try {
-                    const productTypeLabel = getProductTypeLabel(tx);
-                    const typeLabel = getLocalizedTypeLabel(tx.type) || tx.type || '未知类型';
-                    
-                    return (
-                    <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
-                       <div>
-                          <span className="font-bold mr-2">[{typeLabel}]</span> 
-                          {tx.type === 'bank_asset' ? `${tx.client || '未知星球'} - ${tx.remark || '未知物品'}` : `${tx.client || '未知客户'} - ${formatMoney(tx.principal || 0)}`}
-                          {productTypeLabel && tx.type !== 'bank_asset' && <span className="ml-2 text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded">{productTypeLabel}</span>}
-                          {tx.type === 'bank_asset' && <span className="ml-2 text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded">数量: {tx.principal || 0}</span>}
-                          <span className="text-xs text-gray-500 block">{t('applicant')}: {tx.created_by || '未知'}</span>
-                       </div>
-                       <div className="flex gap-2">
-                          <button onClick={() => handleCRUD('approve', tx.id)} className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200"><CheckCircle className="w-4 h-4"/></button>
-                          <button onClick={() => handleCRUD('reject', tx.id)} className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"><XCircle className="w-4 h-4"/></button>
-                       </div>
+                {pendingTx.map(tx => (
+                  <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
+                    <div>
+                      <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type || 'unknown')}]</span>
+                      <span>{tx.client || '未知'} - {formatMoney(tx.principal || 0)}</span>
+                      <span className="text-xs text-gray-500 block">申请人: {tx.created_by || '未知'}</span>
                     </div>
-                    );
-                  } catch (err) {
-                    console.error('Error rendering pending transaction:', err, tx);
-                    return null;
-                  }
-                })}
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => handleCRUD('approve', tx.id)} 
+                        className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200"
+                      >
+                        <CheckCircle className="w-4 h-4"/>
+                      </button>
+                      <button 
+                        onClick={() => handleCRUD('reject', tx.id)} 
+                        className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
+                      >
+                        <XCircle className="w-4 h-4"/>
+                      </button>
+                    </div>
+                  </div>
+                ))}
              </div>
           </div>
         )}
@@ -2504,6 +2485,9 @@ const StatCard = ({ title, value, subtext, icon }) => (
 );
 
 const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, onRepay, onDeleteAll, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
+  // 使用单个state管理所有行的展开状态
+  const [openActionsId, setOpenActionsId] = React.useState(null);
+  
   const calculateWeeklyInterest = (principal, rate) => {
     return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
   };
@@ -2577,7 +2561,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                   ? parseFloat(row.principal || 0)
                   : (parseFloat(row.principal || 0) + weeklyInterest * cyclesForRow));
 
-              const [showActions, setShowActions] = React.useState(false);
+              const showActions = openActionsId === row.id;
               return (
                 <tr key={row.id} className={`hover:bg-gray-50 text-xs ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
                   <td className="px-1.5 py-1.5 whitespace-nowrap">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
@@ -2590,18 +2574,18 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                   <td className="px-1.5 py-1.5 text-xs text-gray-500 whitespace-nowrap">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
                   {isAdmin && <td className="px-1.5 py-1.5 text-center relative">
                     <div className="relative inline-block">
-                      <button onClick={() => setShowActions(!showActions)} className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-200" title="操作">
+                      <button onClick={() => setOpenActionsId(showActions ? null : row.id)} className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-200" title="操作">
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z" /></svg>
                       </button>
                       {showActions && (
                         <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-300 rounded shadow-lg z-10">
-                          <button onClick={() => { onEdit(row); setShowActions(false); }} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-indigo-600 flex items-center gap-2">
+                          <button onClick={() => { onEdit(row); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-indigo-600 flex items-center gap-2">
                             <Edit className="w-3 h-3" /> 编辑
                           </button>
-                          {onRepay && row.type === 'loan' && <button onClick={() => { onRepay(row.id); setShowActions(false); }} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-blue-600">
+                          {onRepay && row.type === 'loan' && <button onClick={() => { onRepay(row.id); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-blue-600">
                             还款
                           </button>}
-                          <button onClick={() => { onDelete(row.id); setShowActions(false); }} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2">
+                          <button onClick={() => { onDelete(row.id); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2">
                             <Trash2 className="w-3 h-3" /> 删除
                           </button>
                         </div>
