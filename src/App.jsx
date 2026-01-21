@@ -690,7 +690,6 @@ const App = () => {
       
       setNewCardModal(false);
       setNewCardData({ name: '', description: '', progress: 0 });
-      fetchTransactions();
     } catch (e) {
       alert('创建失败: ' + e.message);
     }
@@ -713,7 +712,6 @@ const App = () => {
 
       alert('名片更新成功');
       setEditingCardId(null);
-      fetchTransactions();
     } catch (e) {
       alert('更新失败: ' + e.message);
     }
@@ -750,7 +748,6 @@ const App = () => {
       alert('星星开发资金申请已提交，等待管理员审批');
       setFundAmount('');
       setFundingCardId(null);
-      fetchTransactions();
     } catch (e) {
       alert('提交失败: ' + e.message);
     }
