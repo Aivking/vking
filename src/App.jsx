@@ -368,13 +368,20 @@ const App = () => {
       
       // 周三中午12点（检查是否在12:00-12:02分钟内）
       if (dayOfWeek === 3 && hours === 12 && minutes >= 0 && minutes <= 2) {
-        // 每周三自动结算利息，不检查重复
-        await autoSettleInterest();
+        // 检查是否已经在这个小时内结算过
+        const currentHourKey = `settled_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}_${hours}`;
+        const lastSettled = sessionStorage.getItem(currentHourKey);
+        
+        if (!lastSettled) {
+          // 标记为已结算
+          sessionStorage.setItem(currentHourKey, 'true');
+          await autoSettleInterest();
+        }
       }
     };
 
     checkAndSettleInterest();
-  }, [currentUser, transactions]);
+  }, [currentUser]);
 
   // --- 数据同步监听 ---
   useEffect(() => {
