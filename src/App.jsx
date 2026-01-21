@@ -1841,6 +1841,40 @@ const App = () => {
               {t('planetDev')}
             </button>
             {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
+            {isAdmin && <button
+              onClick={() => {
+                const interestTx = transactions.filter(tx => ['interest_income', 'interest_expense'].includes(tx.type));
+                const settleIds = {};
+                interestTx.forEach(tx => {
+                  const sid = tx.settle_id || 'unknown';
+                  if (!settleIds[sid]) settleIds[sid] = [];
+                  settleIds[sid].push(tx);
+                });
+                
+                let msg = '结算周期记录：\n\n';
+                Object.keys(settleIds).sort().reverse().forEach((sid, idx) => {
+                  const records = settleIds[sid];
+                  const time = records[0]?.timestamp || 'N/A';
+                  msg += `[${idx + 1}] 结算ID: ${sid}\n`;
+                  msg += `    时间: ${time}\n`;
+                  msg += `    记录数: ${records.length}条\n\n`;
+                });
+                
+                const choice = prompt(msg + '\n输入结算ID来删除该周期的所有利息记录（谨慎操作！）：');
+                if (choice && settleIds[choice]) {
+                  if (window.confirm(`确认删除结算周期 ${choice} 的 ${settleIds[choice].length} 条记录？`)) {
+                    settleIds[choice].forEach(async (tx) => {
+                      await supabase.from('transactions').delete().eq('id', tx.id);
+                    });
+                    alert('删除成功！');
+                  }
+                }
+              }}
+              className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
+            >
+              <Trash2 className="w-4 h-4" />
+              管理利息记录
+            </button>}
         </div>
 
         {/* 统计卡片 */}
