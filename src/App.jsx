@@ -180,6 +180,9 @@ const translations = {
     availableBalance: '可用余额',
     weeklyNetInterest: '周净利息',
     pendingItems: '笔待处理',
+    personalBalance: '个人账户',
+    totalBalance: '资金余额',
+    injectionAndDeposit: '注资+存款+利息',
     // 表格
     loanAssets: '贷款资产',
     injectionAccount: '注资账户',
@@ -281,6 +284,9 @@ const translations = {
     availableBalance: 'Available Balance',
     weeklyNetInterest: 'Weekly Net Interest',
     pendingItems: 'Pending',
+    personalBalance: 'Personal Account',
+    totalBalance: 'Total Balance',
+    injectionAndDeposit: 'Injection+Deposit+Interest',
     // Table
     loanAssets: 'Loan Assets',
     injectionAccount: 'Injection Account',
@@ -1252,33 +1258,44 @@ const App = () => {
     // 计算利息池 (每周净利息，利率已按周计)
     const interestPool = (totalRevenue - totalExpense);
 
-    // 计算个人注资和存款账户的总余额（包括用户自己的所有记录和已批准的他人记录）
-    const userTransactions = transactions.filter(tx => 
-      tx.created_by === currentUser?.username || tx.status === 'approved'
-    );
-    const calcPersonal = (types) => userTransactions
-      .filter(tx => types.includes(tx.type))
-      .reduce((acc, cur) => ({
-        p: acc.p + (parseFloat(cur.principal) || 0),
-        i: acc.i + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100)
-      }), { p: 0, i: 0 });
+    // 计算当前用户个人的注资和存款账户余额（只统计client字段为当前用户的交易）
+    // 包含已结算的利息
+    const calcPersonalWithSettled = (types) => {
+      return approved
+        .filter(tx => types.includes(tx.type) && tx.client === currentUser?.username)
+        .reduce((acc, cur) => {
+          const principal = parseFloat(cur.principal) || 0;
+          const rate = parseFloat(cur.rate) || 0;
+          const weeklyInterest = (principal * rate / 100);
+          
+          // 从remark中提取已结算次数
+          let settledCount = 0;
+          if (cur.remark && cur.remark.includes('利息次数:')) {
+            const match = cur.remark.match(/利息次数:(\d+)/);
+            if (match) settledCount = parseInt(match[1]);
+          }
+          
+          // 本金 + 已结算利息
+          const totalAmount = principal + (weeklyInterest * settledCount);
+          
+          return {
+            p: acc.p + principal,  // 纯本金
+            total: acc.total + totalAmount  // 本金 + 已结算利息
+          };
+        }, { p: 0, total: 0 });
+    };
     
-    const personalInjections = calcPersonal(['injection']);
-    const personalDeposits = calcPersonal(['deposit']);
-    const personalWInj = calcPersonal(['withdraw_inj']);
-    const personalWDep = calcPersonal(['withdraw_dep']);
+    const personalInjections = calcPersonalWithSettled(['injection']);
+    const personalDeposits = calcPersonalWithSettled(['deposit']);
+    const personalWInj = calcPersonalWithSettled(['withdraw_inj']);
+    const personalWDep = calcPersonalWithSettled(['withdraw_dep']);
     
-    // 统计已结算的利息支出（注资和存款分别统计）
-    const injectionSettledInterest = approved
-      .filter(tx => tx.type === 'interest_expense' && tx.client === '注资利息支出')
-      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    // 计算个人账户余额（本金 + 已结算的利息）
+    const injectionBalance = personalInjections.total - personalWInj.total;
+    const depositBalance = personalDeposits.total - personalWDep.total;
     
-    const depositSettledInterest = approved
-      .filter(tx => tx.type === 'interest_expense' && tx.client === '存款利息支出')
-      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-    
-    const injectionBalance = (personalInjections.p - personalWInj.p) + injectionSettledInterest;
-    const depositBalance = (personalDeposits.p - personalWDep.p) + depositSettledInterest;
+    // 计算个人总余额（注资+存款+已结算利息）
+    const personalTotalBalance = injectionBalance + depositBalance;
 
     // 计算不动产总价值（银行资产）
     const bankAssetsValue = approved
@@ -1293,6 +1310,7 @@ const App = () => {
       interestPool: interestPool,
       injectionBalance: injectionBalance,
       depositBalance: depositBalance,
+      personalTotalBalance: personalTotalBalance,
       bankAssetsValue: bankAssetsValue
     };
   }, [transactions, currentUser]);
@@ -2366,6 +2384,37 @@ const App = () => {
              interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_income')} applyInterest={true} />
            
            <div className="space-y-6">
+             {/* 个人账户 - 仅对普通用户显示 */}
+             {!isAdmin && (
+                <div className="bg-white border border-green-200 rounded-lg shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <Wallet className="w-5 h-5 text-green-600" />
+                      <span className="font-semibold text-base">{t('personalBalance')}</span>
+                    </div>
+                    <div className="flex flex-col items-end">
+                      <div className="flex items-center gap-2 justify-end">
+                        <div className="text-base font-semibold text-gray-900">{formatMoney(stats.personalTotalBalance)}</div>
+                        <div className="text-xl leading-none animate-bounce">💲</div>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap gap-3">
+                    <div className="px-3 py-2 rounded border border-purple-200 bg-purple-50 flex items-center gap-2">
+                      <ArrowDownLeft className="w-4 h-4 text-purple-600" />
+                      <span className="text-xs text-gray-600">注资</span>
+                      <span className="text-sm font-semibold text-gray-900">{formatMoney(stats.injectionBalance)}</span>
+                    </div>
+                    <div className="px-3 py-2 rounded border border-green-200 bg-green-50 flex items-center gap-2">
+                      <Wallet className="w-4 h-4 text-green-600" />
+                      <span className="text-xs text-gray-600">存款</span>
+                      <span className="text-sm font-semibold text-gray-900">{formatMoney(stats.depositBalance)}</span>
+                    </div>
+                  </div>
+                  <p className="mt-3 text-xs text-gray-500">{t('injectionAndDeposit')}</p>
+                </div>
+             )}
+
              {/* 注资账户 - 分开显示 */}
               <TableSection title={`${t('injectionAccount')} - ${t('injection')}`} color="orange" icon={ArrowDownLeft} 
                 data={isAdmin ? displayTx.filter(tx => tx.type === 'injection') : displayTx.filter(tx => tx.type === 'injection' && (tx.status === 'approved' || tx.created_by === currentUser?.username))} 
@@ -2601,7 +2650,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
     <div className="bg-white shadow-sm border border-green-200 overflow-hidden">
       <div className="bg-green-50 px-6 py-4 border-b border-green-200 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className={`text-lg font-bold text-${color}-800`}>{title}</h2>
+          <Icon className={`w-5 h-5 text-${color}-700`} /> <h2 className="text-lg font-bold text-gray-900">{title}</h2>
         </div>
         <div className="flex items-center gap-2">
           <span className="text-xs text-gray-500">{t('settlementCycles')}:</span>
