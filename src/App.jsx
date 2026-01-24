@@ -2384,36 +2384,32 @@ const App = () => {
              interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_income')} applyInterest={true} />
            
            <div className="space-y-6">
-             {/* 个人账户 - 仅对普通用户显示 */}
-             {!isAdmin && (
-                <div className="bg-white border border-green-200 rounded-lg shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2 text-gray-700">
-                      <Wallet className="w-5 h-5 text-green-600" />
-                      <span className="font-semibold text-base">{t('personalBalance')}</span>
-                    </div>
-                    <div className="flex flex-col items-end">
-                      <div className="flex items-center gap-2 justify-end">
-                        <div className="text-base font-semibold text-gray-900">{formatMoney(stats.personalTotalBalance)}</div>
-                        <div className="text-xl leading-none animate-bounce">💲</div>
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex flex-wrap gap-3">
-                    <div className="px-3 py-2 rounded border border-purple-200 bg-purple-50 flex items-center gap-2">
-                      <ArrowDownLeft className="w-4 h-4 text-purple-600" />
-                      <span className="text-xs text-gray-600">注资</span>
-                      <span className="text-sm font-semibold text-gray-900">{formatMoney(stats.injectionBalance)}</span>
-                    </div>
-                    <div className="px-3 py-2 rounded border border-green-200 bg-green-50 flex items-center gap-2">
-                      <Wallet className="w-4 h-4 text-green-600" />
-                      <span className="text-xs text-gray-600">存款</span>
-                      <span className="text-sm font-semibold text-gray-900">{formatMoney(stats.depositBalance)}</span>
-                    </div>
-                  </div>
-                  <p className="mt-3 text-xs text-gray-500">{t('injectionAndDeposit')}</p>
-                </div>
-             )}
+             {/* 个人账户 */}
+             <div className="bg-white border border-green-200 rounded-lg shadow-sm p-4">
+               <div className="flex items-center justify-between mb-3">
+                 <div className="flex items-center gap-2 text-gray-700">
+                   <Wallet className="w-5 h-5 text-green-600" />
+                   <span className="font-semibold text-base">{t('personalBalance')}</span>
+                 </div>
+                 <div className="flex items-center gap-2 justify-end">
+                   <div className="text-base font-semibold text-gray-900">{formatMoney(stats.personalTotalBalance)}</div>
+                   <div className="text-xl leading-none animate-bounce">💲</div>
+                 </div>
+               </div>
+               <div className="flex flex-wrap gap-3">
+                 <div className="px-3 py-2 rounded border border-purple-200 bg-purple-50 flex items-center gap-2">
+                   <ArrowDownLeft className="w-4 h-4 text-purple-600" />
+                   <span className="text-xs text-gray-600">注资</span>
+                   <span className="text-sm font-semibold text-gray-900">{formatMoney(stats.injectionBalance)}</span>
+                 </div>
+                 <div className="px-3 py-2 rounded border border-green-200 bg-green-50 flex items-center gap-2">
+                   <Wallet className="w-4 h-4 text-green-600" />
+                   <span className="text-xs text-gray-600">存款</span>
+                   <span className="text-sm font-semibold text-gray-900">{formatMoney(stats.depositBalance)}</span>
+                 </div>
+               </div>
+               <p className="mt-3 text-xs text-gray-500">{t('injectionAndDeposit')}</p>
+             </div>
 
              {/* 注资账户 - 分开显示 */}
               <TableSection title={`${t('injectionAccount')} - ${t('injection')}`} color="orange" icon={ArrowDownLeft} 
