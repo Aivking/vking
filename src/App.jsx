@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Activity, Wallet, LogOut, Shield, CheckCircle, XCircle, 
-  AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, Settings, PlusCircle, MinusCircle, X, MessageSquare, Send, ThumbsUp
+  AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, ArrowDownRight, Settings, PlusCircle, MinusCircle, X, MessageSquare, Send, ThumbsUp, TrendingUp, CheckSquare
 } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -73,7 +73,11 @@ const typeLabels = {
   'interest_expense': '利息支出',
   'planet_fund': '星星开发资金',
   'planet_card': '星星名片',
-  'bank_asset': '银行资产'
+  'bank_asset': '银行资产',
+  'fund_subscribe': '基金申购',
+  'fund_redeem': '基金赎回',
+  'fund_dividend': '基金分红',
+  'fund_dividend_withdraw': '提取分红'
 };
 
 const getTypeLabel = (type) => typeLabels[type] || type;
@@ -352,13 +356,16 @@ const App = () => {
   const [nextSettleTime, setNextSettleTime] = useState('');
   const [settleCountdown, setSettleCountdown] = useState('');
   
-  // 公告栏 State
-  const [announcement, setAnnouncement] = useState({ id: '', content: '' });
-  const [isEditingAnnouncement, setIsEditingAnnouncement] = useState(false);
-  const [announcementInput, setAnnouncementInput] = useState('');
+  const [bankAnnouncement, setBankAnnouncement] = useState({ id: '', content: '' });
+  const [isEditingBankAnnouncement, setIsEditingBankAnnouncement] = useState(false);
+  const [bankAnnouncementInput, setBankAnnouncementInput] = useState('');
+
+  const [fundAnnouncement, setFundAnnouncement] = useState({ id: '', content: '' });
+  const [isEditingFundAnnouncement, setIsEditingFundAnnouncement] = useState(false);
+  const [fundAnnouncementInput, setFundAnnouncementInput] = useState('');
   
   // 论坛 State
-  const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum', 'planet', 'assets'
+  const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum', 'planet', 'assets', 'fund'
   const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
   const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
   const [posts, setPosts] = useState([]);
@@ -383,6 +390,29 @@ const App = () => {
   const [editingAssetId, setEditingAssetId] = useState(null);
   const [editAssetData, setEditAssetData] = useState({ planetName: '', itemName: '', quantity: '', value: '' });
   
+  // 基金 State
+  const FUND_ACCOUNT_KEY = 'global';
+  const [fundAccount, setFundAccount] = useState({ balance: 0 });
+  const [fundTransactions, setFundTransactions] = useState([]);
+  const [transferModal, setTransferModal] = useState(false);
+  const [transferAmount, setTransferAmount] = useState('');
+  const [transferType, setTransferType] = useState(''); // 'in' or 'out'
+  const [fundUserModal, setFundUserModal] = useState(false);
+  const [fundUserAction, setFundUserAction] = useState(''); // subscribe | redeem | dividend_withdraw
+  const [fundUserAmount, setFundUserAmount] = useState('');
+  
+  // 基金交易记录编辑 State
+  const [editingFundTx, setEditingFundTx] = useState(null);
+  const [editFundTxData, setEditFundTxData] = useState({ amount: '', remark: '' });
+  
+  // 添加基金交易记录 State
+  const [addFundTxModal, setAddFundTxModal] = useState(false);
+  const [newFundTxData, setNewFundTxData] = useState({ type: 'fund_profit', amount: '', remark: '' });
+  
+  // 批量删除 State
+  const [selectedTransactions, setSelectedTransactions] = useState(new Set());
+  const [showBatchDelete, setShowBatchDelete] = useState(false);
+  
   // 利息管理 State
   const [interestManageModal, setInterestManageModal] = useState(false);
 
@@ -394,6 +424,46 @@ const App = () => {
       console.error('Translation error:', e, 'key:', key, 'language:', language);
       return key;
     }
+  };
+
+  const openFundUserModal = (action) => {
+    setFundUserAction(action);
+    setFundUserAmount('');
+    setFundUserModal(true);
+  };
+
+  const submitFundUserRequest = async () => {
+    const amount = parseFloat(fundUserAmount) || 0;
+    if (amount <= 0) {
+      alert('请输入有效金额');
+      return;
+    }
+    let type = '';
+    let remark = '';
+    if (fundUserAction === 'subscribe') {
+      type = 'fund_subscribe';
+      remark = '外部准入申购';
+    } else if (fundUserAction === 'redeem') {
+      type = 'fund_redeem';
+      remark = '赎回（含分红）';
+    } else if (fundUserAction === 'dividend_withdraw') {
+      type = 'fund_dividend_withdraw';
+      remark = '提取分红到外部';
+    } else {
+      return;
+    }
+
+    await handleCRUD('create', {
+      type,
+      client: currentUser.username,
+      principal: amount,
+      rate: 0,
+      remark
+    });
+
+    setFundUserModal(false);
+    setFundUserAction('');
+    setFundUserAmount('');
   };
 
   // --- 初始化 Supabase Auth (简化为会话管理) ---
@@ -474,6 +544,18 @@ const App = () => {
       return;
     }
 
+    const refreshTransactions = async () => {
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('timestamp', { ascending: false });
+
+      if (!txError && txData) {
+        setTransactions(txData);
+      }
+      return { txData, txError };
+    };
+
     const fetchAndListen = async () => {
       try {
         // 自动删除超过20小时的被拒绝记录
@@ -485,14 +567,7 @@ const App = () => {
           .lt('rejected_at', twentyHoursAgo);
 
         // 获取交易数据
-        const { data: txData, error: txError } = await supabase
-          .from('transactions')
-          .select('*')
-          .order('timestamp', { ascending: false });
-
-        if (!txError && txData) {
-          setTransactions(txData);
-        }
+        await refreshTransactions();
 
         // 获取用户数据
         const { data: usersData, error: usersError } = await supabase
@@ -504,21 +579,35 @@ const App = () => {
           if (usersData.length === 0) seedAdminUser();
         }
 
-        // 获取公告数据
-        const { data: announcementData, error: announcementError } = await supabase
-          .from('announcements')
-          .select('*')
-          .limit(1);
+        const ensureAnnouncement = async (key, defaultContent) => {
+          const { data, error } = await supabase
+            .from('announcements')
+            .select('*')
+            .eq('title', key)
+            .order('id', { ascending: false })
+            .limit(1);
 
-        if (!announcementError && announcementData && announcementData.length > 0) {
-          setAnnouncement(announcementData[0]);
-        } else {
-          // 创建默认公告
-          await supabase.from('announcements').insert({
-            title: '公告',
-            content: '欢迎使用 EUU 超级投行系统'
-          });
-        }
+          if (!error && data && data.length > 0) return data[0];
+
+          const { data: created, error: createError } = await supabase
+            .from('announcements')
+            .insert({
+              title: key,
+              content: defaultContent
+            })
+            .select('*')
+            .single();
+          if (createError) throw createError;
+          return created;
+        };
+
+        const [bankAnn, fundAnn] = await Promise.all([
+          ensureAnnouncement('bank_announcement', '欢迎使用 EUU 超级投行系统'),
+          ensureAnnouncement('fund_announcement', '欢迎使用 EUU 超级投行系统')
+        ]);
+
+        if (bankAnn) setBankAnnouncement(bankAnn);
+        if (fundAnn) setFundAnnouncement(fundAnn);
 
         setLoading(false);
       } catch (err) {
@@ -542,6 +631,18 @@ const App = () => {
     };
   }, []);
 
+  const refreshTransactions = async () => {
+    const { data: txData, error: txError } = await supabase
+      .from('transactions')
+      .select('*')
+      .order('timestamp', { ascending: false });
+
+    if (!txError && txData) {
+      setTransactions(txData);
+    }
+    return { txData, txError };
+  };
+
   const seedAdminUser = async () => {
     try {
       await supabase.from('users').insert({
@@ -555,31 +656,455 @@ const App = () => {
     }
   };
 
-  // --- 更新公告 ---
-  const handleUpdateAnnouncement = async () => {
-    if (!announcement.id || !announcementInput.trim()) return;
+  const handleUpdateBankAnnouncement = async () => {
+    if (!bankAnnouncement.id || !bankAnnouncementInput.trim()) return;
     try {
-      await supabase
+      const nextContent = bankAnnouncementInput;
+      const { error } = await supabase
         .from('announcements')
         .update({
-          content: announcementInput,
-          updated_at: new Date().toISOString()
+          content: nextContent
         })
-        .eq('id', announcement.id);
-      setIsEditingAnnouncement(false);
-      setAnnouncementInput('');
+        .eq('id', bankAnnouncement.id);
+
+      if (error) throw error;
+
+      setBankAnnouncement(prev => ({ ...prev, content: nextContent }));
+      setIsEditingBankAnnouncement(false);
+      setBankAnnouncementInput('');
     } catch (e) {
       console.error('更新公告失败:', e);
+      alert('更新公告失败: ' + (e?.message || e));
+    }
+  };
+
+  const handleUpdateFundAnnouncement = async () => {
+    if (!fundAnnouncement.id || !fundAnnouncementInput.trim()) return;
+    try {
+      const nextContent = fundAnnouncementInput;
+      const { error } = await supabase
+        .from('announcements')
+        .update({
+          content: nextContent
+        })
+        .eq('id', fundAnnouncement.id);
+
+      if (error) throw error;
+
+      setFundAnnouncement(prev => ({ ...prev, content: nextContent }));
+      setIsEditingFundAnnouncement(false);
+      setFundAnnouncementInput('');
+    } catch (e) {
+      console.error('更新公告失败:', e);
+      alert('更新公告失败: ' + (e?.message || e));
+    }
+  };
+
+  // --- 基金功能 ---
+  // 获取基金账户信息
+  useEffect(() => {
+    if (currentPage === 'fund' && currentUser) {
+      fetchFundAccount();
+      fetchFundTransactions();
+    }
+  }, [currentPage, currentUser]);
+
+  const fetchFundAccount = async () => {
+    try {
+      // 设置用户名上下文
+      await supabase.rpc('set_app_username', { username: currentUser.username });
+      
+      const { data, error } = await supabase
+        .from('fund_accounts')
+        .select('*')
+        .eq('user_id', FUND_ACCOUNT_KEY)
+        .single();
+      
+      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows returned
+        throw error;
+      }
+      
+      if (data) {
+        setFundAccount(data);
+      } else {
+        // 创建基金账户
+        await createFundAccount();
+      }
+    } catch (e) {
+      console.error('获取基金账户失败:', e);
+      // 创建基金账户
+      await createFundAccount();
+    }
+  };
+
+  const createFundAccount = async () => {
+    try {
+      // 设置用户名上下文
+      await supabase.rpc('set_app_username', { username: currentUser.username });
+      
+      const { data, error } = await supabase
+        .from('fund_accounts')
+        .insert({
+          user_id: FUND_ACCOUNT_KEY,
+          balance: 0
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      setFundAccount(data);
+    } catch (e) {
+      console.error('创建基金账户失败:', e);
+    }
+  };
+
+  const fetchFundTransactions = async () => {
+    try {
+      let query = supabase
+        .from('transactions')
+        .select('*')
+        .in('type', ['bank_fund', 'fund_profit', 'fund_loss', 'fund_subscribe', 'fund_redeem', 'fund_dividend', 'fund_dividend_withdraw'])
+        .order('created_at', { ascending: false }) // 使用 created_at 字段排序
+        .order('timestamp', { ascending: false }); // 如果有 timestamp 字段，也按它排序
+      
+      // 所有用户都可以看到所有记录，但只有管理员和基金经理可以编辑
+      // 移除了基于角色的数据过滤，所有用户都能看到完整的交易记录
+      
+      const { data, error } = await query;
+      
+      if (error) throw error;
+      
+      console.log('基金交易记录排序检查:', data?.map(tx => ({
+        type: tx.type,
+        timestamp: tx.timestamp,
+        created_at: tx.created_at,
+        principal: tx.principal
+      })));
+      
+      setFundTransactions(data || []);
+    } catch (e) {
+      console.error('获取基金交易记录失败:', e);
+    }
+  };
+
+  // 基金交易记录编辑功能
+  const handleEditFundTx = (tx) => {
+    setEditingFundTx(tx.id);
+    setEditFundTxData({ 
+      amount: tx.amount || tx.principal || '', 
+      remark: tx.remark || '' 
+    });
+  };
+
+  const handleSaveFundTx = async () => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          amount: parseFloat(editFundTxData.amount) || 0,
+          remark: editFundTxData.remark
+        })
+        .eq('id', editingFundTx);
+      
+      if (error) throw error;
+      
+      // 重新获取交易记录
+      await fetchFundTransactions();
+      setEditingFundTx(null);
+      setEditFundTxData({ amount: '', remark: '' });
+      alert('交易记录更新成功！');
+    } catch (e) {
+      console.error('更新交易记录失败:', e);
+      alert('更新失败: ' + e.message);
+    }
+  };
+
+  const handleCancelEditFundTx = () => {
+    setEditingFundTx(null);
+    setEditFundTxData({ amount: '', remark: '' });
+  };
+
+  const handleDeleteFundTx = async (txId) => {
+    if (!confirm('确定要删除这条交易记录吗？')) return;
+    
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', txId);
+      
+      if (error) throw error;
+      
+      // 重新获取交易记录
+      await fetchFundTransactions();
+      alert('交易记录删除成功！');
+    } catch (e) {
+      console.error('删除交易记录失败:', e);
+      alert('删除失败: ' + e.message);
+    }
+  };
+
+  // 检查是否可以编辑基金交易记录
+  const canEditFundTransactions = () => {
+    return currentUser?.role === 'admin' || currentUser?.role === 'fund_manager';
+  };
+
+  // 添加基金交易记录功能
+  const handleAddFundTx = async () => {
+    if (!newFundTxData.amount || parseFloat(newFundTxData.amount) <= 0) {
+      alert('请输入有效金额');
+      return;
+    }
+
+    try {
+      const amount = parseFloat(newFundTxData.amount);
+      
+      if (newFundTxData.type === 'fund_profit') {
+        // 添加收益记录 - 正数
+        await supabase.from('transactions').insert({
+          type: 'fund_profit',
+          principal: amount,
+          rate: 0,
+          client: currentUser.username,
+          created_by: currentUser.username,
+          remark: newFundTxData.remark || '基金收益',
+          status: 'approved',
+          timestamp: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        });
+          
+      } else if (newFundTxData.type === 'fund_loss') {
+        // 添加损失记录 - 负数
+        await supabase.from('transactions').insert({
+          type: 'fund_loss',
+          principal: -amount,
+          rate: 0,
+          client: currentUser.username,
+          created_by: currentUser.username,
+          remark: newFundTxData.remark || '基金损失',
+          status: 'approved',
+          timestamp: new Date().toISOString(),
+          created_at: new Date().toISOString()
+        });
+      }
+      
+      // 重新获取数据
+      await fetchFundTransactions();
+      
+      // 重新获取所有交易数据以确保calculateFundBalance正确计算
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('timestamp', { ascending: false });
+      if (!txError && txData) {
+        setTransactions(txData);
+      }
+      
+      // 重置表单
+      setAddFundTxModal(false);
+      setNewFundTxData({ type: 'fund_profit', amount: '', remark: '' });
+      
+      alert('交易记录添加成功！');
+    } catch (e) {
+      console.error('添加交易记录失败:', e);
+      alert('添加失败: ' + e.message);
+    }
+  };
+
+  const handleCancelAddFundTx = () => {
+    setAddFundTxModal(false);
+    setNewFundTxData({ type: 'fund_profit', amount: '', remark: '' });
+  };
+
+  // 批量删除功能
+  const handleSelectTransaction = (txId) => {
+    const newSelected = new Set(selectedTransactions);
+    if (newSelected.has(txId)) {
+      newSelected.delete(txId);
+    } else {
+      newSelected.add(txId);
+    }
+    setSelectedTransactions(newSelected);
+  };
+
+  const handleSelectAll = (transactionType) => {
+    const transactionsToSelect = fundTransactions.filter(tx => {
+      if (transactionType === 'profit') {
+        return ['fund_profit', 'fund_loss'].includes(tx.type);
+      } else if (transactionType === 'transfer') {
+        return tx.type === 'bank_fund';
+      }
+      return false;
+    });
+    
+    const txIds = transactionsToSelect.map(tx => tx.id);
+    const allSelected = txIds.every(id => selectedTransactions.has(id));
+    
+    if (allSelected) {
+      // 取消选择所有
+      const newSelected = new Set(selectedTransactions);
+      txIds.forEach(id => newSelected.delete(id));
+      setSelectedTransactions(newSelected);
+    } else {
+      // 选择所有
+      const newSelected = new Set(selectedTransactions);
+      txIds.forEach(id => newSelected.add(id));
+      setSelectedTransactions(newSelected);
+    }
+  };
+
+  const handleBatchDelete = async () => {
+    if (selectedTransactions.size === 0) {
+      alert('请先选择要删除的记录');
+      return;
+    }
+
+    if (!confirm(`确定要删除选中的 ${selectedTransactions.size} 条记录吗？此操作不可撤销！`)) {
+      return;
+    }
+
+    try {
+      // 批量删除
+      for (const txId of selectedTransactions) {
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', txId);
+        if (error) throw error;
+      }
+      
+      // 重新获取数据
+      await fetchFundTransactions();
+      
+      // 重新获取所有交易数据
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('timestamp', { ascending: false });
+      if (!txError && txData) {
+        setTransactions(txData);
+      }
+      
+      // 清空选择
+      setSelectedTransactions(new Set());
+      setShowBatchDelete(false);
+      
+      alert(`成功删除 ${selectedTransactions.size} 条记录！`);
+    } catch (e) {
+      console.error('批量删除失败:', e);
+      alert('删除失败: ' + e.message);
+    }
+  };
+
+  const handleFundTransfer = async () => {
+    if (!transferAmount || parseFloat(transferAmount) <= 0) {
+      alert('请输入有效金额');
+      return;
+    }
+
+    // 权限检查
+    if (currentUser?.role !== 'admin') {
+      alert('权限不足：只有管理员可以进行基金转账操作');
+      return;
+    }
+
+    try {
+      const amount = parseFloat(transferAmount); // 用户输入的m单位金额
+      
+      if (transferType === 'in') {
+        // 银行转基金
+        const idleCash = calculateIdleCash();
+        if (amount > idleCash) {
+          alert(`银行闲置资金不足。可用：${formatMoney(idleCash)}，尝试：${formatMoney(amount)}`);
+          return;
+        }
+        
+        // 创建银行转基金记录（正数表示转入基金）
+        await supabase.from('transactions').insert({
+          type: 'bank_fund',
+          principal: amount, // 正数表示转入基金
+          rate: 0,
+          client: currentUser.username,
+          created_by: currentUser.username,
+          remark: '从银行转入基金',
+          status: 'approved'
+        });
+        
+        // 更新基金账户余额
+        await supabase.from('fund_accounts')
+          .update({ 
+            balance: fundAccount.balance + amount, // 直接使用m单位
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', FUND_ACCOUNT_KEY);
+          
+      } else if (transferType === 'out') {
+        // 基金转银行
+        const fundBalance = calculateFundBalance();
+        if (amount > fundBalance) {
+          alert(`基金余额不足。可用：${formatMoney(fundBalance)}，尝试：${formatMoney(amount)}`);
+          return;
+        }
+        
+        // 创建基金转银行记录（负数表示从基金转出）
+        await supabase.from('transactions').insert({
+          type: 'bank_fund',
+          principal: -amount, // 负数表示从基金转出
+          rate: 0,
+          client: currentUser.username,
+          created_by: currentUser.username,
+          remark: '从基金转回银行',
+          status: 'approved'
+        });
+        
+        // 更新基金账户余额
+        await supabase.from('fund_accounts')
+          .update({ 
+            balance: fundAccount.balance - amount, // 直接使用m单位
+            updated_at: new Date().toISOString()
+          })
+          .eq('user_id', FUND_ACCOUNT_KEY);
+      }
+      
+      // 刷新数据
+      await fetchFundAccount();
+      await fetchFundTransactions();
+      
+      // 重新获取所有交易数据以确保calculateIdleCash正确计算
+      const { data: txData, error: txError } = await supabase
+        .from('transactions')
+        .select('*')
+        .order('timestamp', { ascending: false });
+      if (!txError && txData) {
+        setTransactions(txData);
+        console.log('重新获取的交易数据:', txData); // 调试日志
+      }
+      
+      // 强制重新渲染以更新所有依赖数据
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      // 调试信息
+      console.log('转账后基金余额:', fundAccount.balance);
+      console.log('转账后闲置资金:', calculateIdleCash());
+      // 重置表单
+      setTransferModal(false);
+      setTransferAmount('');
+      setTransferType('');
+      
+      alert('转账成功！');
+    } catch (e) {
+      console.error('转账失败:', e);
+      alert('转账失败: ' + e.message);
     }
   };
 
   // --- 论坛功能 ---
   // 获取帖子列表
   useEffect(() => {
-    if (currentPage === 'forum') {
-      fetchPosts();
+    if (currentUser) {
+      fetchFundTransactions();
     }
-  }, [currentPage]);
+  }, [currentUser]);
 
   const fetchPosts = async () => {
     try {
@@ -1140,6 +1665,7 @@ const App = () => {
           .eq('id', payload);
         if (error) throw error;
       } else if (action === 'approve' || action === 'reject') {
+        const txToReview = Array.isArray(transactions) ? transactions.find(tx => tx.id === payload) : null;
         const updateData = {
           status: action === 'approve' ? 'approved' : 'rejected',
           approved_by: currentUser.username,
@@ -1151,6 +1677,72 @@ const App = () => {
           updateData.rejected_at = new Date().toISOString();
         }
         
+        if (action === 'approve' && txToReview) {
+          if (txToReview.type === 'fund_dividend_withdraw') {
+            const available = (() => {
+              const approvedAll = transactions.filter(t => t.status === 'approved');
+              const username = txToReview.created_by;
+              const inDiv = approvedAll
+                .filter(t => t.type === 'fund_dividend' && (t.client === username || t.created_by === username))
+                .reduce((sum, t) => sum + (parseFloat(t.principal) || 0), 0);
+              const outDiv = approvedAll
+                .filter(t => t.type === 'fund_dividend_withdraw' && t.created_by === username)
+                .reduce((sum, t) => sum + (parseFloat(t.principal) || 0), 0);
+              const outRedeemDiv = approvedAll
+                .filter(t => t.type === 'fund_redeem' && t.created_by === username)
+                .reduce((sum, t) => {
+                  if (!t.remark) return sum;
+                  const m = String(t.remark).match(/分红[:：]\s*([0-9.]+)/);
+                  return sum + (m ? (parseFloat(m[1]) || 0) : 0);
+                }, 0);
+              return Math.max(0, inDiv - outDiv - outRedeemDiv);
+            })();
+
+            const req = parseFloat(txToReview.principal) || 0;
+            if (req > available + 0.0000001) {
+              throw new Error(`分红可提取不足，可用：${available.toFixed(3)}m`);
+            }
+          }
+
+          if (txToReview.type === 'fund_redeem') {
+            const approvedAll = transactions.filter(t => t.status === 'approved');
+            const username = txToReview.created_by;
+            const totalSubscribed = approvedAll
+              .filter(t => t.type === 'fund_subscribe' && t.created_by === username)
+              .reduce((sum, t) => sum + (parseFloat(t.principal) || 0), 0);
+            const totalRedeemedPrincipal = approvedAll
+              .filter(t => t.type === 'fund_redeem' && t.created_by === username)
+              .reduce((sum, t) => sum + (parseFloat(t.rate) || 0), 0);
+            const availablePrincipal = Math.max(0, totalSubscribed - totalRedeemedPrincipal);
+
+            const totalDividend = approvedAll
+              .filter(t => t.type === 'fund_dividend' && (t.client === username || t.created_by === username))
+              .reduce((sum, t) => sum + (parseFloat(t.principal) || 0), 0);
+            const withdrawnDividend = approvedAll
+              .filter(t => t.type === 'fund_dividend_withdraw' && t.created_by === username)
+              .reduce((sum, t) => sum + (parseFloat(t.principal) || 0), 0);
+            const usedDividendInRedeem = approvedAll
+              .filter(t => t.type === 'fund_redeem' && t.created_by === username)
+              .reduce((sum, t) => {
+                if (!t.remark) return sum;
+                const m = String(t.remark).match(/分红[:：]\s*([0-9.]+)/);
+                return sum + (m ? (parseFloat(m[1]) || 0) : 0);
+              }, 0);
+            const availableDividend = Math.max(0, totalDividend - withdrawnDividend - usedDividendInRedeem);
+
+            const req = parseFloat(txToReview.principal) || 0;
+            const principalPart = Math.min(availablePrincipal, req);
+            const dividendPart = Math.max(0, req - principalPart);
+
+            if (dividendPart > availableDividend + 0.0000001) {
+              throw new Error(`赎回金额超出可用（本金+分红）。可用本金：${availablePrincipal.toFixed(3)}m，可用分红：${availableDividend.toFixed(3)}m`);
+            }
+
+            updateData.rate = principalPart;
+            updateData.remark = `${txToReview.remark || ''} 本金:${principalPart.toFixed(3)} 分红:${dividendPart.toFixed(3)}`.trim();
+          }
+        }
+
         const { error } = await supabase
           .from('transactions')
           .update(updateData)
@@ -1201,6 +1793,11 @@ const App = () => {
         };
         await supabase.from('transactions').insert([repayRecord]);
       }
+
+      // 任何账面变化后立即刷新，确保收益率/个人预估收益等实时更新
+      await refreshTransactions();
+      await fetchFundTransactions();
+      await fetchFundAccount();
     } catch (e) {
       alert("操作失败: " + e.message);
     }
@@ -1234,6 +1831,34 @@ const App = () => {
     setModalOpen(true);
   };
 
+  // 计算当前用户个人的注资和存款账户余额（只统计client字段为当前用户的交易）
+  // 包含已结算的利息
+  const calcPersonalWithSettled = (types) => {
+    const approved = transactions.filter(tx => tx.status === 'approved');
+    return approved
+      .filter(tx => types.includes(tx.type) && tx.client === currentUser?.username)
+      .reduce((acc, cur) => {
+        const principal = parseFloat(cur.principal) || 0;
+        const rate = parseFloat(cur.rate) || 0;
+        const weeklyInterest = (principal * rate / 100);
+        
+        // 从remark中提取已结算次数
+        let settledCount = 0;
+        if (cur.remark && cur.remark.includes('利息次数:')) {
+          const match = cur.remark.match(/利息次数:(\d+)/);
+          if (match) settledCount = parseInt(match[1]);
+        }
+        
+        // 本金 + 已结算利息
+        const totalAmount = principal + (weeklyInterest * settledCount);
+        
+        return {
+          p: acc.p + principal,  // 纯本金
+          total: acc.total + totalAmount  // 本金 + 已结算利息
+        };
+      }, { p: 0, total: 0 });
+  };
+
   // --- 统计 ---
   const stats = useMemo(() => {
     const approved = transactions.filter(tx => tx.status === 'approved');
@@ -1258,33 +1883,6 @@ const App = () => {
     // 计算利息池 (每周净利息，利率已按周计)
     const interestPool = (totalRevenue - totalExpense);
 
-    // 计算当前用户个人的注资和存款账户余额（只统计client字段为当前用户的交易）
-    // 包含已结算的利息
-    const calcPersonalWithSettled = (types) => {
-      return approved
-        .filter(tx => types.includes(tx.type) && tx.client === currentUser?.username)
-        .reduce((acc, cur) => {
-          const principal = parseFloat(cur.principal) || 0;
-          const rate = parseFloat(cur.rate) || 0;
-          const weeklyInterest = (principal * rate / 100);
-          
-          // 从remark中提取已结算次数
-          let settledCount = 0;
-          if (cur.remark && cur.remark.includes('利息次数:')) {
-            const match = cur.remark.match(/利息次数:(\d+)/);
-            if (match) settledCount = parseInt(match[1]);
-          }
-          
-          // 本金 + 已结算利息
-          const totalAmount = principal + (weeklyInterest * settledCount);
-          
-          return {
-            p: acc.p + principal,  // 纯本金
-            total: acc.total + totalAmount  // 本金 + 已结算利息
-          };
-        }, { p: 0, total: 0 });
-    };
-    
     const personalInjections = calcPersonalWithSettled(['injection']);
     const personalDeposits = calcPersonalWithSettled(['deposit']);
     const personalWInj = calcPersonalWithSettled(['withdraw_inj']);
@@ -1302,11 +1900,17 @@ const App = () => {
       .filter(tx => tx.type === 'bank_asset')
       .reduce((sum, tx) => sum + (parseFloat(tx.rate) || 0), 0); // rate字段存储资产价值
 
+    // 计算银行基金转账的净额（仅 bank_fund 影响银行闲置资金）
+    const bankFundNetTransfer = approved
+      .filter(tx => tx.type === 'bank_fund')
+      .reduce((acc, cur) => acc + (parseFloat(cur.principal) || 0), 0);
+
     return {
       loanPrincipal: loans.p,
       liabilities: totalLiabilities,
       netCashFlow: totalRevenue - totalExpense,
-      idleCash: totalLiabilities - loans.p,
+      // 主页的银行闲置资金计算：仅受 bank_fund 转账影响（申购/赎回/分红提取不影响银行闲置资金）
+      idleCash: totalLiabilities - loans.p - bankFundNetTransfer,
       interestPool: interestPool,
       injectionBalance: injectionBalance,
       depositBalance: depositBalance,
@@ -1314,6 +1918,286 @@ const App = () => {
       bankAssetsValue: bankAssetsValue
     };
   }, [transactions, currentUser]);
+
+  // 计算银行账户余额
+  const calculateBalance = () => {
+    if (!currentUser || !transactions.length) return 0;
+    
+    const personalInjections = calcPersonalWithSettled(['injection']);
+    const personalDeposits = calcPersonalWithSettled(['deposit']);
+    const personalWInj = calcPersonalWithSettled(['withdraw_inj']);
+    const personalWDep = calcPersonalWithSettled(['withdraw_dep']);
+    
+    const injectionBalance = personalInjections.total - personalWInj.total;
+    const depositBalance = personalDeposits.total - personalWDep.total;
+    
+    return injectionBalance + depositBalance;
+  };
+
+  // 计算基金本金：只计算银行转入/转出 + 申购/赎回（本金部分）
+  const calculateFundPrincipal = () => {
+    const source = fundTransactions.length
+      ? fundTransactions
+      : (transactions || []).filter(tx => ['bank_fund', 'fund_subscribe', 'fund_redeem'].includes(tx.type));
+    if (!source.length) return 0;
+    const approved = source.filter(tx => tx.status ? tx.status === 'approved' : true);
+
+    const bankNet = approved
+      .filter(tx => tx.type === 'bank_fund')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const subscribed = approved
+      .filter(tx => tx.type === 'fund_subscribe')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const redeemedPrincipal = approved
+      .filter(tx => tx.type === 'fund_redeem')
+      .reduce((sum, tx) => sum + (parseFloat(tx.rate) || 0), 0);
+
+    return bankNet + subscribed - redeemedPrincipal;
+  };
+
+  // 基金余额显示改为：基金本金
+  const calculateFundBalance = () => {
+    return calculateFundPrincipal();
+  };
+
+  // 计算基金总收益
+  const calculateFundProfit = () => {
+    if (!fundTransactions.length) return 0;
+    
+    const approved = fundTransactions.filter(tx => tx.status ? tx.status === 'approved' : true);
+    
+    // 计算基金收益（正数）
+    const fundProfit = approved
+      .filter(tx => tx.type === 'fund_profit')
+      .reduce((acc, cur) => acc + (parseFloat(cur.principal) || 0), 0);
+    
+    // 计算基金损失（已经是负数，直接相加）
+    const fundLoss = approved
+      .filter(tx => tx.type === 'fund_loss')
+      .reduce((acc, cur) => acc + (parseFloat(cur.principal) || 0), 0);
+    
+    // 净收益 = 收益 + 损失（损失已经是负数）
+    const netProfit = fundProfit + fundLoss;
+    
+    return netProfit;
+  };
+
+  const calculateFundYieldPercent = () => {
+    const source = fundTransactions.length
+      ? fundTransactions
+      : (transactions || []).filter(tx => ['bank_fund', 'fund_profit', 'fund_loss', 'fund_subscribe', 'fund_redeem', 'fund_dividend', 'fund_dividend_withdraw'].includes(tx.type));
+    if (!source.length) return 0;
+    const approved = source.filter(tx => tx.status ? tx.status === 'approved' : true);
+    const netProfit = approved
+      .filter(tx => ['fund_profit', 'fund_loss'].includes(tx.type))
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+    const principalBase = calculateFundPrincipal();
+    if (principalBase <= 0.0000001) return 0;
+    return (netProfit / principalBase) * 100;
+  };
+
+  const calculatePersonalFundBalance = () => {
+    if (!currentUser) return 0;
+    const approvedAll = (transactions || []).filter(tx => tx.status === 'approved');
+    const username = currentUser.username;
+
+    const totalSubscribed = approvedAll
+      .filter(t => t.type === 'fund_subscribe' && t.created_by === username)
+      .reduce((sum, t) => sum + (parseFloat(t.principal) || 0), 0);
+
+    const totalRedeemedPrincipal = approvedAll
+      .filter(t => t.type === 'fund_redeem' && t.created_by === username)
+      .reduce((sum, t) => sum + (parseFloat(t.rate) || 0), 0);
+
+    const netSubscribed = Math.max(0, totalSubscribed - totalRedeemedPrincipal);
+    const inDiv = approvedAll
+      .filter(t => t.type === 'fund_dividend' && (t.client === username || t.created_by === username))
+      .reduce((sum, t) => sum + (parseFloat(t.principal) || 0), 0);
+    const outDiv = approvedAll
+      .filter(t => t.type === 'fund_dividend_withdraw' && t.created_by === username)
+      .reduce((sum, t) => sum + (parseFloat(t.principal) || 0), 0);
+    const usedDividendInRedeem = approvedAll
+      .filter(t => t.type === 'fund_redeem' && t.created_by === username)
+      .reduce((sum, t) => {
+        if (!t.remark) return sum;
+        const m = String(t.remark).match(/分红[:：]\s*([0-9.]+)/);
+        return sum + (m ? (parseFloat(m[1]) || 0) : 0);
+      }, 0);
+    const availableDividend = Math.max(0, inDiv - outDiv - usedDividendInRedeem);
+
+    return netSubscribed + availableDividend;
+  };
+
+  const calculatePersonalFundNetSubscribed = () => {
+    if (!currentUser) return 0;
+    const approvedAll = (transactions || []).filter(tx => tx.status === 'approved');
+    const username = currentUser.username;
+    const totalSubscribed = approvedAll
+      .filter(t => t.type === 'fund_subscribe' && t.created_by === username)
+      .reduce((sum, t) => sum + (parseFloat(t.principal) || 0), 0);
+    const totalRedeemedPrincipal = approvedAll
+      .filter(t => t.type === 'fund_redeem' && t.created_by === username)
+      .reduce((sum, t) => sum + (parseFloat(t.rate) || 0), 0);
+    return Math.max(0, totalSubscribed - totalRedeemedPrincipal);
+  };
+
+  const calculatePersonalFundEstimatedProfit = () => {
+    const netSubscribed = calculatePersonalFundNetSubscribed();
+    return netSubscribed * (calculateFundYieldPercent() / 100);
+  };
+
+  const handleSettleFundDividends = async () => {
+    try {
+      if (!fundTransactions.length) return;
+      const approved = fundTransactions.filter(tx => tx.status ? tx.status === 'approved' : true);
+      const netProfit = approved
+        .filter(tx => ['fund_profit', 'fund_loss'].includes(tx.type))
+        .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+      if (netProfit <= 0.0000001) {
+        alert('暂无可结算分红');
+        return;
+      }
+
+      const fundPrincipal = calculateFundPrincipal();
+      if (fundPrincipal <= 0.0000001) {
+        alert('基金本金为 0，无法结算');
+        return;
+      }
+
+      const yieldRate = netProfit / fundPrincipal;
+
+      const approvedAll = transactions.filter(tx => tx.status === 'approved');
+      const users = Array.from(new Set(approvedAll.map(tx => tx.created_by).filter(Boolean)));
+      const userNet = users
+        .map(u => {
+          const sub = approvedAll
+            .filter(t => t.type === 'fund_subscribe' && t.created_by === u)
+            .reduce((s, t) => s + (parseFloat(t.principal) || 0), 0);
+          const red = approvedAll
+            .filter(t => t.type === 'fund_redeem' && t.created_by === u)
+            .reduce((s, t) => s + (parseFloat(t.rate) || 0), 0);
+          return { u, net: Math.max(0, sub - red) };
+        })
+        .filter(x => x.net > 0);
+
+      const totalNet = userNet.reduce((s, x) => s + x.net, 0);
+      if (totalNet <= 0) {
+        alert('暂无持仓用户，无法结算');
+        return;
+      }
+
+      const settleId = `fund_dividend_${Date.now()}`;
+      const rows = userNet.map(({ u, net }) => ({
+        type: 'fund_dividend',
+        client: u,
+        principal: parseFloat(((net * yieldRate)).toFixed(3)),
+        rate: 0,
+        remark: `结算批次:${settleId}`,
+        status: 'approved',
+        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+        created_by: currentUser.username,
+        creator_id: currentUser.id || 'unknown'
+      })).filter(r => r.principal > 0);
+
+      if (rows.length === 0) {
+        alert('暂无可结算分红');
+        return;
+      }
+
+      const distributedTotal = rows.reduce((s, r) => s + (parseFloat(r.principal) || 0), 0);
+      const remainingProfit = Math.max(0, netProfit - distributedTotal);
+
+      const extraRows = [];
+      // 从总收益里扣除已分配分红
+      if (distributedTotal > 0.0000001) {
+        extraRows.push({
+          type: 'fund_loss',
+          client: 'dividend_settle',
+          principal: -parseFloat(distributedTotal.toFixed(3)),
+          rate: 0,
+          remark: `分红结算扣减:${settleId}`,
+          status: 'approved',
+          timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+          created_by: currentUser.username,
+          creator_id: currentUser.id || 'unknown'
+        });
+      }
+
+      // 结算后：剩余总收益全部转入本金，记为银行资金转入，同时把收益归零
+      if (remainingProfit > 0.0000001) {
+        extraRows.push({
+          type: 'bank_fund',
+          client: 'profit_to_principal',
+          principal: parseFloat(remainingProfit.toFixed(3)),
+          rate: 0,
+          remark: `收益转入本金:${settleId}`,
+          status: 'approved',
+          timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+          created_by: currentUser.username,
+          creator_id: currentUser.id || 'unknown'
+        });
+        extraRows.push({
+          type: 'fund_loss',
+          client: 'profit_to_principal',
+          principal: -parseFloat(remainingProfit.toFixed(3)),
+          rate: 0,
+          remark: `收益归零(已转本金):${settleId}`,
+          status: 'approved',
+          timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+          created_by: currentUser.username,
+          creator_id: currentUser.id || 'unknown'
+        });
+      }
+
+      const { error } = await supabase.from('transactions').insert([...rows, ...extraRows]);
+      if (error) throw error;
+
+      await fetchFundTransactions();
+      await refreshTransactions();
+      alert(`分红结算完成：${rows.length}人，总额 ${distributedTotal.toFixed(3)}m`);
+    } catch (e) {
+      alert('结算失败: ' + e.message);
+    }
+  };
+  // 计算银行闲置资金（基于当前状态，不受历史删除影响）
+  const calculateIdleCash = () => {
+    if (!currentUser || !transactions.length) return 0;
+    
+    const approved = transactions.filter(tx => tx.status === 'approved');
+    
+    // 计算总负债（注资+存款）
+    const injections = approved
+      .filter(tx => ['injection', 'deposit'].includes(tx.type))
+      .reduce((acc, cur) => ({
+        p: acc.p + (parseFloat(cur.principal) || 0),
+        i: acc.i + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100)
+      }), { p: 0, i: 0 });
+    
+    // 计算贷款资产
+    const loans = approved
+      .filter(tx => tx.type === 'loan')
+      .reduce((acc, cur) => ({
+        p: acc.p + (parseFloat(cur.principal) || 0),
+        i: acc.i + ((parseFloat(cur.principal) || 0) * (parseFloat(cur.rate) || 0) / 100)
+      }), { p: 0, i: 0 });
+    
+    // 银行闲置资金 = 总负债 - 贷款资产 - 银行→基金净转账额（仅 bank_fund 影响银行闲置资金）
+    const bankFundNetTransfer = approved
+      .filter(tx => tx.type === 'bank_fund')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+    const idleCash = injections.p - loans.p - bankFundNetTransfer;
+    
+    console.log('银行闲置资金计算（当前状态）:', {
+      总负债: injections.p,
+      贷款资产: loans.p,
+      银行基金净转账: bankFundNetTransfer,
+      闲置资金: idleCash
+    });
+    
+    return Math.max(0, idleCash); // 确保不为负数
+  };
 
   const formatMoney = (val) => `${parseFloat(val || 0).toFixed(3)}m`;
 
@@ -2175,46 +3059,740 @@ const App = () => {
     );
   }
 
-  // 计算按用户分组的净余额数据（用于显示在表格中）
-  // 对于 injection/deposit，显示 (total - withdraw/取款)，仅计入已批准的交易
-  // 对于 withdraw_inj/withdraw_dep，仍显示原始数据
-  const getNetBalanceData = (txList, types, withdrawType = null) => {
-    const approved = txList.filter(tx => types.includes(tx.type) && tx.status === 'approved');
-    
-    if (!withdrawType) {
-      // 直接返回原始数据（用于撤资/取款）
-      return approved;
-    }
-    
-    // 按创建人分组计算净余额
-    const userBalances = {};
-    approved.forEach(tx => {
-      const user = tx.created_by || 'unknown';
-      if (!userBalances[user]) {
-        userBalances[user] = { ...tx, principal: 0, userBalanceTotal: 0 };
-      }
-      userBalances[user].principal += parseFloat(tx.principal) || 0;
-      userBalances[user].userBalanceTotal = userBalances[user].principal;
-    });
-    
-    // 从撤资/取款中扣除（仅计入已批准的撤资/取款）
-    if (withdrawType) {
-      const withdrawn = txList.filter(tx => tx.type === withdrawType && tx.status === 'approved');
-      withdrawn.forEach(w => {
-        const user = w.created_by || 'unknown';
-        if (userBalances[user]) {
-          userBalances[user].userBalanceTotal -= parseFloat(w.principal) || 0;
-        }
-      });
-    }
-    
-    // 将净余额更新到 principal 中供显示
-    return Object.values(userBalances).map(item => ({
-      ...item,
-      principal: item.userBalanceTotal,
-      isNetBalance: true // 标记为净余额数据
-    })).filter(item => item.principal > 0); // 只显示余额 > 0 的用户
-  };
+  // 银行基金页面
+  if (currentPage === 'fund') {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-green-50/20 to-emerald-50/20 animate-gradient-slow">
+        <style>{`
+          @keyframes gradient-slow {
+            0% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+            100% { background-position: 0% 50%; }
+          }
+        `}</style>
+        
+        {/* 头部 */}
+        <div className="bg-gradient-to-r from-green-500 to-emerald-500 text-white p-6 shadow-xl">
+          <div className="max-w-7xl mx-auto flex justify-between items-center">
+            <div>
+              <h2 className="text-4xl font-black tracking-wider mb-2 flex items-center gap-3">
+                <TrendingUp className="w-10 h-10" />
+                银行基金
+              </h2>
+              <p className="text-orange-100 font-medium">独立的基金投资管理系统</p>
+            </div>
+            <div>
+              <button onClick={() => setCurrentPage('bank')} className="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-6 py-3 font-bold transition-all border border-white/30">
+                返回银行
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 主体内容 */}
+        <div className="max-w-7xl mx-auto p-6 space-y-6">
+          {/* 账户概览 - 参考个人账户设计 */}
+          <div className="bg-white border border-green-200 shadow-sm p-4">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* 左侧：基金账户信息 */}
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <TrendingUp className="w-5 h-5 text-green-600" />
+                    <span className="font-semibold text-base">基金账户</span>
+                  </div>
+                  <div className="flex items-center gap-2 justify-end">
+                    <div className="text-base font-semibold text-gray-900">{formatMoney(calculateFundBalance())}</div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="w-full h-10 px-3 border border-green-200 bg-green-50 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <TrendingUp className="w-4 h-4 text-green-600 shrink-0" />
+                      <span className="text-xs text-gray-600 whitespace-nowrap">基金余额</span>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{formatMoney(calculateFundBalance())}</span>
+                  </div>
+                  <div className="w-full h-10 px-3 border border-green-200 bg-green-50 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Wallet className="w-4 h-4 text-green-600 shrink-0" />
+                      <span className="text-xs text-gray-600 whitespace-nowrap">银行余额</span>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{formatMoney(calculateIdleCash())}</span>
+                  </div>
+                  <div className="w-full h-10 px-3 border border-purple-200 bg-purple-50 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Activity className="w-4 h-4 text-purple-600 shrink-0" />
+                      <span className="text-xs text-gray-600 whitespace-nowrap">总收益</span>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{formatMoney(calculateFundProfit())}</span>
+                  </div>
+                  <div className="w-full h-10 px-3 border border-blue-200 bg-blue-50 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Activity className="w-4 h-4 text-blue-600 shrink-0" />
+                      <span className="text-xs text-gray-600 whitespace-nowrap">收益率</span>
+                    </div>
+                    <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{calculateFundYieldPercent().toFixed(2)}%</span>
+                  </div>
+                </div>
+                <p className="mt-3 text-xs text-gray-500">基金 + 银行 + 收益统计</p>
+              </div>
+              {/* 右侧：管理员公告栏 */}
+              <div className="border-l border-green-200 pl-6">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <MessageSquare className="w-5 h-5 text-green-600" />
+                    <span className="font-semibold text-base">管理员公告</span>
+                  </div>
+                  {currentUser?.role === 'admin' && (
+                    <button
+                      onClick={() => {
+                        setIsEditingFundAnnouncement(true);
+                        setFundAnnouncementInput(fundAnnouncement.content);
+                      }}
+                      className="text-green-600 hover:text-green-700 text-sm font-medium transition-colors"
+                    >
+                      编辑
+                    </button>
+                  )}
+                </div>
+                
+                {isEditingFundAnnouncement && currentUser?.role === 'admin' ? (
+                  <div className="space-y-3">
+                    <textarea
+                      value={fundAnnouncementInput}
+                      onChange={(e) => setFundAnnouncementInput(e.target.value)}
+                      className="w-full border border-green-200 px-3 py-2 text-sm focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none resize-none"
+                      rows={6}
+                      placeholder="输入公告内容..."
+                    />
+                    <div className="flex gap-2">
+                      <button
+                        onClick={handleUpdateFundAnnouncement}
+                        className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium transition-colors"
+                      >
+                        保存
+                      </button>
+                      <button
+                        onClick={() => {
+                          setIsEditingFundAnnouncement(false);
+                          setFundAnnouncementInput('');
+                        }}
+                        className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 text-sm font-medium transition-colors"
+                      >
+                        取消
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-green-50 border border-green-200 p-4 min-h-[120px]">
+                    <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                      {fundAnnouncement.content || '暂无公告内容'}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div>
+              {/* 转账操作 */}
+              {currentUser?.role === 'admin' ? (
+                <div className="bg-white border border-green-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <ArrowDownRight className="w-5 h-5 text-green-600" />
+                      <span className="font-semibold text-base">资金转账</span>
+                    </div>
+                    <button
+                      onClick={handleSettleFundDividends}
+                      className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-4 py-2 text-sm font-medium transition-colors"
+                    >
+                      结算分红
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <button
+                      onClick={() => { setTransferModal(true); setTransferType('in'); }}
+                      className="bg-gradient-to-r from-green-100 to-green-200 hover:from-green-200 hover:to-green-300 text-green-700 px-4 py-3 font-bold transition-all flex items-center justify-center gap-2 border border-green-300 shadow-sm hover:shadow-md"
+                    >
+                      <ArrowDownRight className="w-4 h-4" />
+                      银行 → 基金
+                    </button>
+                    <button
+                      onClick={() => { setTransferModal(true); setTransferType('out'); }}
+                      className="bg-gradient-to-r from-teal-100 to-teal-200 hover:from-teal-200 hover:to-teal-300 text-teal-700 px-4 py-3 font-bold transition-all flex items-center justify-center gap-2 border border-teal-300 shadow-sm hover:shadow-md"
+                    >
+                      <ArrowUpRight className="w-4 h-4" />
+                      基金 → 银行
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white border border-green-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <Lock className="w-5 h-5 text-green-600" />
+                      <span className="font-semibold text-base">资金转账</span>
+                    </div>
+                  </div>
+                  <div className="text-center py-6">
+                    <Lock className="w-8 h-8 text-gray-400 mx-auto mb-3" />
+                    <p className="text-gray-500">权限不足</p>
+                    <p className="text-gray-400 text-xs mt-1">只有管理员可以进行基金转账操作</p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div>
+              {/* 基金操作 */}
+              {currentUser?.role !== 'admin' ? (
+                <div className="bg-white border border-green-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <TrendingUp className="w-5 h-5 text-green-600" />
+                      <span className="font-semibold text-base">基金操作</span>
+                    </div>
+                    <div className="text-xs text-gray-500">提交后需管理员审批</div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                    <div className="h-10 w-full border border-blue-200 bg-blue-50 flex items-center justify-center gap-2 px-3">
+                      <TrendingUp className="w-4 h-4 text-blue-600" />
+                      <span className="text-xs text-gray-600">申购本金</span>
+                      <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundNetSubscribed())}</span>
+                    </div>
+                    <div className="h-10 w-full border border-purple-200 bg-purple-50 flex items-center justify-center gap-2 px-3">
+                      <Activity className="w-4 h-4 text-purple-600" />
+                      <span className="text-xs text-gray-600">预估收益</span>
+                      <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundEstimatedProfit())}</span>
+                    </div>
+                    <div className="h-10 w-full border border-green-200 bg-green-50 flex items-center justify-center gap-2 px-3">
+                      <Wallet className="w-4 h-4 text-green-600" />
+                      <span className="text-xs text-gray-600">基金余额</span>
+                      <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundBalance())}</span>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <button
+                      onClick={() => openFundUserModal('subscribe')}
+                      className="h-10 bg-gradient-to-r from-emerald-100 to-green-100 hover:from-emerald-200 hover:to-green-200 text-green-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-green-200"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      申购
+                    </button>
+                    <button
+                      onClick={() => openFundUserModal('redeem')}
+                      className="h-10 bg-gradient-to-r from-blue-100 to-sky-100 hover:from-blue-200 hover:to-sky-200 text-blue-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-blue-200"
+                    >
+                      <ArrowUpRight className="w-4 h-4" />
+                      赎回
+                    </button>
+                    <button
+                      onClick={() => openFundUserModal('dividend_withdraw')}
+                      className="h-10 bg-gradient-to-r from-purple-100 to-fuchsia-100 hover:from-purple-200 hover:to-fuchsia-200 text-purple-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-purple-200"
+                    >
+                      <ArrowUpRight className="w-4 h-4" />
+                      提取分红
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-white border border-green-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="flex items-center gap-2 text-gray-700">
+                      <TrendingUp className="w-5 h-5 text-green-600" />
+                      <span className="font-semibold text-base">基金操作</span>
+                    </div>
+                  </div>
+                  <div className="text-center py-6">
+                    <p className="text-gray-500">该区域为普通用户申购/赎回入口</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* 交易记录 */}
+          <div className="bg-white border border-green-200 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2 text-gray-700">
+                <MessageSquare className="w-5 h-5 text-green-600" />
+                <span className="font-semibold text-base">基金交易记录</span>
+              </div>
+              <div className="flex items-center gap-2">
+                {canEditFundTransactions() && (
+                  <>
+                    {selectedTransactions.size > 0 && (
+                      <button
+                        onClick={handleBatchDelete}
+                        className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                        删除选中 ({selectedTransactions.size})
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setShowBatchDelete(!showBatchDelete)}
+                      className={`px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2 ${
+                        showBatchDelete 
+                          ? 'bg-blue-600 hover:bg-blue-700 text-white' 
+                          : 'bg-gray-100 hover:bg-gray-200 text-gray-700'
+                      }`}
+                    >
+                      <CheckSquare className="w-4 h-4" />
+                      {showBatchDelete ? '完成选择' : '批量选择'}
+                    </button>
+                    <button
+                      onClick={() => setAddFundTxModal(true)}
+                      className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
+                    >
+                      <PlusCircle className="w-4 h-4" />
+                      添加记录
+                    </button>
+                  </>
+                )}
+              </div>
+            </div>
+            
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-5xl mx-auto">
+              {/* 左侧：基金盈亏记录 */}
+              <div className="w-full">
+                <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  <TrendingUp className="w-4 h-4 text-green-600" />
+                  基金盈亏记录
+                </h4>
+                <div className="overflow-hidden">
+                  <table className="w-full text-sm table-fixed">
+                    <thead>
+                      <tr className="border-b border-green-200">
+                        {showBatchDelete && canEditFundTransactions() && (
+                          <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs w-16">
+                            <input
+                              type="checkbox"
+                              onChange={() => handleSelectAll('profit')}
+                              className="w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                            />
+                          </th>
+                        )}
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-32 whitespace-nowrap">时间</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-20 whitespace-nowrap">类型</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-700 text-xs w-24 whitespace-nowrap">金额</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">备注</th>
+                        {canEditFundTransactions() && (
+                          <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs w-24">操作</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fundTransactions.filter(tx => ['fund_profit', 'fund_loss'].includes(tx.type)).length === 0 ? (
+                        <tr>
+                          <td colSpan={canEditFundTransactions() ? (showBatchDelete ? "6" : "5") : "4"} className="text-center py-6 text-gray-400 text-xs">暂无盈亏记录</td>
+                        </tr>
+                      ) : (
+                        fundTransactions
+                          .filter(tx => ['fund_profit', 'fund_loss'].includes(tx.type))
+                          .map((tx) => (
+                            <tr key={tx.id} className={`border-b border-gray-100 hover:bg-green-50 ${selectedTransactions.has(tx.id) ? 'bg-green-100' : ''}`}>
+                              {showBatchDelete && canEditFundTransactions() && (
+                                <td className="py-2 px-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedTransactions.has(tx.id)}
+                                    onChange={() => handleSelectTransaction(tx.id)}
+                                    className="w-4 h-4 text-green-600 focus:ring-green-500 border-gray-300 rounded"
+                                  />
+                                </td>
+                              )}
+                              <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">
+                                {new Date(tx.created_at || tx.timestamp).toLocaleString('zh-CN', { 
+                                  year: 'numeric', 
+                                  month: '2-digit', 
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </td>
+                              <td className="py-2 px-3 whitespace-nowrap">
+                                <span className={`inline-flex px-2 py-1 text-xs font-medium whitespace-nowrap ${
+                                  tx.type === 'fund_profit' ? 'bg-emerald-100 text-emerald-700' :
+                                  'bg-red-100 text-red-700'
+                                }`}>
+                                  {tx.type === 'fund_profit' ? '收益' : '损失'}
+                                </span>
+                              </td>
+                              <td className={`py-2 px-3 text-right font-medium text-xs ${
+                                (tx.principal || 0) > 0 ? 'text-green-600' : 'text-red-600'
+                              } whitespace-nowrap`}>
+                                {(tx.principal || 0) > 0 ? '+' : ''}{formatMoney(Math.abs(tx.principal || 0))}
+                              </td>
+                              <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">
+                                <div className="max-w-[160px] truncate" title={tx.remark || ''}>{tx.remark || '-'}</div>
+                              </td>
+                              {canEditFundTransactions() && (
+                                <td className="py-2 px-3">
+                                  <div className="flex flex-row items-center justify-center gap-4 whitespace-nowrap">
+                                    <button
+                                      onClick={() => handleEditFundTx(tx)}
+                                      className="inline-flex items-center justify-center whitespace-nowrap bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 text-xs font-medium transition-colors"
+                                    >
+                                      编辑
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteFundTx(tx.id)}
+                                      className="inline-flex items-center justify-center whitespace-nowrap bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 text-xs font-medium transition-colors"
+                                    >
+                                      删除
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* 右侧：银行资金转入转出记录 */}
+              <div className="w-full">
+                <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
+                  <ArrowDownRight className="w-4 h-4 text-blue-600" />
+                  银行资金记录
+                </h4>
+                <div className="overflow-hidden">
+                  <table className="w-full text-sm table-fixed">
+                    <thead>
+                      <tr className="border-b border-blue-200">
+                        {showBatchDelete && canEditFundTransactions() && (
+                          <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs w-16">
+                            <input
+                              type="checkbox"
+                              onChange={() => handleSelectAll('transfer')}
+                              className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                            />
+                          </th>
+                        )}
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-32 whitespace-nowrap">时间</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-20 whitespace-nowrap">类型</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-700 text-xs w-24 whitespace-nowrap">金额</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">备注</th>
+                        {canEditFundTransactions() && (
+                          <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs w-24">操作</th>
+                        )}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {fundTransactions.filter(tx => tx.type === 'bank_fund').length === 0 ? (
+                        <tr>
+                          <td colSpan={canEditFundTransactions() ? (showBatchDelete ? "6" : "5") : "4"} className="text-center py-6 text-gray-400 text-xs">暂无银行资金记录</td>
+                        </tr>
+                      ) : (
+                        fundTransactions
+                          .filter(tx => tx.type === 'bank_fund')
+                          .map((tx) => (
+                            <tr key={tx.id} className={`border-b border-gray-100 hover:bg-blue-50 ${selectedTransactions.has(tx.id) ? 'bg-blue-100' : ''}`}>
+                              {showBatchDelete && canEditFundTransactions() && (
+                                <td className="py-2 px-3 text-center">
+                                  <input
+                                    type="checkbox"
+                                    checked={selectedTransactions.has(tx.id)}
+                                    onChange={() => handleSelectTransaction(tx.id)}
+                                    className="w-4 h-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                                  />
+                                </td>
+                              )}
+                              <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">
+                                {new Date(tx.created_at || tx.timestamp).toLocaleString('zh-CN', { 
+                                  year: 'numeric', 
+                                  month: '2-digit', 
+                                  day: '2-digit',
+                                  hour: '2-digit',
+                                  minute: '2-digit'
+                                })}
+                              </td>
+                              <td className="py-2 px-3 whitespace-nowrap">
+                                <span className={`inline-flex px-2 py-1 text-xs font-medium whitespace-nowrap ${
+                                  tx.principal > 0 ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                }`}>
+                                  {tx.principal > 0 ? '转入' : '转出'}
+                                </span>
+                              </td>
+                              <td className={`py-2 px-3 text-right font-medium text-xs ${
+                                (tx.principal || 0) > 0 ? 'text-green-600' : 'text-blue-600'
+                              } whitespace-nowrap`}>
+                                {(tx.principal || 0) > 0 ? '+' : ''}{formatMoney(Math.abs(tx.principal || 0))}
+                              </td>
+                              <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">
+                                <div className="max-w-[160px] truncate" title={tx.remark || ''}>{tx.remark || '-'}</div>
+                              </td>
+                              {canEditFundTransactions() && (
+                                <td className="py-2 px-3">
+                                  <div className="flex flex-row items-center justify-center gap-2 whitespace-nowrap">
+                                    <button
+                                      onClick={() => handleEditFundTx(tx)}
+                                      className="inline-flex items-center justify-center whitespace-nowrap bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 text-xs font-medium transition-colors"
+                                    >
+                                      编辑
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteFundTx(tx.id)}
+                                      className="inline-flex items-center justify-center whitespace-nowrap bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 text-xs font-medium transition-colors"
+                                    >
+                                      删除
+                                    </button>
+                                  </div>
+                                </td>
+                              )}
+                            </tr>
+                          ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+
+        {/* 转账弹窗 */}
+        {transferModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white shadow-2xl p-8 max-w-md w-full animate-in">
+              <h3 className="text-2xl font-bold text-gray-800 mb-6">
+                {transferType === 'in' ? '银行转基金' : '基金转银行'}
+              </h3>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">转账金额 (m单位)</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="0.01"
+                  value={transferAmount}
+                  onChange={(e) => setTransferAmount(e.target.value)}
+                  className="w-full border-2 border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none"
+                  placeholder="请输入转账金额（如：0.1）"
+                />
+              </div>
+              
+              <div className="mb-6 p-4 bg-green-50">
+                <p className="text-sm text-gray-600">
+                  {transferType === 'in' ? 
+                    `将从银行闲置资金转出，银行可用闲置资金：${formatMoney(calculateIdleCash())}` :
+                    `将从基金账户转出，基金可用余额：${formatMoney(calculateFundBalance())}`
+                  }
+                </p>
+              </div>
+              
+              <div className="flex gap-4">
+                <button
+                  onClick={() => { setTransferModal(false); setTransferAmount(''); setTransferType(''); }}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 font-medium transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleFundTransfer}
+                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-3 font-bold transition-all"
+                >
+                  确认转账
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 添加基金交易记录弹窗 */}
+        {addFundTxModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white shadow-2xl p-8 max-w-md w-full animate-in">
+              <h3 className="text-2xl font-bold text-gray-800 mb-6">添加基金交易记录</h3>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">记录类型</label>
+                <select
+                  value={newFundTxData.type}
+                  onChange={(e) => setNewFundTxData({...newFundTxData, type: e.target.value})}
+                  className="w-full border border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none"
+                >
+                  <option value="fund_profit">基金收益</option>
+                  <option value="fund_loss">基金损失</option>
+                </select>
+              </div>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">金额 (m单位)</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="0.01"
+                  value={newFundTxData.amount}
+                  onChange={(e) => setNewFundTxData({...newFundTxData, amount: e.target.value})}
+                  className="w-full border border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none"
+                  placeholder="请输入金额（如：0.1）"
+                />
+              </div>
+              
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">备注说明</label>
+                <textarea
+                  value={newFundTxData.remark}
+                  onChange={(e) => setNewFundTxData({...newFundTxData, remark: e.target.value})}
+                  className="w-full border border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none resize-none"
+                  rows={3}
+                  placeholder="请输入备注说明（可选）"
+                />
+              </div>
+              
+              <div className="mb-6 p-4 bg-green-50">
+                <p className="text-sm text-gray-600">
+                  {newFundTxData.type === 'fund_profit' ? 
+                    `将增加基金收益 ${formatMoney(parseFloat(newFundTxData.amount) || 0)}` :
+                    `将记录基金损失 ${formatMoney(parseFloat(newFundTxData.amount) || 0)}`
+                  }
+                </p>
+              </div>
+              
+              <div className="flex gap-4">
+                <button
+                  onClick={handleCancelAddFundTx}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 font-medium transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleAddFundTx}
+                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-3 font-bold transition-all"
+                >
+                  确认添加
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 普通用户申购/赎回/提取分红弹窗 */}
+        {fundUserModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white shadow-2xl p-8 max-w-md w-full animate-in">
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-gray-800">
+                  {fundUserAction === 'subscribe' ? '基金申购申请' : fundUserAction === 'redeem' ? '基金赎回申请' : '提取分红申请'}
+                </h3>
+                <button onClick={() => setFundUserModal(false)}>
+                  <X className="w-6 h-6 text-gray-400 hover:text-gray-600" />
+                </button>
+              </div>
+
+              <div className="mb-6">
+                <label className="block text-sm font-medium text-gray-700 mb-2">金额 (m单位)</label>
+                <input
+                  type="number"
+                  required
+                  min="0"
+                  step="0.001"
+                  value={fundUserAmount}
+                  onChange={(e) => setFundUserAmount(e.target.value)}
+                  className="w-full border border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none"
+                  placeholder="请输入金额（如：0.100）"
+                />
+              </div>
+
+              <div className="mb-6 p-4 bg-green-50 border border-green-200">
+                <p className="text-sm text-gray-600">
+                  提交后将进入管理员审批队列。
+                </p>
+              </div>
+
+              <div className="flex gap-4">
+                <button
+                  onClick={() => setFundUserModal(false)}
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 font-medium transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={submitFundUserRequest}
+                  className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-3 font-bold transition-all"
+                >
+                  提交申请
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* 管理利息记录弹窗 */}
+        {interestManageModal && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
+            <div className="bg-white shadow-2xl p-8 max-w-md w-full animate-in">
+              <h3 className="text-2xl font-bold text-gray-800 mb-6">管理利息记录</h3>
+              <div className="flex flex-wrap gap-4">
+                <button
+                  onClick={() => setInterestManageModal(false)}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 font-medium transition-colors"
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleInterestManage}
+                  className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-3 font-bold transition-all"
+                >
+                  确认
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+ }
+
+ // 计算按用户分组的净余额数据（用于显示在表格中）
+ // 对于 injection/deposit，显示 (total - withdraw/取款)，仅计入已批准的交易
+ // 对于 withdraw_inj/withdraw_dep，仍显示原始数据
+ const getNetBalanceData = (txList, types, withdrawType = null) => {
+   const approved = txList.filter(tx => types.includes(tx.type) && tx.status === 'approved');
+ 
+   if (!withdrawType) {
+     // 直接返回原始数据（用于撤资/取款）
+     return approved;
+   }
+ 
+   // 按创建人分组计算净余额
+   const userBalances = {};
+   approved.forEach(tx => {
+     const user = tx.created_by || 'unknown';
+     if (!userBalances[user]) {
+       userBalances[user] = { ...tx, principal: 0, userBalanceTotal: 0 };
+     }
+     userBalances[user].principal += parseFloat(tx.principal) || 0;
+     userBalances[user].userBalanceTotal = userBalances[user].principal;
+   });
+ 
+   // 从撤资/取款中扣除（仅计入已批准的撤资/取款）
+   const withdrawn = txList.filter(tx => tx.type === withdrawType && tx.status === 'approved');
+   withdrawn.forEach(w => {
+     const user = w.created_by || 'unknown';
+     if (userBalances[user]) {
+       userBalances[user].userBalanceTotal -= parseFloat(w.principal) || 0;
+     }
+   });
+ 
+   // 将净余额更新到 principal 中供显示
+   return Object.values(userBalances)
+     .map(item => ({
+       ...item,
+       principal: item.userBalanceTotal,
+       isNetBalance: true // 标记为净余额数据
+     }))
+     .filter(item => item.principal > 0); // 只显示余额 > 0 的用户
+ };
 
   return (
     <div className="min-h-screen bg-[#FFFEF9] text-gray-800 p-4 md:p-8 font-sans">
@@ -2244,55 +3822,59 @@ const App = () => {
           </div>
         </div>
 
-        {/* 公告栏 */}
-        <div className="bg-green-50 shadow-sm p-4 border border-green-200">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3 flex-1">
-              <div className="bg-green-100 p-2 border border-green-200">
-                <Activity className="w-6 h-6 text-green-700" />
-              </div>
-              {isEditingAnnouncement ? (
-                <input 
-                  type="text" 
-                  value={announcementInput} 
-                  onChange={(e) => setAnnouncementInput(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && handleUpdateAnnouncement()}
-                  className="flex-1 px-4 py-2 rounded-lg border-2 border-green-200 bg-white text-gray-800 font-medium focus:outline-none focus:ring-2 focus:ring-green-400"
-                  placeholder={t('announcementPlaceholder')}
-                  autoFocus
-                />
-              ) : (
-                <p className="text-green-900 text-lg font-bold flex-1">{announcement.content || t('noAnnouncement')}</p>
-              )}
+        <div className="bg-white border border-green-200 shadow-sm p-4">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2 text-gray-700">
+              <MessageSquare className="w-5 h-5 text-green-600" />
+              <span className="font-semibold text-base">管理员公告</span>
             </div>
-            {isAdmin && (
-              <div className="flex gap-2 ml-4">
-                {isEditingAnnouncement ? (
-                  <>
-                    <button 
-                      onClick={handleUpdateAnnouncement}
-                      className="bg-green-600 text-white px-4 py-2 rounded-lg font-bold hover:bg-green-700 transition-colors flex items-center gap-2"
-                    >
-                      <CheckCircle className="w-4 h-4" /> {t('save')}
-                    </button>
-                    <button 
-                      onClick={() => { setIsEditingAnnouncement(false); setAnnouncementInput(''); }}
-                      className="bg-white text-green-700 px-4 py-2 rounded-lg font-bold border border-green-200 hover:bg-green-50 transition-colors flex items-center gap-2"
-                    >
-                      <XCircle className="w-4 h-4" /> {t('cancel')}
-                    </button>
-                  </>
-                ) : (
-                  <button 
-                    onClick={() => { setIsEditingAnnouncement(true); setAnnouncementInput(announcement.content || ''); }}
-                    className="bg-white text-green-700 px-4 py-2 rounded-lg font-bold border border-green-200 hover:bg-green-50 transition-colors flex items-center gap-2"
-                  >
-                    <Edit className="w-4 h-4" /> {t('editAnnouncement')}
-                  </button>
-                )}
-              </div>
+            {currentUser?.role === 'admin' && (
+              <button
+                onClick={() => {
+                  setIsEditingBankAnnouncement(true);
+                  setBankAnnouncementInput(bankAnnouncement.content);
+                }}
+                className="text-green-600 hover:text-green-700 text-sm font-medium transition-colors"
+              >
+                编辑
+              </button>
             )}
           </div>
+
+          {isEditingBankAnnouncement && currentUser?.role === 'admin' ? (
+            <div className="space-y-3">
+              <textarea
+                value={bankAnnouncementInput}
+                onChange={(e) => setBankAnnouncementInput(e.target.value)}
+                className="w-full border border-green-200 px-3 py-2 text-sm focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none resize-none"
+                rows={4}
+                placeholder={t('announcementPlaceholder')}
+              />
+              <div className="flex gap-2">
+                <button
+                  onClick={handleUpdateBankAnnouncement}
+                  className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium transition-colors"
+                >
+                  {t('save')}
+                </button>
+                <button
+                  onClick={() => {
+                    setIsEditingBankAnnouncement(false);
+                    setBankAnnouncementInput('');
+                  }}
+                  className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 text-sm font-medium transition-colors"
+                >
+                  {t('cancel')}
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-green-50 border border-green-200 p-4 min-h-[90px]">
+              <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                {bankAnnouncement.content || t('noAnnouncement')}
+              </p>
+            </div>
+          )}
         </div>
 
         {/* 管理员审批 */}
@@ -2356,6 +3938,10 @@ const App = () => {
               <Wallet className="w-4 h-4" />
               {t('bankAssets')}
             </button>
+            <button onClick={() => setCurrentPage('fund')} className="bg-gradient-to-r from-green-100 to-emerald-100 hover:from-green-200 hover:to-emerald-200 text-green-700 px-8 py-2 font-bold transition-all duration-300 flex items-center gap-2 border border-green-300 shadow-sm hover:shadow-md transform hover:scale-105 active:scale-95">
+              <TrendingUp className="w-4 h-4" />
+              银行基金
+            </button>
             {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
             {isAdmin && <button
               onClick={() => setInterestManageModal(true)}
@@ -2406,6 +3992,11 @@ const App = () => {
                    <Wallet className="w-4 h-4 text-green-600" />
                    <span className="text-xs text-gray-600">存款</span>
                    <span className="text-sm font-semibold text-gray-900">{formatMoney(stats.depositBalance)}</span>
+                 </div>
+                 <div className="px-3 py-2 rounded border border-blue-200 bg-blue-50 flex items-center gap-2">
+                   <TrendingUp className="w-4 h-4 text-blue-600" />
+                   <span className="text-xs text-gray-600">基金</span>
+                   <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundBalance())}</span>
                  </div>
                </div>
                <p className="mt-3 text-xs text-gray-500">{t('injectionAndDeposit')}</p>
