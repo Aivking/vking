@@ -64,45 +64,6 @@ npm run dev
 npm run build
 ```
 
-## 🚀 Vercel 部署
-
-### 方式一：连接 GitHub（推荐）
-
-1. 推送项目到 GitHub
-   ```bash
-   git init
-   git add .
-   git commit -m "Initial commit"
-   git branch -M main
-   git remote add origin https://github.com/your-username/EUU-Bank-Vercel.git
-   git push -u origin main
-   ```
-
-2. 访问 [Vercel Dashboard](https://vercel.com/dashboard)
-3. 点击 "Add New" → "Project"
-4. 导入 GitHub 仓库
-5. 在 "Environment Variables" 中添加以下变量：
-   - `VITE_FIREBASE_API_KEY`
-   - `VITE_FIREBASE_AUTH_DOMAIN`
-   - `VITE_FIREBASE_PROJECT_ID`
-   - `VITE_FIREBASE_STORAGE_BUCKET`
-   - `VITE_FIREBASE_MESSAGING_SENDER_ID`
-   - `VITE_FIREBASE_APP_ID`
-
-6. 点击 "Deploy"
-
-### 方式二：Vercel CLI
-
-```bash
-# 全局安装 Vercel CLI
-npm install -g vercel
-
-# 部署
-vercel
-
-# 添加环境变量后重新部署
-vercel --prod
-```
 
 
 ## 📚 功能说明
@@ -130,22 +91,7 @@ vercel --prod
 - **审批队列**：等待审批的交易数量
 - **净现金流**：利息收入减去利息支出
 
-## 🔒 数据安全
 
-- Firebase Firestore 数据库，企业级加密
-- 用户密码存储在 Firestore（建议后续迁移到 Firebase Auth）
-- Session 存储认证信息
-- 所有敏感操作都有删除确认
-
-## 🎯 未来优化方向
-
-- [ ] 迁移用户认证到 Firebase Authentication
-- [ ] 添加数据导出功能 (CSV/Excel)
-- [ ] 支持多币种
-- [ ] 添加交易历史版本控制
-- [ ] 数据备份与恢复功能
-
-## 📝 许可证
 
 MIT
 
