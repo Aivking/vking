@@ -1101,10 +1101,10 @@ const App = () => {
   // --- 论坛功能 ---
   // 获取帖子列表
   useEffect(() => {
-    if (currentUser) {
-      fetchFundTransactions();
+    if (currentPage === 'forum' && currentUser) {
+      fetchPosts();
     }
-  }, [currentUser]);
+  }, [currentPage, currentUser]);
 
   const fetchPosts = async () => {
     try {
@@ -3802,6 +3802,7 @@ const App = () => {
           <div>
             <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
               <span className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-emerald-500 to-blue-600 bg-clip-text text-transparent animate-gradient">{t('loginTitle')}</span> {t('loginSubtitle')}
+              <span className="bg-white border border-green-200 text-green-700 text-xs px-2 py-1 font-bold whitespace-nowrap">隶属 琉璃主权资本</span>
               {isAdmin && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">ADMIN</span>}
             </h1>
             <p className="text-slate-500 mt-1 text-sm">{t('currentUser')}: <span className="font-bold">{currentUser.username}</span></p>
