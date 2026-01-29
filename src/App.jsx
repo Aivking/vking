@@ -64,20 +64,25 @@ let deployMode = 'standalone';
 
 // 事务类型中文映射
 const typeLabels = {
-  'loan': '贷款',
   'injection': '注资',
   'withdraw_inj': '撤资',
   'deposit': '存款',
   'withdraw_dep': '取款',
-  'interest_income': '利息收入',
-  'interest_expense': '利息支出',
-  'planet_fund': '星星开发资金',
+  'deposit_interest': '存款利息',
+  'loan': '贷款',
+  'loan_interest': '贷款利息',
+  'loan_repayment': '还款',
+  'planet_fund': '星星基金',
   'planet_card': '星星名片',
   'bank_asset': '银行资产',
+  'bond_issue': '债券发售',
+  'bond_subscribe': '债券申购',
+  'bond_redeem': '债券赎回',
   'fund_subscribe': '基金申购',
   'fund_redeem': '基金赎回',
   'fund_dividend': '基金分红',
-  'fund_dividend_withdraw': '提取分红'
+  'fund_dividend_withdraw': '基金分红提取',
+  'fund_profit_withdraw': '基金盈利提取'
 };
 
 const getTypeLabel = (type) => typeLabels[type] || type;
@@ -175,8 +180,8 @@ const translations = {
     withdrawDep: '取款',
     manualSettle: '手动结算',
     // 统计卡片
-    totalAssets: '总资产 (贷款)',
-    totalLiabilities: '总负债 (注资+存款)',
+    totalAssets: '总资产',
+    totalLiabilities: '总放贷',
     idleFunds: '闲置资金',
     interestPool: '利息池',
     approvalQueue: '审批队列',
@@ -207,8 +212,10 @@ const translations = {
     repay: '还款',
     productType: '产品类型',
     normalDeposit: '普通存款 (2.5%/周)',
-    riskDeposit: '风险理财 (9%/周)',
-    riskNote: '风险理财只保本不保利息',
+    riskDeposit: '成员理财 (9%/周)',
+    riskDeposit5: '普通理财 (5%/周)',
+    riskNote: '⚠️ 仅琉璃主权资本成员可申请 9%/周理财；管理员会鉴别并通过/拒绝。风险理财只保本不保利息。',
+    riskNote5: '普通客户理财利率为 5%/周。风险理财只保本不保利息。',
     interestLoan: '利息贷款',
     stableLoan: '稳定贷款',
     // 模态框
@@ -279,8 +286,8 @@ const translations = {
     withdrawDep: 'Withdraw Dep.',
     manualSettle: 'Manual Settle',
     // Statistics
-    totalAssets: 'Total Assets (Loans)',
-    totalLiabilities: 'Total Liabilities (Inj+Dep)',
+    totalAssets: 'Total Assets',
+    totalLiabilities: 'Total Loans',
     idleFunds: 'Idle Funds',
     interestPool: 'Interest Pool',
     approvalQueue: 'Approval Queue',
@@ -308,6 +315,13 @@ const translations = {
     rejected: 'Rejected',
     effective: 'Effective',
     noData: 'No Data',
+    repay: 'Repay',
+    productType: 'Product Type',
+    normalDeposit: 'Normal Deposit (2.5%/week)',
+    riskDeposit: 'Member Wealth (9%/week)',
+    riskDeposit5: 'Standard Wealth (5%/week)',
+    riskNote: '⚠️ Only Liuli Sovereign Capital members can apply for 9%/week. Admin will approve/reject. Principal guaranteed only, interest not guaranteed.',
+    riskNote5: 'Standard wealth rate is 5%/week. Principal guaranteed only, interest not guaranteed.',
     // Modal
     create: 'Create',
     edit: 'Edit',
@@ -325,7 +339,10 @@ const translations = {
       'interest_income': 'Interest Income',
       'interest_expense': 'Interest Expense',
       'planet_fund': 'Star Fund',
-      'planet_card': 'Star Card'
+      'planet_card': 'Star Card',
+      'bond_issue': 'Bond Issue',
+      'bond_subscribe': 'Bond Subscribe',
+      'bond_redeem': 'Bond Redeem'
     }
   }
 };
@@ -365,7 +382,7 @@ const App = () => {
   const [fundAnnouncementInput, setFundAnnouncementInput] = useState('');
   
   // 论坛 State
-  const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum', 'planet', 'assets', 'fund'
+  const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum', 'planet', 'assets', 'fund', 'bonds'
   const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
   const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
   const [posts, setPosts] = useState([]);
@@ -400,6 +417,30 @@ const App = () => {
   const [fundUserModal, setFundUserModal] = useState(false);
   const [fundUserAction, setFundUserAction] = useState(''); // subscribe | redeem | dividend_withdraw
   const [fundUserAmount, setFundUserAmount] = useState('');
+
+  // 债券 State（本地产品 + 申购走审批队列）
+  const [bondProducts, setBondProducts] = useState([]); // localStorage
+  const [bondIssueModal, setBondIssueModal] = useState(false);
+  const [bondIssueData, setBondIssueData] = useState({
+    name: '',
+    category: 'short', // short | long
+    term_days: '30',
+    rate_per_week: '2.0',
+    total_supply: '1000'
+  });
+  const [bondSubscribeModal, setBondSubscribeModal] = useState(false);
+  const [bondSubscribeTarget, setBondSubscribeTarget] = useState(null);
+  const [bondSubscribeAmount, setBondSubscribeAmount] = useState('');
+
+  const [bondEditModal, setBondEditModal] = useState(false);
+  const [bondEditTarget, setBondEditTarget] = useState(null);
+  const [bondEditData, setBondEditData] = useState({
+    name: '',
+    category: 'short',
+    term_days: '30',
+    rate_per_week: '2.0',
+    total_supply: '1000'
+  });
   
   // 基金交易记录编辑 State
   const [editingFundTx, setEditingFundTx] = useState(null);
@@ -426,10 +467,324 @@ const App = () => {
     }
   };
 
+  const openBondEditModal = (bond) => {
+    if (currentUser?.role !== 'admin') return;
+    setBondEditTarget(bond);
+    setBondEditData({
+      name: bond?.name || '',
+      category: bond?.category || 'short',
+      term_days: String(bond?.term_days ?? '30'),
+      rate_per_week: String(bond?.rate_per_week ?? '2.0'),
+      total_supply: String(bond?.total_supply ?? '1000')
+    });
+    setBondEditModal(true);
+  };
+
+  const handleUpdateBondProduct = async (e) => {
+    e.preventDefault();
+    if (currentUser?.role !== 'admin') {
+      alert('权限不足：只有管理员可以编辑债券');
+      return;
+    }
+    if (!bondEditTarget?.tx_id) {
+      alert('未找到债券记录');
+      return;
+    }
+
+    const termDays = parseInt(bondEditData.term_days, 10);
+    const ratePerWeek = parseFloat(bondEditData.rate_per_week);
+    const totalSupply = parseFloat(bondEditData.total_supply);
+
+    if (!bondEditData.name.trim()) return alert('请输入债券名称');
+    if (!Number.isFinite(termDays) || termDays <= 0) return alert('请输入有效期限');
+    if (!Number.isFinite(ratePerWeek) || ratePerWeek < 0) return alert('请输入有效利率');
+    if (!Number.isFinite(totalSupply) || totalSupply <= 0) return alert('请输入有效发行额度');
+
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          client: bondEditData.name.trim(),
+          principal: totalSupply,
+          rate: ratePerWeek,
+          product_type: bondEditData.category === 'long' ? 'bond_long' : 'bond_short',
+          remark: `期限:${termDays}天`,
+          last_edited_by: currentUser.username,
+          last_edited_at: new Date().toLocaleString('zh-CN', { hour12: false })
+        })
+        .eq('id', bondEditTarget.tx_id);
+      if (error) throw error;
+
+      await refreshTransactions();
+      setBondEditModal(false);
+      setBondEditTarget(null);
+    } catch (e2) {
+      alert('更新失败: ' + (e2?.message || e2));
+    }
+  };
+
+  const handleDeleteBondProduct = async (bond) => {
+    if (currentUser?.role !== 'admin') {
+      alert('权限不足：只有管理员可以删除债券');
+      return;
+    }
+    if (!bond?.tx_id) {
+      alert('未找到债券记录');
+      return;
+    }
+    if (!window.confirm('确认删除此债券发售？将同时删除所有相关持仓/申购记录。')) return;
+
+    try {
+      // 取消持仓（保留账单历史）：将相关 bond_subscribe 标记为 rejected，使其不再计入持仓/占用
+      const { error: cancelSubErr1 } = await supabase
+        .from('transactions')
+        .update({
+          status: 'rejected',
+          approved_by: currentUser.username,
+          approved_at: new Date().toLocaleString('zh-CN', { hour12: false }),
+          rejected_at: new Date().toISOString()
+        })
+        .eq('type', 'bond_subscribe')
+        .ilike('remark', `%issue_id:${bond.tx_id}%`);
+      if (cancelSubErr1) throw cancelSubErr1;
+
+      // 兼容旧数据：早期申购没有 issue_id，只能用名称匹配取消
+      const { error: cancelSubErr2 } = await supabase
+        .from('transactions')
+        .update({
+          status: 'rejected',
+          approved_by: currentUser.username,
+          approved_at: new Date().toLocaleString('zh-CN', { hour12: false }),
+          rejected_at: new Date().toISOString()
+        })
+        .eq('type', 'bond_subscribe')
+        .eq('client', bond.name);
+      if (cancelSubErr2) throw cancelSubErr2;
+
+      const { error: delIssueErr } = await supabase
+        .from('transactions')
+        .delete()
+        .eq('id', bond.tx_id);
+      if (delIssueErr) throw delIssueErr;
+
+      await refreshTransactions();
+    } catch (e2) {
+      alert('删除失败: ' + (e2?.message || e2));
+    }
+  };
+
+  const handleEndBondIssue = async (bond) => {
+    if (currentUser?.role !== 'admin') {
+      alert('权限不足：只有管理员可以结束发行');
+      return;
+    }
+    if (!bond?.tx_id) {
+      alert('未找到债券记录');
+      return;
+    }
+    if (!window.confirm('确认结束该债券发行？结束后将无法继续申购，但已申购持仓会保留。')) return;
+
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          status: 'rejected',
+          approved_by: currentUser.username,
+          approved_at: new Date().toLocaleString('zh-CN', { hour12: false }),
+          rejected_at: new Date().toISOString()
+        })
+        .eq('id', bond.tx_id);
+      if (error) throw error;
+      await refreshTransactions();
+    } catch (e2) {
+      alert('结束发行失败: ' + (e2?.message || e2));
+    }
+  };
+
+  const handleRedeemAllBond = async (bond) => {
+    if (currentUser?.role !== 'admin') {
+      alert('权限不足：只有管理员可以全额赎回');
+      return;
+    }
+    if (!bond?.tx_id) {
+      alert('未找到债券记录');
+      return;
+    }
+    if (!window.confirm('确认全额赎回该债券？将结束发行并取消所有人的持仓（删除所有相关申购记录）。')) return;
+
+    try {
+      // 先结束发行（下架），保留发行记录作为历史
+      const { error: endErr } = await supabase
+        .from('transactions')
+        .update({
+          status: 'rejected',
+          approved_by: currentUser.username,
+          approved_at: new Date().toLocaleString('zh-CN', { hour12: false }),
+          rejected_at: new Date().toISOString()
+        })
+        .eq('id', bond.tx_id);
+      if (endErr) throw endErr;
+
+      // 统计当前债券所有人的已审批持仓总额，用于生成赎回账单
+      const approvedAll = (transactions || []).filter(tx => tx.status === 'approved');
+      const totalApproved = approvedAll
+        .filter(tx => tx.type === 'bond_subscribe')
+        .filter(tx => {
+          const issueId = parseBondIssueIdFromRemark(tx.remark);
+          return issueId ? (String(issueId) === String(bond.tx_id)) : (tx.client === bond.name);
+        })
+        .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+      // 写入一条全员可见的赎回账单记录
+      await handleCRUD('create', {
+        type: 'bond_redeem',
+        client: bond.name,
+        principal: totalApproved,
+        rate: 0,
+        product_type: bond.category === 'long' ? 'bond_long' : 'bond_short',
+        remark: `issue_id:${bond.tx_id} 全额赎回` 
+      });
+
+      // 再取消所有持仓/申购（包含 pending/approved），释放占用（保留账单历史）
+      const cancelData = {
+        status: 'rejected',
+        approved_by: currentUser.username,
+        approved_at: new Date().toLocaleString('zh-CN', { hour12: false }),
+        rejected_at: new Date().toISOString()
+      };
+
+      const { error: cancelSubErr1 } = await supabase
+        .from('transactions')
+        .update(cancelData)
+        .eq('type', 'bond_subscribe')
+        .ilike('remark', `%issue_id:${bond.tx_id}%`);
+      if (cancelSubErr1) throw cancelSubErr1;
+
+      // 兼容旧数据：早期申购没有 issue_id，只能用名称匹配取消
+      const { error: cancelSubErr2 } = await supabase
+        .from('transactions')
+        .update(cancelData)
+        .eq('type', 'bond_subscribe')
+        .eq('client', bond.name);
+      if (cancelSubErr2) throw cancelSubErr2;
+
+      await refreshTransactions();
+    } catch (e2) {
+      alert('全额赎回失败: ' + (e2?.message || e2));
+    }
+  };
+
   const openFundUserModal = (action) => {
     setFundUserAction(action);
     setFundUserAmount('');
     setFundUserModal(true);
+  };
+
+  // 债券产品（公共：来自 transactions 的 bond_issue 记录）
+  useEffect(() => {
+    try {
+      const approvedIssues = (transactions || [])
+        .filter(tx => tx.status === 'approved' && tx.type === 'bond_issue')
+        .map(tx => {
+          const termDays = (() => {
+            if (!tx.remark) return 0;
+            const m = String(tx.remark).match(/期限[:：]\s*(\d+)\s*天/);
+            return m ? (parseInt(m[1], 10) || 0) : 0;
+          })();
+
+          return {
+            tx_id: tx.id,
+            id: `bond_issue_${tx.id}`,
+            name: tx.client || '未命名债券',
+            category: tx.product_type === 'bond_long' ? 'long' : 'short',
+            term_days: termDays,
+            rate_per_week: parseFloat(tx.rate) || 0,
+            total_supply: parseFloat(tx.principal) || 0,
+            created_at: tx.created_at || '',
+            created_by: tx.created_by || ''
+          };
+        });
+
+      setBondProducts(approvedIssues);
+    } catch (e) {
+      console.error('解析债券产品失败:', e);
+    }
+  }, [transactions]);
+
+  const openBondSubscribeModal = (bond) => {
+    setBondSubscribeTarget(bond);
+    setBondSubscribeAmount('');
+    setBondSubscribeModal(true);
+  };
+
+  const parseBondIssueIdFromRemark = (remark) => {
+    if (!remark) return null;
+    const m = String(remark).match(/issue_id\s*[:：]\s*(\d+)/);
+    return m ? m[1] : null;
+  };
+
+  const handleCreateBondProduct = async (e) => {
+    e.preventDefault();
+    if (currentUser?.role !== 'admin') {
+      alert('权限不足：只有管理员可以发售债券');
+      return;
+    }
+
+    const termDays = parseInt(bondIssueData.term_days, 10);
+    const ratePerWeek = parseFloat(bondIssueData.rate_per_week);
+    const totalSupply = parseFloat(bondIssueData.total_supply);
+
+    if (!bondIssueData.name.trim()) return alert('请输入债券名称');
+    if (!Number.isFinite(termDays) || termDays <= 0) return alert('请输入有效期限');
+    if (!Number.isFinite(ratePerWeek) || ratePerWeek < 0) return alert('请输入有效利率');
+    if (!Number.isFinite(totalSupply) || totalSupply <= 0) return alert('请输入有效发行额度');
+
+    await handleCRUD('create', {
+      type: 'bond_issue',
+      client: bondIssueData.name.trim(),
+      principal: totalSupply,
+      rate: ratePerWeek,
+      product_type: bondIssueData.category === 'long' ? 'bond_long' : 'bond_short',
+      remark: `期限:${termDays}天`
+    });
+
+    await refreshTransactions();
+    setBondIssueModal(false);
+    setBondIssueData({ name: '', category: 'short', term_days: '30', rate_per_week: '2.0', total_supply: '1000' });
+  };
+
+  const submitBondSubscribe = async () => {
+    if (!bondSubscribeTarget) return;
+    const amount = parseFloat(bondSubscribeAmount) || 0;
+    if (amount <= 0) {
+      alert('请输入有效金额');
+      return;
+    }
+
+    // 防止对已结束/已删除的债券继续申购
+    const stillActive = (transactions || []).some(
+      tx => tx.status === 'approved' && tx.type === 'bond_issue' && String(tx.id) === String(bondSubscribeTarget.tx_id)
+    );
+    if (!stillActive) {
+      alert('该债券已结束发行或已删除，无法继续申购');
+      setBondSubscribeModal(false);
+      setBondSubscribeTarget(null);
+      setBondSubscribeAmount('');
+      return;
+    }
+
+    await handleCRUD('create', {
+      type: 'bond_subscribe',
+      client: bondSubscribeTarget.name,
+      principal: amount,
+      rate: parseFloat(bondSubscribeTarget.rate_per_week) || 0,
+      product_type: bondSubscribeTarget.category === 'long' ? 'bond_long' : 'bond_short',
+      remark: `issue_id:${bondSubscribeTarget.tx_id} 期限:${bondSubscribeTarget.term_days}天`
+    });
+
+    setBondSubscribeModal(false);
+    setBondSubscribeTarget(null);
+    setBondSubscribeAmount('');
   };
 
   const submitFundUserRequest = async () => {
@@ -1596,6 +1951,15 @@ const App = () => {
   const handleCRUD = async (action, payload = null) => {
     try {
       if (action === 'create') {
+        if (payload.type === 'deposit') {
+          if (payload.product_type === 'risk') {
+            payload = { ...payload, rate: 9 };
+          } else if (payload.product_type === 'risk5') {
+            payload = { ...payload, rate: 5 };
+          } else if (payload.product_type === 'normal') {
+            payload = { ...payload, rate: 2.5 };
+          }
+        }
         // 验证撤资和取款的额度限制
         if (payload.type === 'withdraw_inj') {
           const injections = transactions.filter(tx => tx.status === 'approved' && ['injection'].includes(tx.type))
@@ -1621,7 +1985,10 @@ const App = () => {
             .reduce((sum, tx) => sum + ((parseFloat(tx.principal) || 0) * (parseFloat(tx.rate) || 0) / 100), 0);
           const withdrawnDep = transactions.filter(tx => tx.status === 'approved' && tx.type === 'withdraw_dep')
             .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-          const availableDep = deposits + depInterest - withdrawnDep;
+          const bondUsed = transactions
+            .filter(tx => tx.status === 'approved' && tx.type === 'bond_subscribe' && tx.created_by === currentUser.username)
+            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+          const availableDep = deposits + depInterest - withdrawnDep - bondUsed;
           
           if (deposits === 0) {
             return alert(language === 'zh' ? '没有存款记录，无法取款！' : 'No deposit records, cannot withdraw!');
@@ -1859,6 +2226,26 @@ const App = () => {
       }, { p: 0, total: 0 });
   };
 
+  const calculateFundBalanceForStats = () => {
+    const source = fundTransactions.length
+      ? fundTransactions
+      : (transactions || []).filter(tx => ['bank_fund', 'fund_subscribe', 'fund_redeem'].includes(tx.type));
+    if (!source.length) return 0;
+    const approved = source.filter(tx => tx.status ? tx.status === 'approved' : true);
+
+    const bankNet = approved
+      .filter(tx => tx.type === 'bank_fund')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const subscribed = approved
+      .filter(tx => tx.type === 'fund_subscribe')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const redeemedPrincipal = approved
+      .filter(tx => tx.type === 'fund_redeem')
+      .reduce((sum, tx) => sum + (parseFloat(tx.rate) || 0), 0);
+
+    return bankNet + subscribed - redeemedPrincipal;
+  };
+
   // --- 统计 ---
   const stats = useMemo(() => {
     const approved = transactions.filter(tx => tx.status === 'approved');
@@ -1876,7 +2263,7 @@ const App = () => {
     const wInj = calc(['withdraw_inj']);
     const wDep = calc(['withdraw_dep']);
 
-    const totalLiabilities = (injections.p - wInj.p) + (deposits.p - wDep.p);
+    const fundingBase = (injections.p - wInj.p) + (deposits.p - wDep.p);
     const totalRevenue = loans.i;
     const totalExpense = (injections.i - wInj.i) + (deposits.i - wDep.i);
 
@@ -1890,7 +2277,10 @@ const App = () => {
     
     // 计算个人账户余额（本金 + 已结算的利息）
     const injectionBalance = personalInjections.total - personalWInj.total;
-    const depositBalance = personalDeposits.total - personalWDep.total;
+    const bondUsed = approved
+      .filter(tx => tx.type === 'bond_subscribe' && tx.created_by === currentUser?.username)
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const depositBalance = personalDeposits.total - personalWDep.total - bondUsed;
     
     // 计算个人总余额（注资+存款+已结算利息）
     const personalTotalBalance = injectionBalance + depositBalance;
@@ -1905,19 +2295,24 @@ const App = () => {
       .filter(tx => tx.type === 'bank_fund')
       .reduce((acc, cur) => acc + (parseFloat(cur.principal) || 0), 0);
 
+    const fundBalance = calculateFundBalanceForStats();
+    const totalAssets = fundingBase + bankAssetsValue + fundBalance;
+
     return {
       loanPrincipal: loans.p,
-      liabilities: totalLiabilities,
+      totalAssets: totalAssets,
+      totalLoans: loans.p,
       netCashFlow: totalRevenue - totalExpense,
       // 主页的银行闲置资金计算：仅受 bank_fund 转账影响（申购/赎回/分红提取不影响银行闲置资金）
-      idleCash: totalLiabilities - loans.p - bankFundNetTransfer,
+      idleCash: fundingBase - loans.p - bankFundNetTransfer,
       interestPool: interestPool,
       injectionBalance: injectionBalance,
       depositBalance: depositBalance,
       personalTotalBalance: personalTotalBalance,
-      bankAssetsValue: bankAssetsValue
+      bankAssetsValue: bankAssetsValue,
+      fundBalance: fundBalance
     };
-  }, [transactions, currentUser]);
+  }, [transactions, currentUser, fundTransactions]);
 
   // 计算银行账户余额
   const calculateBalance = () => {
@@ -1929,7 +2324,10 @@ const App = () => {
     const personalWDep = calcPersonalWithSettled(['withdraw_dep']);
     
     const injectionBalance = personalInjections.total - personalWInj.total;
-    const depositBalance = personalDeposits.total - personalWDep.total;
+    const bondUsed = transactions
+      .filter(tx => tx.status === 'approved' && tx.type === 'bond_subscribe' && tx.created_by === currentUser.username)
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const depositBalance = personalDeposits.total - personalWDep.total - bondUsed;
     
     return injectionBalance + depositBalance;
   };
@@ -2451,6 +2849,313 @@ const App = () => {
                     {t('publish')}
                   </button>
                 </form>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // 银行债券页面
+  if (currentPage === 'bonds') {
+    const approvedAll = (transactions || []).filter(tx => tx.status === 'approved');
+    const myBond = approvedAll
+      .filter(tx => tx.type === 'bond_subscribe' && tx.created_by === currentUser?.username)
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+    const bondBills = (transactions || [])
+      .filter(tx => ['bond_subscribe', 'bond_redeem'].includes(tx.type))
+      .slice()
+      .sort((a, b) => {
+        const ta = new Date(a.timestamp || a.created_at || 0).getTime();
+        const tb = new Date(b.timestamp || b.created_at || 0).getTime();
+        return tb - ta;
+      });
+
+    const soldByIssueId = approvedAll
+      .filter(tx => tx.type === 'bond_subscribe')
+      .reduce((acc, tx) => {
+        const issueId = parseBondIssueIdFromRemark(tx.remark);
+        if (!issueId) return acc;
+        acc[issueId] = (acc[issueId] || 0) + (parseFloat(tx.principal) || 0);
+        return acc;
+      }, {});
+
+    const soldByName = approvedAll
+      .filter(tx => tx.type === 'bond_subscribe')
+      .reduce((acc, tx) => {
+        const key = tx.client || '未知债券';
+        acc[key] = (acc[key] || 0) + (parseFloat(tx.principal) || 0);
+        return acc;
+      }, {});
+
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-amber-50/30 to-yellow-50/30">
+        <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6">
+          <div className="flex justify-between items-center pb-6 border-b border-amber-200">
+            <div>
+              <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
+                <TrendingUp className="w-7 h-7 text-amber-600" />
+                银行债券
+              </h1>
+              <p className="text-slate-500 mt-1 text-sm">管理员发售债券，成员申购（申购需审批）</p>
+            </div>
+            <div className="flex gap-3">
+              <button onClick={() => setCurrentPage('bank')} className="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-medium transition-colors border border-amber-200">
+                返回银行
+              </button>
+              {isAdmin && (
+                <button onClick={() => setBondIssueModal(true)} className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white px-4 py-2 font-bold transition-all shadow">
+                  发售债券
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="bg-white border border-amber-200 shadow-sm p-4">
+            <div className="flex items-center justify-between">
+              <div className="text-sm text-gray-600">我的债券持仓（已审批）</div>
+              <div className="text-base font-semibold text-gray-900">{formatMoney(myBond)}</div>
+            </div>
+            <div className="text-xs text-gray-400 mt-2">申购会占用你的存款可用额度</div>
+          </div>
+
+          <div className="bg-white border border-amber-200 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="font-semibold text-gray-800">在售债券</div>
+              <div className="text-xs text-gray-500">共 {bondProducts.length} 个产品</div>
+            </div>
+            {bondProducts.length === 0 ? (
+              <div className="text-center text-gray-400 py-10">暂无在售债券</div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {bondProducts.map(p => {
+                  const sold = (soldByIssueId[String(p.tx_id)] || 0) + (soldByName[p.name] || 0);
+                  const remaining = Math.max(0, (parseFloat(p.total_supply) || 0) - sold);
+                  return (
+                    <div key={p.id} className="border border-amber-200 p-4 bg-amber-50/30">
+                      <div className="flex items-center justify-between">
+                        <div className="font-bold text-gray-800">{p.name}</div>
+                        <div className={`text-xs px-2 py-1 border ${p.category === 'long' ? 'border-purple-200 bg-purple-50 text-purple-700' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
+                          {p.category === 'long' ? '长期' : '短期'}
+                        </div>
+                      </div>
+                      <div className="mt-2 text-sm text-gray-600">期限：{p.term_days} 天</div>
+                      <div className="mt-1 text-sm text-gray-600">利率：{parseFloat(p.rate_per_week || 0).toFixed(3)}% / 周</div>
+                      <div className="mt-1 text-xs text-gray-500">发行：{formatMoney(p.total_supply)}，已售：{formatMoney(sold)}，剩余：{formatMoney(remaining)}</div>
+                      <div className="mt-3 flex items-center justify-end gap-2">
+                        {isAdmin && (
+                          <>
+                            <button
+                              onClick={() => handleEndBondIssue(p)}
+                              className="text-gray-700 hover:text-gray-900 p-2 hover:bg-gray-50 border border-gray-200"
+                              title="发行结束"
+                            >
+                              <Lock className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleRedeemAllBond(p)}
+                              className="text-green-700 hover:text-green-900 p-2 hover:bg-green-50 border border-green-200"
+                              title="全额赎回"
+                            >
+                              <CheckSquare className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => openBondEditModal(p)}
+                              className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 border border-blue-200"
+                              title="编辑"
+                            >
+                              <Edit className="w-4 h-4" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteBondProduct(p)}
+                              className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 border border-red-200"
+                              title="删除"
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </button>
+                          </>
+                        )}
+                        <button
+                          onClick={() => openBondSubscribeModal(p)}
+                          className="bg-white hover:bg-gray-50 text-amber-700 px-4 py-2 font-bold transition-colors border border-amber-200"
+                        >
+                          申购
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="bg-white border border-amber-200 shadow-sm p-4">
+            <div className="flex items-center justify-between mb-4">
+              <div className="font-semibold text-gray-800">债券账单（全员可见）</div>
+              <div className="text-xs text-gray-500">共 {bondBills.length} 条</div>
+            </div>
+            {bondBills.length === 0 ? (
+              <div className="text-center text-gray-400 py-10">暂无账单记录</div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-gray-500 border-b border-amber-200">
+                      <th className="py-2 pr-3">时间</th>
+                      <th className="py-2 pr-3">类型</th>
+                      <th className="py-2 pr-3">用户</th>
+                      <th className="py-2 pr-3">债券</th>
+                      <th className="py-2 pr-3 text-right">金额</th>
+                      <th className="py-2 pr-3">状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {bondBills.map(row => (
+                      <tr key={row.id} className="border-b border-gray-100 text-gray-700">
+                        <td className="py-2 pr-3 whitespace-nowrap">{row.timestamp || row.created_at || ''}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap font-semibold">{getLocalizedTypeLabel(row.type, language)}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap">{row.created_by || ''}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap">{row.client || ''}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap text-right">{formatMoney(row.principal)}</td>
+                        <td className="py-2 pr-3 whitespace-nowrap">{row.status || ''}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {bondEditModal && isAdmin && bondEditTarget && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+              <div className="bg-white border-2 border-amber-200 shadow-2xl max-w-md w-full p-8 space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-gray-900">编辑债券</h3>
+                    <p className="text-sm text-gray-500 mt-1">{bondEditTarget.name}</p>
+                  </div>
+                  <button
+                    onClick={() => {
+                      setBondEditModal(false);
+                      setBondEditTarget(null);
+                    }}
+                    className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
+                  >
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+
+                <form onSubmit={handleUpdateBondProduct} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">债券名称</label>
+                    <input value={bondEditData.name} onChange={e => setBondEditData({ ...bondEditData, name: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">类型</label>
+                      <select value={bondEditData.category} onChange={e => setBondEditData({ ...bondEditData, category: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none">
+                        <option value="short">短期</option>
+                        <option value="long">长期</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">期限(天)</label>
+                      <input value={bondEditData.term_days} onChange={e => setBondEditData({ ...bondEditData, term_days: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">利率(%/周)</label>
+                      <input value={bondEditData.rate_per_week} onChange={e => setBondEditData({ ...bondEditData, rate_per_week: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">发行额度(m)</label>
+                      <input value={bondEditData.total_supply} onChange={e => setBondEditData({ ...bondEditData, total_supply: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold py-3 transition-all">
+                    保存修改
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {bondIssueModal && isAdmin && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+              <div className="bg-white border-2 border-amber-200 shadow-2xl max-w-md w-full p-8 space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-gray-900">发售债券</h3>
+                    <p className="text-sm text-gray-500 mt-1">创建长期/短期债券产品</p>
+                  </div>
+                  <button onClick={() => setBondIssueModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                <form onSubmit={handleCreateBondProduct} className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">债券名称</label>
+                    <input value={bondIssueData.name} onChange={e => setBondIssueData({ ...bondIssueData, name: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">类型</label>
+                      <select value={bondIssueData.category} onChange={e => setBondIssueData({ ...bondIssueData, category: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none">
+                        <option value="short">短期</option>
+                        <option value="long">长期</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">期限(天)</label>
+                      <input value={bondIssueData.term_days} onChange={e => setBondIssueData({ ...bondIssueData, term_days: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">利率(%/周)</label>
+                      <input value={bondIssueData.rate_per_week} onChange={e => setBondIssueData({ ...bondIssueData, rate_per_week: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">发行额度(m)</label>
+                      <input value={bondIssueData.total_supply} onChange={e => setBondIssueData({ ...bondIssueData, total_supply: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                    </div>
+                  </div>
+                  <button type="submit" className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold py-3 transition-all">
+                    创建并发售
+                  </button>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {bondSubscribeModal && bondSubscribeTarget && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+              <div className="bg-white border-2 border-amber-200 shadow-2xl max-w-md w-full p-8 space-y-6">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <h3 className="font-bold text-xl text-gray-900">申购债券</h3>
+                    <p className="text-sm text-gray-500 mt-1">{bondSubscribeTarget.name}</p>
+                  </div>
+                  <button onClick={() => setBondSubscribeModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
+                    <X className="w-6 h-6" />
+                  </button>
+                </div>
+                <div className="text-sm text-gray-600 space-y-1">
+                  <div>类型：{bondSubscribeTarget.category === 'long' ? '长期' : '短期'}</div>
+                  <div>期限：{bondSubscribeTarget.term_days} 天</div>
+                  <div>利率：{parseFloat(bondSubscribeTarget.rate_per_week || 0).toFixed(3)}% / 周</div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">申购金额(m)</label>
+                  <input value={bondSubscribeAmount} onChange={e => setBondSubscribeAmount(e.target.value)} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                  <p className="text-xs text-gray-500 mt-2">提交后需管理员审批</p>
+                </div>
+                <button onClick={submitBondSubscribe} className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold py-3 transition-all">
+                  提交申购
+                </button>
               </div>
             </div>
           )}
@@ -3802,8 +4507,10 @@ const App = () => {
           <div>
             <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
               <span className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-emerald-500 to-blue-600 bg-clip-text text-transparent animate-gradient">{t('loginTitle')}</span> {t('loginSubtitle')}
-              <span className="bg-white border border-green-200 text-green-700 text-xs px-2 py-1 font-bold whitespace-nowrap">隶属 琉璃主权资本</span>
-              {isAdmin && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">ADMIN</span>}
+              <span className="relative overflow-hidden border border-emerald-400 text-emerald-950 text-xs px-2 py-1 font-bold whitespace-nowrap bg-gradient-to-r from-emerald-200 via-emerald-100 to-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.35)] animate-pulse">
+                琉璃主权资本
+              </span>
+              {isAdmin && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">LSVC</span>}
             </h1>
             <p className="text-slate-500 mt-1 text-sm">{t('currentUser')}: <span className="font-bold">{currentUser.username}</span></p>
           </div>
@@ -3943,6 +4650,10 @@ const App = () => {
               <TrendingUp className="w-4 h-4" />
               银行基金
             </button>
+            <button onClick={() => setCurrentPage('bonds')} className="bg-gradient-to-r from-amber-100 to-yellow-100 hover:from-amber-200 hover:to-yellow-200 text-amber-800 px-8 py-2 font-bold transition-all flex items-center gap-2 border border-amber-300">
+              <TrendingUp className="w-4 h-4" />
+              银行债券
+            </button>
             {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
             {isAdmin && <button
               onClick={() => setInterestManageModal(true)}
@@ -3955,8 +4666,8 @@ const App = () => {
 
         {/* 统计卡片 */}
         <div className="grid grid-cols-1 md:grid-cols-6 gap-4">
-          <StatCard title={t('totalAssets')} value={formatMoney(stats.loanPrincipal + stats.bankAssetsValue)} subtext={`贷款+不动产`} icon={<ArrowUpRight className="text-green-600" />} />
-          <StatCard title={t('totalLiabilities')} value={formatMoney(stats.liabilities)} subtext={t('approved')} icon={<ArrowDownLeft className="text-red-500" />} />
+          <StatCard title={t('totalAssets')} value={formatMoney(stats.totalAssets)} subtext={''} icon={<ArrowUpRight className="text-green-600" />} />
+          <StatCard title={t('totalLiabilities')} value={formatMoney(stats.totalLoans)} subtext={''} icon={<ArrowDownLeft className="text-red-500" />} />
           <StatCard title={t('idleFunds')} value={formatMoney(stats.idleCash)} subtext={t('availableBalance')} icon={<Wallet className="text-yellow-500" />} />
           <StatCard title={t('totalAssetValue')} value={formatMoney(stats.bankAssetsValue)} subtext="不动产" icon={<Wallet className="text-purple-600" />} />
           <StatCard title={t('interestPool')} value={formatMoney(stats.interestPool)} subtext={t('weeklyNetInterest')} icon={<Activity className="text-purple-600" />} />
@@ -4070,16 +4781,20 @@ const App = () => {
                                 setFormData({
                                   ...formData, 
                                   product_type: newType,
-                                  rate: newType === 'risk' ? '9' : '2.5'
+                                  rate: newType === 'risk' ? '9' : (newType === 'risk5' ? '5' : '2.5')
                                 });
                               }} 
                               className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all hover:border-green-300"
                             >
                               <option value="normal">{t('normalDeposit')}</option>
                               <option value="risk">{t('riskDeposit')}</option>
+                              <option value="risk5">{t('riskDeposit5')}</option>
                             </select>
                             {formData.product_type === 'risk' && (
-                              <p className="text-xs text-orange-600 mt-2 bg-orange-50 p-2">{t('riskNote')}</p>
+                              <p className="text-xs text-red-700 mt-2 bg-red-50 border border-red-200 p-2 font-semibold">{t('riskNote')}</p>
+                            )}
+                            {formData.product_type === 'risk5' && (
+                              <p className="text-xs text-orange-700 mt-2 bg-orange-50 border border-orange-200 p-2">{t('riskNote5')}</p>
                             )}
                           </div>
                         )}
@@ -4227,11 +4942,13 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
 
   const getProductTypeLabel = (row) => {
     if (row.type === 'deposit') {
-      return row.product_type === 'risk' ? t('riskDeposit') : t('normalDeposit');
+      if (row.product_type === 'risk') return t('riskDeposit');
+      if (row.product_type === 'risk5') return t('riskDeposit5');
+      return t('normalDeposit');
     } else if (row.type === 'loan') {
       return row.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
     }
-    return '-';
+    return '';
   };
 
   return (
