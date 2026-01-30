@@ -334,7 +334,6 @@ const translations = {
     injectionShort: '注资',
     depositShort: '存款',
     fundShort: '基金',
-    brandBadge: '琉璃主权资本',
     fundTransferTitle: '资金转账',
     settleDividends: '结算分红',
     amountInputPlaceholder: '输入金额...',
@@ -668,7 +667,6 @@ const translations = {
     injectionShort: 'Injection',
     depositShort: 'Deposit',
     fundShort: 'Fund',
-    brandBadge: 'Glaze Sovereign Capital',
     fundTransferTitle: 'Fund Transfers',
     settleDividends: 'Settle Dividends',
     amountInputPlaceholder: 'Enter amount...',
@@ -4944,9 +4942,8 @@ const App = () => {
             <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
               <span className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-emerald-500 to-blue-600 bg-clip-text text-transparent animate-gradient">{t('loginTitle')}</span> {t('loginSubtitle')}
               <span className="relative overflow-hidden border border-emerald-400 text-emerald-950 text-xs px-2 py-1 font-bold whitespace-nowrap bg-gradient-to-r from-emerald-200 via-emerald-100 to-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.35)] animate-pulse">
-                {t('brandBadge')}
+                琉璃主权资本
               </span>
-              {isAdmin && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">LSVC</span>}
             </h1>
             <p className="text-slate-500 mt-1 text-sm">{t('currentUser')}: <span className="font-bold">{currentUser.username}</span></p>
           </div>
