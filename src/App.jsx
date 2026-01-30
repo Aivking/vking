@@ -24,18 +24,19 @@ class ErrorBoundary extends React.Component {
 
   render() {
     if (this.state.hasError) {
+      const t = this.props.t || ((k) => k);
       return (
         <div className="min-h-screen bg-gray-100 flex items-center justify-center p-4">
           <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
             <div className="flex items-center gap-3 text-red-600 mb-4">
               <AlertCircle className="w-8 h-8" />
-              <h2 className="text-2xl font-bold">渲染出错</h2>
+              <h2 className="text-2xl font-bold">{t('renderError')}</h2>
             </div>
             <p className="text-gray-600 mb-4">
-              页面渲染时发生了错误，请刷新页面重试。
+              {t('renderErrorHint')}
             </p>
             <details className="mb-4 text-xs text-gray-500">
-              <summary className="cursor-pointer font-medium">错误详情</summary>
+              <summary className="cursor-pointer font-medium">{t('errorDetails')}</summary>
               <pre className="mt-2 p-2 bg-gray-50 rounded overflow-auto">
                 {this.state.error?.toString()}
               </pre>
@@ -44,7 +45,7 @@ class ErrorBoundary extends React.Component {
               onClick={() => window.location.reload()}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium transition-colors"
             >
-              刷新页面
+              {t('reloadPage')}
             </button>
           </div>
         </div>
@@ -116,6 +117,7 @@ const translations = {
     logout: '退出登录',
     // 公告栏
     noAnnouncement: '暂无公告',
+    announcement: '公告',
     forum: '论坛',
     backToBank: '返回银行',
     newPost: '发帖',
@@ -130,6 +132,216 @@ const translations = {
     save: '保存',
     cancel: '取消',
     editAnnouncement: '编辑公告',
+    editShort: '编辑',
+    unknown: '未知',
+    applicantLabel: '申请人',
+    bankFund: '银行基金',
+    bankBonds: '银行债券',
+    manageInterestRecords: '管理利息记录',
+    confirm: '确认',
+    realEstate: '不动产',
+    confirmTransfer: '确认转账',
+    addFundTx: '添加基金交易记录',
+    recordType: '记录类型',
+    fundProfit: '基金收益',
+    fundLoss: '基金损失',
+    amountM: '金额 (m单位)',
+    amountPlaceholder01: '请输入金额（如：0.1）',
+    remarkLabel: '备注说明',
+    remarkPlaceholderOptional: '请输入备注说明（可选）',
+    willIncreaseFundProfit: '将增加基金收益',
+    willRecordFundLoss: '将记录基金损失',
+    confirmAdd: '确认添加',
+    fundSubscribeRequest: '基金申购申请',
+    fundRedeemRequest: '基金赎回申请',
+    fundDividendWithdrawRequest: '提取分红申请',
+    amountPlaceholder0100: '请输入金额（如：0.100）',
+    submitWillEnterApproval: '提交后将进入管理员审批队列。',
+    submitRequest: '提交申请',
+    manageInterestTitle: '管理利息记录',
+    titlePlaceholder: '请输入标题...',
+    contentPlaceholder: '写下你想说的...',
+    bondsTitle: '银行债券',
+    bondsSubtitle: '管理员发售债券，成员申购（申购需审批）',
+    issueBond: '发售债券',
+    myBondHolding: '我的债券持仓（已审批）',
+    bondSubscribeOccupyNote: '申购会占用你的存款可用额度',
+    onSaleBonds: '在售债券',
+    productCount: '共 {count} 个产品',
+    noOnSaleBonds: '暂无在售债券',
+    longTerm: '长期',
+    shortTerm: '短期',
+    termLabel: '期限',
+    rateLabelPerWeek: '利率',
+    issueLabel: '发行',
+    soldLabel: '已售',
+    remainingLabel: '剩余',
+    endIssue: '发行结束',
+    redeemAll: '全额赎回',
+    subscribe: '申购',
+    bondBillsPublic: '债券账单（全员可见）',
+    billCount: '共 {count} 条',
+    noBills: '暂无账单记录',
+    bondEditTitle: '编辑债券',
+    bondName: '债券名称',
+    category: '类型',
+    termDays: '期限(天)',
+    ratePerWeek: '利率(%/周)',
+    totalSupplyM: '发行额度(m)',
+    saveChanges: '保存修改',
+    createBondTitle: '发售债券',
+    createBondSubtitle: '创建长期/短期债券产品',
+    createAndIssue: '创建并发售',
+    subscribeBondTitle: '申购债券',
+    subscribeAmountM: '申购金额(m)',
+    requiresApproval: '提交后需管理员审批',
+    submitSubscribe: '提交申购',
+    billTime: '时间',
+    billType: '类型',
+    billUser: '用户',
+    billBond: '债券',
+    billAmount: '金额',
+    billStatus: '状态',
+
+    fundPageTitle: '银行基金',
+    fundPageSubtitle: '独立的基金投资管理系统',
+    fundAccountTitle: '基金账户',
+    fundBalanceLabel: '基金余额',
+    bankBalanceLabel: '银行余额',
+    totalProfitLabel: '总收益',
+    transferBankToFund: '银行转基金',
+    transferFundToBank: '基金转银行',
+    transferAmountLabel: '转账金额 (m单位)',
+    transferAmountPlaceholder: '请输入转账金额（如：0.1）',
+    transferHintIn: '将从银行闲置资金转出，银行可用闲置资金：{amount}',
+    transferHintOut: '将从基金账户转出，基金可用余额：{amount}',
+    noPlanetCards: '暂无星星名片',
+    noSettlementRecords: '暂无利息结算记录',
+    settlementPrefix: '结算',
+    settlementTime: '时间',
+    settlementCountLabel: '记录数',
+    incomeLabel: '收入',
+    expenseLabel: '支出',
+    netProfitLabel: '净利',
+    yieldRateLabel: '收益率',
+    interestSettlementManageTitle: '利息结算记录管理',
+    settlementIdLabel: '结算周期 ID',
+    confirmDeleteSettlement: '确认删除结算周期的 {count} 条记录？此操作不可撤销！',
+    deleteSuccess: '删除成功！',
+    deleteFailed: '删除失败',
+    bankFundRecords: '银行资金记录',
+    transferIn: '转入',
+    transferOut: '转出',
+    noBankFundRecords: '暂无银行资金记录',
+    fundStatsHint: '基金 + 银行 + 收益统计',
+    profitLossRecords: '基金盈亏记录',
+    profit: '收益',
+    loss: '损失',
+    noProfitLossRecords: '暂无盈亏记录',
+    addRecord: '添加记录',
+    doneSelect: '完成选择',
+    batchSelect: '批量选择',
+    deleteSelected: '删除选中',
+    confirmDeleteSelected: '确定要删除选中的 {count} 条记录吗？此操作不可撤销！',
+    selectRecordsToDelete: '请先选择要删除的记录',
+    batchDeleteFailed: '批量删除失败',
+    batchDeleteSuccess: '成功删除 {count} 条记录！',
+    fundActionsTitle: '基金操作',
+    fundActionsHint: '该区域为普通用户申购/赎回入口',
+    fundTransactionsTitle: '基金交易记录',
+    subscribeFund: '申购',
+    redeemFund: '赎回',
+    withdrawDividend: '提取分红',
+    clickToEdit: '点击编辑',
+    fundTxUpdated: '交易记录更新成功！',
+    updateFailed: '更新失败',
+    validAmountRequired: '请输入有效金额',
+    permissionDeniedAdminOnly: '权限不足：只有管理员可以执行此操作',
+    bankIdleInsufficient: '银行闲置资金不足。可用：{available}，尝试：{attempt}',
+    fundBalanceInsufficient: '基金余额不足。可用：{available}，尝试：{attempt}',
+    transferSuccess: '转账成功！',
+    transferFailed: '转账失败',
+    confirmDeleteTx: '确定要删除这条交易记录吗？',
+    fundTxDeleted: '交易记录删除成功！',
+    fundTxAdded: '交易记录添加成功！',
+    addFailed: '添加失败',
+    fundProfitRemark: '基金收益',
+    fundLossRemark: '基金损失',
+    fundOperationsTitle: '基金操作',
+    requiresAdminApproval: '提交后需管理员审批',
+    subscribedPrincipal: '申购本金',
+    estimatedProfit: '预估收益',
+    bondUnavailable: '该债券已结束发行或已删除，无法继续申购',
+    adminOnlyRedeemAll: '权限不足：只有管理员可以全额赎回',
+    bondNotFound: '未找到债券记录',
+    renderError: '渲染出错',
+    renderErrorHint: '页面渲染时发生了错误，请刷新页面重试。',
+    errorDetails: '错误详情',
+    reloadPage: '刷新页面',
+    confirmDeleteRecordServer: '确认从服务器永久删除此记录？',
+    confirmRepayLoan: '确认还款此笔贷款？',
+    confirmEndBondIssue: '确认结束该债券发行？结束后将无法继续申购，但已申购持仓会保留。',
+    endBondIssueFailed: '结束发行失败',
+    confirmRedeemAllBond: '确认全额赎回该债券？将结束发行并取消所有人的持仓（删除所有相关申购记录）。',
+    redeemAllBondFailed: '全额赎回失败',
+    adminOnlyBondEdit: '权限不足：只有管理员可以编辑债券',
+    adminOnlyBondDelete: '权限不足：只有管理员可以删除债券',
+    adminOnlyBondIssue: '权限不足：只有管理员可以发售债券',
+    bondNameRequired: '请输入债券名称',
+    bondTermInvalid: '请输入有效期限',
+    bondRateInvalid: '请输入有效利率',
+    bondSupplyInvalid: '请输入有效发行额度',
+    bondUpdateFailed: '更新失败',
+    confirmDeleteBondIssue: '确认删除此债券发售？将同时删除所有相关持仓/申购记录。',
+    deleteBondFailed: '删除失败',
+    announcementUpdateFailed: '更新公告失败',
+    starCardCreated: '星星名片创建成功',
+    starCardSubmitted: '星星名片申请已提交，等待管理员审批',
+    createFailed: '创建失败',
+    starCardUpdated: '名片更新成功',
+    submitFailed: '提交失败',
+    assetRegistered: '银行资产登记成功',
+    registerFailed: '登记失败',
+    assetUpdated: '资产更新成功',
+    settleFailed: '结算失败',
+    fundPrincipalZeroCannotSettle: '基金本金为 0，无法结算',
+    fundDividendSettled: '分红结算完成：{count}人，总额 {amount}',
+    invalidNumber: '请输入有效的数字',
+    confirmDeleteReply: '确认删除此评论？',
+    confirmDeletePost: '确认删除此帖子？',
+    confirmDeleteAllBills: '确认永久删除此账户的所有账单？此操作不可撤销！',
+    confirmDeleteAssetRecord: '确认删除此资产记录？',
+    bondTermRemark: '期限:{days}天',
+    bondSubscribeRemark: 'issue_id:{id} 期限:{days}天',
+    interestCountPrefix: '利息次数',
+    authUserExists: '该用户名已被注册',
+    authReservedAccount: 'EUU 是保留账号',
+    authRegisterFailed: '注册失败，服务器连接异常',
+    collapse: '收起',
+    viewFull: '查看全文',
+    postNotFound: '帖子不存在',
+    weeklyInterestLabel: '周利息',
+    cyclesLabel: '次数',
+    dateLabel: '日期',
+    deleteAll: '删除所有',
+    appNotConnectedTitle: '应用尚未连接至数据库',
+    appNotConnectedHint: '检测到您正在独立环境 (如 Vercel) 运行此应用，但尚未配置 Supabase 环境变量。',
+    appNotConnectedVarsHint: '# 请在 Vercel 项目设置 → Environment Variables 中添加以下变量：',
+    appNotConnectedRedeployHint: '配置完成后，请在 Vercel 中重新部署 (Redeploy)。',
+    fixedRateHint: '💡 固定 3%，不允许更改',
+    langChinese: '中文',
+    clientPlaceholderText: '输入客户或对象名称',
+    injectionShort: '注资',
+    depositShort: '存款',
+    fundShort: '基金',
+    brandBadge: '琉璃主权资本',
+    fundTransferTitle: '资金转账',
+    settleDividends: '结算分红',
+    amountInputPlaceholder: '输入金额...',
+    fundTransferPermissionHint: '只有管理员可以进行基金转账操作',
+    noDividendToSettle: '暂无可结算分红',
+    noHoldersToSettle: '暂无持仓用户，无法结算',
+    noDescription: '暂无描述',
     // 星星开发
     planetDev: '星星开发',
     planetCard: '星星名片',
@@ -249,10 +461,221 @@ const translations = {
     logout: 'Logout',
     // Announcement
     noAnnouncement: 'No announcements',
+    announcement: 'Announcement',
     announcementPlaceholder: 'Enter announcement...',
     save: 'Save',
     cancel: 'Cancel',
     editAnnouncement: 'Edit Announcement',
+    editShort: 'Edit',
+    unknown: 'Unknown',
+    applicantLabel: 'Applicant',
+    bankFund: 'Bank Fund',
+    bankBonds: 'Bank Bonds',
+    manageInterestRecords: 'Manage Interest Records',
+    confirm: 'Confirm',
+    realEstate: 'Real Estate',
+    confirmTransfer: 'Confirm Transfer',
+    addFundTx: 'Add Fund Transaction',
+    recordType: 'Record Type',
+    fundProfit: 'Fund Profit',
+    fundLoss: 'Fund Loss',
+    amountM: 'Amount (m)',
+    amountPlaceholder01: 'Enter amount (e.g., 0.1)',
+    remarkLabel: 'Remark',
+    remarkPlaceholderOptional: 'Enter remark (optional)',
+    willIncreaseFundProfit: 'Will increase fund profit',
+    willRecordFundLoss: 'Will record fund loss',
+    confirmAdd: 'Confirm Add',
+    fundSubscribeRequest: 'Fund Subscription Request',
+    fundRedeemRequest: 'Fund Redemption Request',
+    fundDividendWithdrawRequest: 'Dividend Withdrawal Request',
+    amountPlaceholder0100: 'Enter amount (e.g., 0.100)',
+    submitWillEnterApproval: 'After submission, it will enter the admin approval queue.',
+    submitRequest: 'Submit Request',
+    manageInterestTitle: 'Manage Interest Records',
+    titlePlaceholder: 'Enter title...',
+    contentPlaceholder: 'Write what you want to say...',
+    bondsTitle: 'Bank Bonds',
+    bondsSubtitle: 'Admin issues bonds, members subscribe (requires approval)',
+    issueBond: 'Issue Bond',
+    myBondHolding: 'My Bond Holdings (Approved)',
+    bondSubscribeOccupyNote: 'Subscriptions occupy your available deposit balance',
+    onSaleBonds: 'On-sale Bonds',
+    productCount: '{count} products',
+    noOnSaleBonds: 'No bonds on sale',
+    longTerm: 'Long-term',
+    shortTerm: 'Short-term',
+    termLabel: 'Term',
+    rateLabelPerWeek: 'Rate',
+    issueLabel: 'Issued',
+    soldLabel: 'Sold',
+    remainingLabel: 'Remaining',
+    endIssue: 'End Issue',
+    redeemAll: 'Redeem All',
+    subscribe: 'Subscribe',
+    bondBillsPublic: 'Bond Ledger (Public)',
+    billCount: '{count} records',
+    noBills: 'No records',
+    bondEditTitle: 'Edit Bond',
+    bondName: 'Bond Name',
+    category: 'Category',
+    termDays: 'Term (days)',
+    ratePerWeek: 'Rate (%/week)',
+    totalSupplyM: 'Total Supply (m)',
+    saveChanges: 'Save Changes',
+    createBondTitle: 'Issue Bond',
+    createBondSubtitle: 'Create long/short bond product',
+    createAndIssue: 'Create & Issue',
+    subscribeBondTitle: 'Subscribe Bond',
+    subscribeAmountM: 'Amount (m)',
+    requiresApproval: 'Requires admin approval',
+    submitSubscribe: 'Submit Subscription',
+    billTime: 'Time',
+    billType: 'Type',
+    billUser: 'User',
+    billBond: 'Bond',
+    billAmount: 'Amount',
+    billStatus: 'Status',
+
+    fundPageTitle: 'Bank Fund',
+    fundPageSubtitle: 'Independent fund investment management system',
+    fundAccountTitle: 'Fund Account',
+    fundBalanceLabel: 'Fund Balance',
+    bankBalanceLabel: 'Bank Balance',
+    totalProfitLabel: 'Total Profit',
+    transferBankToFund: 'Bank → Fund',
+    transferFundToBank: 'Fund → Bank',
+    transferAmountLabel: 'Transfer Amount (m)',
+    transferAmountPlaceholder: 'Enter transfer amount (e.g., 0.1)',
+    transferHintIn: 'Will transfer out from bank idle funds. Available idle funds: {amount}',
+    transferHintOut: 'Will transfer out from fund account. Available fund balance: {amount}',
+    noPlanetCards: 'No star cards yet',
+    noSettlementRecords: 'No interest settlement records',
+    settlementPrefix: 'Settlement',
+    settlementTime: 'Time',
+    settlementCountLabel: 'Records',
+    incomeLabel: 'Income',
+    expenseLabel: 'Expense',
+    netProfitLabel: 'Net',
+    yieldRateLabel: 'Yield Rate',
+    interestSettlementManageTitle: 'Interest Settlement Records',
+    settlementIdLabel: 'Settlement ID',
+    confirmDeleteSettlement: 'Delete {count} records in this settlement? This cannot be undone.',
+    deleteSuccess: 'Deleted successfully!',
+    deleteFailed: 'Delete failed',
+    bankFundRecords: 'Bank Fund Records',
+    transferIn: 'In',
+    transferOut: 'Out',
+    noBankFundRecords: 'No bank fund records',
+    fundStatsHint: 'Fund + Bank + Profit Stats',
+    profitLossRecords: 'Fund P/L Records',
+    profit: 'Profit',
+    loss: 'Loss',
+    noProfitLossRecords: 'No P/L records',
+    addRecord: 'Add Record',
+    doneSelect: 'Done',
+    batchSelect: 'Batch Select',
+    deleteSelected: 'Delete Selected',
+    confirmDeleteSelected: 'Delete selected {count} records? This cannot be undone.',
+    selectRecordsToDelete: 'Please select records to delete first',
+    batchDeleteFailed: 'Batch delete failed',
+    batchDeleteSuccess: 'Deleted {count} records successfully!',
+    fundActionsTitle: 'Fund Actions',
+    fundActionsHint: 'This area is for user subscribe/redeem actions',
+    fundTransactionsTitle: 'Fund Transactions',
+    subscribeFund: 'Subscribe',
+    redeemFund: 'Redeem',
+    withdrawDividend: 'Withdraw Dividend',
+    clickToEdit: 'Click to edit',
+    fundTxUpdated: 'Transaction updated successfully!',
+    updateFailed: 'Update failed',
+    validAmountRequired: 'Please enter a valid amount',
+    permissionDeniedAdminOnly: 'Permission denied: admin only',
+    bankIdleInsufficient: 'Insufficient bank idle funds. Available: {available}, Attempt: {attempt}',
+    fundBalanceInsufficient: 'Insufficient fund balance. Available: {available}, Attempt: {attempt}',
+    transferSuccess: 'Transfer successful!',
+    transferFailed: 'Transfer failed',
+    confirmDeleteTx: 'Delete this transaction record?',
+    fundTxDeleted: 'Transaction deleted successfully!',
+    fundTxAdded: 'Transaction added successfully!',
+    addFailed: 'Add failed',
+    fundProfitRemark: 'Fund profit',
+    fundLossRemark: 'Fund loss',
+    fundOperationsTitle: 'Fund Actions',
+    requiresAdminApproval: 'Requires admin approval',
+    subscribedPrincipal: 'Subscribed Principal',
+    estimatedProfit: 'Estimated Profit',
+    bondUnavailable: 'This bond is no longer available for subscription.',
+    adminOnlyRedeemAll: 'Permission denied: admin only',
+    bondNotFound: 'Bond record not found',
+    renderError: 'Render Error',
+    renderErrorHint: 'An error occurred while rendering. Please refresh the page and try again.',
+    errorDetails: 'Error Details',
+    reloadPage: 'Reload Page',
+    confirmDeleteRecordServer: 'Permanently delete this record from server?',
+    confirmRepayLoan: 'Confirm repayment for this loan?',
+    confirmEndBondIssue: 'End this bond issuance? Subscriptions will be disabled, existing holdings remain.',
+    endBondIssueFailed: 'End issuance failed',
+    confirmRedeemAllBond: 'Redeem all for this bond? It will end issuance and cancel all holdings.',
+    redeemAllBondFailed: 'Redeem all failed',
+    adminOnlyBondEdit: 'Permission denied: admin only',
+    adminOnlyBondDelete: 'Permission denied: admin only',
+    adminOnlyBondIssue: 'Permission denied: admin only',
+    bondNameRequired: 'Please enter bond name',
+    bondTermInvalid: 'Please enter a valid term',
+    bondRateInvalid: 'Please enter a valid rate',
+    bondSupplyInvalid: 'Please enter a valid total supply',
+    bondUpdateFailed: 'Update failed',
+    confirmDeleteBondIssue: 'Delete this bond issue? It will also cancel all related holdings/subscriptions.',
+    deleteBondFailed: 'Delete failed',
+    announcementUpdateFailed: 'Update announcement failed',
+    starCardCreated: 'Star card created successfully',
+    starCardSubmitted: 'Star card request submitted. Waiting for admin approval.',
+    createFailed: 'Create failed',
+    starCardUpdated: 'Card updated successfully',
+    submitFailed: 'Submit failed',
+    assetRegistered: 'Asset registered successfully',
+    registerFailed: 'Register failed',
+    assetUpdated: 'Asset updated successfully',
+    settleFailed: 'Settlement failed',
+    fundPrincipalZeroCannotSettle: 'Fund principal is 0. Cannot settle.',
+    fundDividendSettled: 'Dividend settlement completed: {count} users, total {amount}',
+    invalidNumber: 'Please enter a valid number',
+    confirmDeleteReply: 'Delete this comment?',
+    confirmDeletePost: 'Delete this post?',
+    confirmDeleteAllBills: 'Permanently delete all bills in this account? This cannot be undone.',
+    confirmDeleteAssetRecord: 'Delete this asset record?',
+    bondTermRemark: 'Term:{days}d',
+    bondSubscribeRemark: 'issue_id:{id} Term:{days}d',
+    interestCountPrefix: 'Interest Count',
+    authUserExists: 'Username already registered',
+    authReservedAccount: 'EUU is a reserved account',
+    authRegisterFailed: 'Registration failed due to server connection error',
+    collapse: 'Collapse',
+    viewFull: 'View full',
+    postNotFound: 'Post not found',
+    weeklyInterestLabel: 'Weekly Interest',
+    cyclesLabel: 'Cycles',
+    dateLabel: 'Date',
+    deleteAll: 'Delete All',
+    appNotConnectedTitle: 'App is not connected to the database',
+    appNotConnectedHint: 'Detected that you are running this app in a standalone environment (e.g., Vercel), but Supabase environment variables are not configured.',
+    appNotConnectedVarsHint: '# Add the following variables in Vercel → Project Settings → Environment Variables:',
+    appNotConnectedRedeployHint: 'After configuration, please redeploy on Vercel.',
+    fixedRateHint: '💡 Fixed at 3%, cannot be changed',
+    langChinese: '中文',
+    clientPlaceholderText: 'Enter client or target name',
+    injectionShort: 'Injection',
+    depositShort: 'Deposit',
+    fundShort: 'Fund',
+    brandBadge: 'Glaze Sovereign Capital',
+    fundTransferTitle: 'Fund Transfers',
+    settleDividends: 'Settle Dividends',
+    amountInputPlaceholder: 'Enter amount...',
+    fundTransferPermissionHint: 'Only admins can perform fund transfers',
+    noDividendToSettle: 'No dividends to settle',
+    noHoldersToSettle: 'No holders, cannot settle',
+    noDescription: 'No description',
     // Star Development
     planetDev: 'Star Dev',
     planetCard: 'Star Card',
@@ -336,13 +759,25 @@ const translations = {
       'withdraw_inj': 'Withdraw Inj.',
       'deposit': 'Deposit',
       'withdraw_dep': 'Withdraw Dep.',
+      'deposit_interest': 'Deposit Interest',
+      'loan_interest': 'Loan Interest',
+      'loan_repayment': 'Repayment',
       'interest_income': 'Interest Income',
       'interest_expense': 'Interest Expense',
       'planet_fund': 'Star Fund',
       'planet_card': 'Star Card',
+      'bank_asset': 'Bank Asset',
       'bond_issue': 'Bond Issue',
       'bond_subscribe': 'Bond Subscribe',
-      'bond_redeem': 'Bond Redeem'
+      'bond_redeem': 'Bond Redeem',
+      'fund_subscribe': 'Fund Subscribe',
+      'fund_redeem': 'Fund Redeem',
+      'fund_dividend': 'Fund Dividend',
+      'fund_dividend_withdraw': 'Fund Dividend Withdraw',
+      'fund_profit_withdraw': 'Fund Profit Withdraw',
+      'fund_profit': 'Fund Profit',
+      'fund_loss': 'Fund Loss',
+      'bank_fund': 'Bank ↔ Fund Transfer'
     }
   }
 };
@@ -483,11 +918,11 @@ const App = () => {
   const handleUpdateBondProduct = async (e) => {
     e.preventDefault();
     if (currentUser?.role !== 'admin') {
-      alert('权限不足：只有管理员可以编辑债券');
+      alert(t('adminOnlyBondEdit'));
       return;
     }
     if (!bondEditTarget?.tx_id) {
-      alert('未找到债券记录');
+      alert(t('bondNotFound'));
       return;
     }
 
@@ -495,10 +930,10 @@ const App = () => {
     const ratePerWeek = parseFloat(bondEditData.rate_per_week);
     const totalSupply = parseFloat(bondEditData.total_supply);
 
-    if (!bondEditData.name.trim()) return alert('请输入债券名称');
-    if (!Number.isFinite(termDays) || termDays <= 0) return alert('请输入有效期限');
-    if (!Number.isFinite(ratePerWeek) || ratePerWeek < 0) return alert('请输入有效利率');
-    if (!Number.isFinite(totalSupply) || totalSupply <= 0) return alert('请输入有效发行额度');
+    if (!bondEditData.name.trim()) return alert(t('bondNameRequired'));
+    if (!Number.isFinite(termDays) || termDays <= 0) return alert(t('bondTermInvalid'));
+    if (!Number.isFinite(ratePerWeek) || ratePerWeek < 0) return alert(t('bondRateInvalid'));
+    if (!Number.isFinite(totalSupply) || totalSupply <= 0) return alert(t('bondSupplyInvalid'));
 
     try {
       const { error } = await supabase
@@ -508,7 +943,7 @@ const App = () => {
           principal: totalSupply,
           rate: ratePerWeek,
           product_type: bondEditData.category === 'long' ? 'bond_long' : 'bond_short',
-          remark: `期限:${termDays}天`,
+          remark: String(t('bondTermRemark')).replace('{days}', termDays),
           last_edited_by: currentUser.username,
           last_edited_at: new Date().toLocaleString('zh-CN', { hour12: false })
         })
@@ -519,20 +954,20 @@ const App = () => {
       setBondEditModal(false);
       setBondEditTarget(null);
     } catch (e2) {
-      alert('更新失败: ' + (e2?.message || e2));
+      alert(t('bondUpdateFailed') + ': ' + (e2?.message || e2));
     }
   };
 
   const handleDeleteBondProduct = async (bond) => {
     if (currentUser?.role !== 'admin') {
-      alert('权限不足：只有管理员可以删除债券');
+      alert(t('adminOnlyBondDelete'));
       return;
     }
     if (!bond?.tx_id) {
-      alert('未找到债券记录');
+      alert(t('bondNotFound'));
       return;
     }
-    if (!window.confirm('确认删除此债券发售？将同时删除所有相关持仓/申购记录。')) return;
+    if (!window.confirm(t('confirmDeleteBondIssue'))) return;
 
     try {
       // 取消持仓（保留账单历史）：将相关 bond_subscribe 标记为 rejected，使其不再计入持仓/占用
@@ -569,20 +1004,17 @@ const App = () => {
 
       await refreshTransactions();
     } catch (e2) {
-      alert('删除失败: ' + (e2?.message || e2));
+      alert(t('deleteBondFailed') + ': ' + (e2?.message || e2));
     }
   };
 
   const handleEndBondIssue = async (bond) => {
-    if (currentUser?.role !== 'admin') {
-      alert('权限不足：只有管理员可以结束发行');
-      return;
-    }
+    if (currentUser?.role !== 'admin') return;
     if (!bond?.tx_id) {
-      alert('未找到债券记录');
+      alert(t('bondNotFound'));
       return;
     }
-    if (!window.confirm('确认结束该债券发行？结束后将无法继续申购，但已申购持仓会保留。')) return;
+    if (!window.confirm(t('confirmEndBondIssue'))) return;
 
     try {
       const { error } = await supabase
@@ -590,27 +1022,26 @@ const App = () => {
         .update({
           status: 'rejected',
           approved_by: currentUser.username,
-          approved_at: new Date().toLocaleString('zh-CN', { hour12: false }),
           rejected_at: new Date().toISOString()
         })
         .eq('id', bond.tx_id);
       if (error) throw error;
       await refreshTransactions();
     } catch (e2) {
-      alert('结束发行失败: ' + (e2?.message || e2));
+      alert(t('endBondIssueFailed') + ': ' + (e2?.message || e2));
     }
   };
 
   const handleRedeemAllBond = async (bond) => {
     if (currentUser?.role !== 'admin') {
-      alert('权限不足：只有管理员可以全额赎回');
+      alert(t('adminOnlyRedeemAll'));
       return;
     }
     if (!bond?.tx_id) {
-      alert('未找到债券记录');
+      alert(t('bondNotFound'));
       return;
     }
-    if (!window.confirm('确认全额赎回该债券？将结束发行并取消所有人的持仓（删除所有相关申购记录）。')) return;
+    if (!window.confirm(t('confirmRedeemAllBond'))) return;
 
     try {
       // 先结束发行（下架），保留发行记录作为历史
@@ -670,7 +1101,7 @@ const App = () => {
 
       await refreshTransactions();
     } catch (e2) {
-      alert('全额赎回失败: ' + (e2?.message || e2));
+      alert(t('redeemAllBondFailed') + ': ' + (e2?.message || e2));
     }
   };
 
@@ -726,7 +1157,7 @@ const App = () => {
   const handleCreateBondProduct = async (e) => {
     e.preventDefault();
     if (currentUser?.role !== 'admin') {
-      alert('权限不足：只有管理员可以发售债券');
+      alert(t('adminOnlyBondIssue'));
       return;
     }
 
@@ -734,10 +1165,10 @@ const App = () => {
     const ratePerWeek = parseFloat(bondIssueData.rate_per_week);
     const totalSupply = parseFloat(bondIssueData.total_supply);
 
-    if (!bondIssueData.name.trim()) return alert('请输入债券名称');
-    if (!Number.isFinite(termDays) || termDays <= 0) return alert('请输入有效期限');
-    if (!Number.isFinite(ratePerWeek) || ratePerWeek < 0) return alert('请输入有效利率');
-    if (!Number.isFinite(totalSupply) || totalSupply <= 0) return alert('请输入有效发行额度');
+    if (!bondIssueData.name.trim()) return alert(t('bondNameRequired'));
+    if (!Number.isFinite(termDays) || termDays <= 0) return alert(t('bondTermInvalid'));
+    if (!Number.isFinite(ratePerWeek) || ratePerWeek < 0) return alert(t('bondRateInvalid'));
+    if (!Number.isFinite(totalSupply) || totalSupply <= 0) return alert(t('bondSupplyInvalid'));
 
     await handleCRUD('create', {
       type: 'bond_issue',
@@ -745,7 +1176,7 @@ const App = () => {
       principal: totalSupply,
       rate: ratePerWeek,
       product_type: bondIssueData.category === 'long' ? 'bond_long' : 'bond_short',
-      remark: `期限:${termDays}天`
+      remark: String(t('bondTermRemark')).replace('{days}', termDays)
     });
 
     await refreshTransactions();
@@ -757,7 +1188,7 @@ const App = () => {
     if (!bondSubscribeTarget) return;
     const amount = parseFloat(bondSubscribeAmount) || 0;
     if (amount <= 0) {
-      alert('请输入有效金额');
+      alert(t('validAmountRequired'));
       return;
     }
 
@@ -766,7 +1197,7 @@ const App = () => {
       tx => tx.status === 'approved' && tx.type === 'bond_issue' && String(tx.id) === String(bondSubscribeTarget.tx_id)
     );
     if (!stillActive) {
-      alert('该债券已结束发行或已删除，无法继续申购');
+      alert(t('bondUnavailable'));
       setBondSubscribeModal(false);
       setBondSubscribeTarget(null);
       setBondSubscribeAmount('');
@@ -779,7 +1210,9 @@ const App = () => {
       principal: amount,
       rate: parseFloat(bondSubscribeTarget.rate_per_week) || 0,
       product_type: bondSubscribeTarget.category === 'long' ? 'bond_long' : 'bond_short',
-      remark: `issue_id:${bondSubscribeTarget.tx_id} 期限:${bondSubscribeTarget.term_days}天`
+      remark: String(t('bondSubscribeRemark'))
+        .replace('{id}', bondSubscribeTarget.tx_id)
+        .replace('{days}', bondSubscribeTarget.term_days)
     });
 
     setBondSubscribeModal(false);
@@ -790,20 +1223,20 @@ const App = () => {
   const submitFundUserRequest = async () => {
     const amount = parseFloat(fundUserAmount) || 0;
     if (amount <= 0) {
-      alert('请输入有效金额');
+      alert(t('validAmountRequired'));
       return;
     }
     let type = '';
     let remark = '';
     if (fundUserAction === 'subscribe') {
       type = 'fund_subscribe';
-      remark = '外部准入申购';
+      remark = language === 'zh' ? '外部准入申购' : 'External access subscription';
     } else if (fundUserAction === 'redeem') {
       type = 'fund_redeem';
-      remark = '赎回（含分红）';
+      remark = language === 'zh' ? '赎回（含分红）' : 'Redeem (incl. dividends)';
     } else if (fundUserAction === 'dividend_withdraw') {
       type = 'fund_dividend_withdraw';
-      remark = '提取分红到外部';
+      remark = language === 'zh' ? '提取分红到外部' : 'Withdraw dividends to external';
     } else {
       return;
     }
@@ -1029,7 +1462,7 @@ const App = () => {
       setBankAnnouncementInput('');
     } catch (e) {
       console.error('更新公告失败:', e);
-      alert('更新公告失败: ' + (e?.message || e));
+      alert(t('announcementUpdateFailed') + ': ' + (e?.message || e));
     }
   };
 
@@ -1167,10 +1600,10 @@ const App = () => {
       await fetchFundTransactions();
       setEditingFundTx(null);
       setEditFundTxData({ amount: '', remark: '' });
-      alert('交易记录更新成功！');
+      alert(t('fundTxUpdated'));
     } catch (e) {
       console.error('更新交易记录失败:', e);
-      alert('更新失败: ' + e.message);
+      alert(t('updateFailed') + ': ' + e.message);
     }
   };
 
@@ -1180,7 +1613,7 @@ const App = () => {
   };
 
   const handleDeleteFundTx = async (txId) => {
-    if (!confirm('确定要删除这条交易记录吗？')) return;
+    if (!confirm(t('confirmDeleteTx'))) return;
     
     try {
       const { error } = await supabase
@@ -1192,10 +1625,10 @@ const App = () => {
       
       // 重新获取交易记录
       await fetchFundTransactions();
-      alert('交易记录删除成功！');
+      alert(t('fundTxDeleted'));
     } catch (e) {
       console.error('删除交易记录失败:', e);
-      alert('删除失败: ' + e.message);
+      alert(`${t('deleteFailed')}: ${e.message}`);
     }
   };
 
@@ -1207,7 +1640,7 @@ const App = () => {
   // 添加基金交易记录功能
   const handleAddFundTx = async () => {
     if (!newFundTxData.amount || parseFloat(newFundTxData.amount) <= 0) {
-      alert('请输入有效金额');
+      alert(t('amountPlaceholder01'));
       return;
     }
 
@@ -1222,7 +1655,7 @@ const App = () => {
           rate: 0,
           client: currentUser.username,
           created_by: currentUser.username,
-          remark: newFundTxData.remark || '基金收益',
+          remark: newFundTxData.remark || t('fundProfitRemark'),
           status: 'approved',
           timestamp: new Date().toISOString(),
           created_at: new Date().toISOString()
@@ -1236,7 +1669,7 @@ const App = () => {
           rate: 0,
           client: currentUser.username,
           created_by: currentUser.username,
-          remark: newFundTxData.remark || '基金损失',
+          remark: newFundTxData.remark || t('fundLossRemark'),
           status: 'approved',
           timestamp: new Date().toISOString(),
           created_at: new Date().toISOString()
@@ -1259,10 +1692,10 @@ const App = () => {
       setAddFundTxModal(false);
       setNewFundTxData({ type: 'fund_profit', amount: '', remark: '' });
       
-      alert('交易记录添加成功！');
+      alert(t('fundTxAdded'));
     } catch (e) {
       console.error('添加交易记录失败:', e);
-      alert('添加失败: ' + e.message);
+      alert(t('addFailed') + ': ' + e.message);
     }
   };
 
@@ -1310,11 +1743,11 @@ const App = () => {
 
   const handleBatchDelete = async () => {
     if (selectedTransactions.size === 0) {
-      alert('请先选择要删除的记录');
+      alert(t('selectRecordsToDelete'));
       return;
     }
 
-    if (!confirm(`确定要删除选中的 ${selectedTransactions.size} 条记录吗？此操作不可撤销！`)) {
+    if (!confirm(String(t('confirmDeleteSelected')).replace('{count}', selectedTransactions.size))) {
       return;
     }
 
@@ -1344,22 +1777,22 @@ const App = () => {
       setSelectedTransactions(new Set());
       setShowBatchDelete(false);
       
-      alert(`成功删除 ${selectedTransactions.size} 条记录！`);
+      alert(String(t('batchDeleteSuccess')).replace('{count}', selectedTransactions.size));
     } catch (e) {
       console.error('批量删除失败:', e);
-      alert('删除失败: ' + e.message);
+      alert(`${t('batchDeleteFailed')}: ${e.message}`);
     }
   };
 
   const handleFundTransfer = async () => {
     if (!transferAmount || parseFloat(transferAmount) <= 0) {
-      alert('请输入有效金额');
+      alert(t('validAmountRequired'));
       return;
     }
 
     // 权限检查
     if (currentUser?.role !== 'admin') {
-      alert('权限不足：只有管理员可以进行基金转账操作');
+      alert(t('permissionDeniedAdminOnly'));
       return;
     }
 
@@ -1370,7 +1803,9 @@ const App = () => {
         // 银行转基金
         const idleCash = calculateIdleCash();
         if (amount > idleCash) {
-          alert(`银行闲置资金不足。可用：${formatMoney(idleCash)}，尝试：${formatMoney(amount)}`);
+          alert(String(t('bankIdleInsufficient'))
+            .replace('{available}', formatMoney(idleCash))
+            .replace('{attempt}', formatMoney(amount)));
           return;
         }
         
@@ -1397,7 +1832,9 @@ const App = () => {
         // 基金转银行
         const fundBalance = calculateFundBalance();
         if (amount > fundBalance) {
-          alert(`基金余额不足。可用：${formatMoney(fundBalance)}，尝试：${formatMoney(amount)}`);
+          alert(String(t('fundBalanceInsufficient'))
+            .replace('{available}', formatMoney(fundBalance))
+            .replace('{attempt}', formatMoney(amount)));
           return;
         }
         
@@ -1446,10 +1883,10 @@ const App = () => {
       setTransferAmount('');
       setTransferType('');
       
-      alert('转账成功！');
+      alert(t('transferSuccess'));
     } catch (e) {
       console.error('转账失败:', e);
-      alert('转账失败: ' + e.message);
+      alert(t('transferFailed') + ': ' + e.message);
     }
   };
 
@@ -1576,7 +2013,7 @@ const App = () => {
   };
   
   const handleDeleteReply = async (postId, replyId) => {
-    if (!window.confirm('确认删除此评论？')) return;
+    if (!window.confirm(t('confirmDeleteReply'))) return;
     
     try {
       const post = posts.find(p => p.id === postId);
@@ -1608,7 +2045,7 @@ const App = () => {
   };
 
   const handleDeletePost = async (postId) => {
-    if (!window.confirm('确认删除此帖子？')) return;
+    if (!window.confirm(t('confirmDeletePost'))) return;
     
     try {
       const { error } = await supabase
@@ -1647,15 +2084,15 @@ const App = () => {
       if (error) throw error;
 
       if (isAdmin) {
-        alert('星星名片创建成功');
+        alert(t('starCardCreated'));
       } else {
-        alert('星星名片申请已提交，等待管理员审批');
+        alert(t('starCardSubmitted'));
       }
       
       setNewCardModal(false);
       setNewCardData({ name: '', description: '', progress: 0 });
     } catch (e) {
-      alert('创建失败: ' + e.message);
+      alert(t('createFailed') + ': ' + e.message);
     }
   };
 
@@ -1674,17 +2111,17 @@ const App = () => {
 
       if (error) throw error;
 
-      alert('名片更新成功');
+      alert(t('starCardUpdated'));
       setEditingCardId(null);
     } catch (e) {
-      alert('更新失败: ' + e.message);
+      alert(t('updateFailed') + ': ' + e.message);
     }
   };
 
   const handlePlanetFundRequest = async (cardId) => {
     const amount = parseFloat(fundAmount);
     if (isNaN(amount) || amount <= 0) {
-      alert('请输入有效金额');
+      alert(t('invalidNumber'));
       return;
     }
 
@@ -1709,11 +2146,11 @@ const App = () => {
 
       if (error) throw error;
 
-      alert('星星开发资金申请已提交，等待管理员审批');
+      alert(t('starCardSubmitted'));
       setFundAmount('');
       setFundingCardId(null);
     } catch (e) {
-      alert('提交失败: ' + e.message);
+      alert(t('submitFailed') + ': ' + e.message);
     }
   };
 
@@ -1761,12 +2198,12 @@ const App = () => {
 
       if (error) throw error;
 
-      alert('银行资产登记成功');
+      alert(t('assetRegistered'));
       
       setNewAssetModal(false);
       setNewAssetData({ planetName: '', itemName: '', quantity: '', value: '' });
     } catch (e) {
-      alert('登记失败: ' + e.message);
+      alert(t('registerFailed') + ': ' + e.message);
     }
   };
   
@@ -1793,10 +2230,10 @@ const App = () => {
 
       if (error) throw error;
 
-      alert('资产更新成功');
+      alert(t('assetUpdated'));
       setEditingAssetId(null);
     } catch (e) {
-      alert('更新失败: ' + e.message);
+      alert(t('updateFailed') + ': ' + e.message);
     }
   };
 
@@ -1919,10 +2356,10 @@ const App = () => {
     setAuthError('');
     
     if (registeredUsers.find(u => u.username === authInput.username)) {
-      return setAuthError('该用户名已被注册');
+      return setAuthError(t('authUserExists'));
     }
     if (authInput.username === 'EUU') {
-      return setAuthError('EUU 是保留账号');
+      return setAuthError(t('authReservedAccount'));
     }
 
     try {
@@ -1944,7 +2381,7 @@ const App = () => {
       sessionStorage.setItem('current_bank_user_v2', JSON.stringify(userWithId));
       setAuthInput({ username: '', password: '' });
     } catch (error) { 
-      setAuthError("注册失败，服务器连接异常"); 
+      setAuthError(t('authRegisterFailed')); 
     }
   };
 
@@ -2025,7 +2462,7 @@ const App = () => {
         setModalOpen(false);
         setFormData({ client: '', principal: '', rate: '' });
       } else if (action === 'delete') {
-        if (!window.confirm('确认从服务器永久删除此记录？')) return;
+        if (!window.confirm(t('confirmDeleteRecordServer'))) return;
         const { error } = await supabase
           .from('transactions')
           .delete()
@@ -2128,7 +2565,7 @@ const App = () => {
         if (delError) throw delError;
       } else if (action === 'deleteAll') {
         // payload 应该是交易类型，如 'withdraw_inj' 或 'withdraw_dep'
-        if (!window.confirm('确认永久删除此账户的所有账单？此操作不可撤销！')) return;
+        if (!window.confirm(t('confirmDeleteAllBills'))) return;
         
         const allIds = transactions
           .filter(tx => tx.type === payload)
@@ -2211,8 +2648,9 @@ const App = () => {
         
         // 从remark中提取已结算次数
         let settledCount = 0;
-        if (cur.remark && cur.remark.includes('利息次数:')) {
-          const match = cur.remark.match(/利息次数:(\d+)/);
+        const interestPrefix = `${t('interestCountPrefix')}:`;
+        if (cur.remark && cur.remark.includes(interestPrefix)) {
+          const match = cur.remark.match(new RegExp(`${t('interestCountPrefix')}:\\s*(\\d+)`));
           if (match) settledCount = parseInt(match[1]);
         }
         
@@ -2453,13 +2891,13 @@ const App = () => {
         .filter(tx => ['fund_profit', 'fund_loss'].includes(tx.type))
         .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
       if (netProfit <= 0.0000001) {
-        alert('暂无可结算分红');
+        alert(t('noDividendToSettle'));
         return;
       }
 
       const fundPrincipal = calculateFundPrincipal();
       if (fundPrincipal <= 0.0000001) {
-        alert('基金本金为 0，无法结算');
+        alert(t('fundPrincipalZeroCannotSettle'));
         return;
       }
 
@@ -2481,7 +2919,7 @@ const App = () => {
 
       const totalNet = userNet.reduce((s, x) => s + x.net, 0);
       if (totalNet <= 0) {
-        alert('暂无持仓用户，无法结算');
+        alert(t('noHoldersToSettle'));
         return;
       }
 
@@ -2499,7 +2937,7 @@ const App = () => {
       })).filter(r => r.principal > 0);
 
       if (rows.length === 0) {
-        alert('暂无可结算分红');
+        alert(t('noDividendToSettle'));
         return;
       }
 
@@ -2553,9 +2991,11 @@ const App = () => {
 
       await fetchFundTransactions();
       await refreshTransactions();
-      alert(`分红结算完成：${rows.length}人，总额 ${distributedTotal.toFixed(3)}m`);
+      alert(String(t('fundDividendSettled'))
+        .replace('{count}', rows.length)
+        .replace('{amount}', distributedTotal.toFixed(3) + 'm'));
     } catch (e) {
-      alert('结算失败: ' + e.message);
+      alert(t('settleFailed') + ': ' + e.message);
     }
   };
   // 计算银行闲置资金（基于当前状态，不受历史删除影响）
@@ -2606,16 +3046,16 @@ const App = () => {
         <div className="max-w-2xl w-full bg-white p-8 rounded-2xl shadow-xl border border-gray-200">
           <div className="flex items-center gap-3 mb-6 text-red-600">
              <Settings className="w-8 h-8" />
-             <h1 className="text-2xl font-bold">应用尚未连接至数据库</h1>
+             <h1 className="text-2xl font-bold">{t('appNotConnectedTitle')}</h1>
           </div>
-          <p className="mb-4">检测到您正在独立环境 (如 Vercel) 运行此应用，但尚未配置 Supabase 环境变量。</p>
+          <p className="mb-4">{t('appNotConnectedHint')}</p>
           
           <div className="bg-slate-900 text-slate-300 p-4 rounded-lg overflow-x-auto mb-6 text-sm font-mono">
-            <p className="text-slate-500 mb-2"># 请在 Vercel 项目设置 → Environment Variables 中添加以下变量：</p>
+            <p className="text-slate-500 mb-2">{t('appNotConnectedVarsHint')}</p>
             <p>VITE_SUPABASE_URL=https://xxx.supabase.co</p>
             <p>VITE_SUPABASE_ANON_KEY=sb_publishable_...</p>
           </div>
-          <p className="text-sm text-gray-600">配置完成后，请在 Vercel 中重新部署 (Redeploy)。</p>
+          <p className="text-sm text-gray-600">{t('appNotConnectedRedeployHint')}</p>
         </div>
       </div>
     );
@@ -2630,7 +3070,7 @@ const App = () => {
             onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
             className="bg-white/60 hover:bg-white/80 text-gray-700 px-4 py-2 rounded-lg font-medium transition-colors border border-gray-300"
           >
-            {language === 'zh' ? 'EN' : '中文'}
+            {language === 'zh' ? 'EN' : t('langChinese')}
           </button>
         </div>
         <div className="bg-white w-full max-w-md p-8 shadow-2xl animate-in fade-in zoom-in-95 duration-300">
@@ -2705,7 +3145,7 @@ const App = () => {
                         <h3 className="text-xl font-bold text-gray-800 mb-2">{post.title}</h3>
                         <div className="flex items-center gap-4 text-sm text-gray-500">
                           <span className="font-medium text-indigo-600">{post.author}</span>
-                          <span>{new Date(post.created_at).toLocaleString('zh-CN')}</span>
+                          <span>{new Date(post.created_at).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</span>
                         </div>
                       </div>
                       {(isAdmin || post.author === currentUser.username) && (
@@ -2738,7 +3178,7 @@ const App = () => {
                                 }}
                                 className="text-indigo-600 hover:text-indigo-700 font-medium mt-2"
                               >
-                                {isExpanded ? '收起' : '查看全文'}
+                                {isExpanded ? t('collapse') : t('viewFull')}
                               </button>
                             )}
                           </>
@@ -2774,6 +3214,8 @@ const App = () => {
                             postId={post.id}
                             currentUser={currentUser}
                             isAdmin={isAdmin}
+                            language={language}
+                            t={t}
                             replyingTo={replyingTo}
                             setReplyingTo={setReplyingTo}
                             onDelete={handleDeleteReply}
@@ -2828,7 +3270,7 @@ const App = () => {
                       value={newPostData.title}
                       onChange={(e) => setNewPostData({ ...newPostData, title: e.target.value })}
                       className="w-full border-2 border-green-200 px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all"
-                      placeholder="请输入标题..."
+                      placeholder={t('titlePlaceholder')}
                     />
                   </div>
                   <div>
@@ -2839,7 +3281,7 @@ const App = () => {
                       onChange={(e) => setNewPostData({ ...newPostData, content: e.target.value })}
                       rows={6}
                       className="w-full border-2 border-green-200 px-4 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all resize-none"
-                      placeholder="写下你想说的..."
+                      placeholder={t('contentPlaceholder')}
                     />
                   </div>
                   <button
@@ -2885,7 +3327,7 @@ const App = () => {
     const soldByName = approvedAll
       .filter(tx => tx.type === 'bond_subscribe')
       .reduce((acc, tx) => {
-        const key = tx.client || '未知债券';
+        const key = tx.client || t('unknown');
         acc[key] = (acc[key] || 0) + (parseFloat(tx.principal) || 0);
         return acc;
       }, {});
@@ -2897,17 +3339,17 @@ const App = () => {
             <div>
               <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
                 <TrendingUp className="w-7 h-7 text-amber-600" />
-                银行债券
+                {t('bondsTitle')}
               </h1>
-              <p className="text-slate-500 mt-1 text-sm">管理员发售债券，成员申购（申购需审批）</p>
+              <p className="text-slate-500 mt-1 text-sm">{t('bondsSubtitle')}</p>
             </div>
             <div className="flex gap-3">
               <button onClick={() => setCurrentPage('bank')} className="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-medium transition-colors border border-amber-200">
-                返回银行
+                {t('backToBank')}
               </button>
               {isAdmin && (
                 <button onClick={() => setBondIssueModal(true)} className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white px-4 py-2 font-bold transition-all shadow">
-                  发售债券
+                  {t('issueBond')}
                 </button>
               )}
             </div>
@@ -2915,19 +3357,19 @@ const App = () => {
 
           <div className="bg-white border border-amber-200 shadow-sm p-4">
             <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-600">我的债券持仓（已审批）</div>
+              <div className="text-sm text-gray-600">{t('myBondHolding')}</div>
               <div className="text-base font-semibold text-gray-900">{formatMoney(myBond)}</div>
             </div>
-            <div className="text-xs text-gray-400 mt-2">申购会占用你的存款可用额度</div>
+            <div className="text-xs text-gray-400 mt-2">{t('bondSubscribeOccupyNote')}</div>
           </div>
 
           <div className="bg-white border border-amber-200 shadow-sm p-4">
             <div className="flex items-center justify-between mb-4">
-              <div className="font-semibold text-gray-800">在售债券</div>
-              <div className="text-xs text-gray-500">共 {bondProducts.length} 个产品</div>
+              <div className="font-semibold text-gray-800">{t('onSaleBonds')}</div>
+              <div className="text-xs text-gray-500">{String(t('productCount')).replace('{count}', bondProducts.length)}</div>
             </div>
             {bondProducts.length === 0 ? (
-              <div className="text-center text-gray-400 py-10">暂无在售债券</div>
+              <div className="text-center text-gray-400 py-10">{t('noOnSaleBonds')}</div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {bondProducts.map(p => {
@@ -2938,51 +3380,45 @@ const App = () => {
                       <div className="flex items-center justify-between">
                         <div className="font-bold text-gray-800">{p.name}</div>
                         <div className={`text-xs px-2 py-1 border ${p.category === 'long' ? 'border-purple-200 bg-purple-50 text-purple-700' : 'border-blue-200 bg-blue-50 text-blue-700'}`}>
-                          {p.category === 'long' ? '长期' : '短期'}
+                          {p.category === 'long' ? t('longTerm') : t('shortTerm')}
                         </div>
                       </div>
-                      <div className="mt-2 text-sm text-gray-600">期限：{p.term_days} 天</div>
-                      <div className="mt-1 text-sm text-gray-600">利率：{parseFloat(p.rate_per_week || 0).toFixed(3)}% / 周</div>
-                      <div className="mt-1 text-xs text-gray-500">发行：{formatMoney(p.total_supply)}，已售：{formatMoney(sold)}，剩余：{formatMoney(remaining)}</div>
+                      <div className="mt-2 text-sm text-gray-600">{t('termLabel')}：{p.term_days} {language === 'zh' ? '天' : 'days'}</div>
+                      <div className="mt-1 text-sm text-gray-600">{t('rateLabelPerWeek')}：{parseFloat(p.rate_per_week || 0).toFixed(3)}% {t('perWeek')}</div>
+                      <div className="mt-1 text-xs text-gray-500">{t('issueLabel')}：{formatMoney(p.total_supply)}，{t('soldLabel')}：{formatMoney(sold)}，{t('remainingLabel')}：{formatMoney(remaining)}</div>
                       <div className="mt-3 flex items-center justify-end gap-2">
                         {isAdmin && (
                           <>
                             <button
                               onClick={() => handleEndBondIssue(p)}
                               className="text-gray-700 hover:text-gray-900 p-2 hover:bg-gray-50 border border-gray-200"
-                              title="发行结束"
+                              title={t('endIssue')}
                             >
                               <Lock className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleRedeemAllBond(p)}
                               className="text-green-700 hover:text-green-900 p-2 hover:bg-green-50 border border-green-200"
-                              title="全额赎回"
+                              title={t('redeemAll')}
                             >
                               <CheckSquare className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => openBondEditModal(p)}
                               className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 border border-blue-200"
-                              title="编辑"
+                              title={t('editShort')}
                             >
                               <Edit className="w-4 h-4" />
                             </button>
                             <button
                               onClick={() => handleDeleteBondProduct(p)}
                               className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 border border-red-200"
-                              title="删除"
+                              title={t('delete')}
                             >
                               <Trash2 className="w-4 h-4" />
                             </button>
                           </>
                         )}
-                        <button
-                          onClick={() => openBondSubscribeModal(p)}
-                          className="bg-white hover:bg-gray-50 text-amber-700 px-4 py-2 font-bold transition-colors border border-amber-200"
-                        >
-                          申购
-                        </button>
                       </div>
                     </div>
                   );
@@ -2993,22 +3429,22 @@ const App = () => {
 
           <div className="bg-white border border-amber-200 shadow-sm p-4">
             <div className="flex items-center justify-between mb-4">
-              <div className="font-semibold text-gray-800">债券账单（全员可见）</div>
-              <div className="text-xs text-gray-500">共 {bondBills.length} 条</div>
+              <div className="font-semibold text-gray-800">{t('bondBillsPublic')}</div>
+              <div className="text-xs text-gray-500">{String(t('billCount')).replace('{count}', bondBills.length)}</div>
             </div>
             {bondBills.length === 0 ? (
-              <div className="text-center text-gray-400 py-10">暂无账单记录</div>
+              <div className="text-center text-gray-400 py-10">{t('noBills')}</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="min-w-full text-xs">
                   <thead>
                     <tr className="text-left text-gray-500 border-b border-amber-200">
-                      <th className="py-2 pr-3">时间</th>
-                      <th className="py-2 pr-3">类型</th>
-                      <th className="py-2 pr-3">用户</th>
-                      <th className="py-2 pr-3">债券</th>
-                      <th className="py-2 pr-3 text-right">金额</th>
-                      <th className="py-2 pr-3">状态</th>
+                      <th className="py-2 pr-3">{t('billTime')}</th>
+                      <th className="py-2 pr-3">{t('billType')}</th>
+                      <th className="py-2 pr-3">{t('billUser')}</th>
+                      <th className="py-2 pr-3">{t('billBond')}</th>
+                      <th className="py-2 pr-3 text-right">{t('billAmount')}</th>
+                      <th className="py-2 pr-3">{t('billStatus')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -3033,7 +3469,7 @@ const App = () => {
               <div className="bg-white border-2 border-amber-200 shadow-2xl max-w-md w-full p-8 space-y-6">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="font-bold text-xl text-gray-900">编辑债券</h3>
+                    <h3 className="font-bold text-xl text-gray-900">{t('bondEditTitle')}</h3>
                     <p className="text-sm text-gray-500 mt-1">{bondEditTarget.name}</p>
                   </div>
                   <button
@@ -3049,34 +3485,34 @@ const App = () => {
 
                 <form onSubmit={handleUpdateBondProduct} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">债券名称</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{t('bondName')}</label>
                     <input value={bondEditData.name} onChange={e => setBondEditData({ ...bondEditData, name: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">类型</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('category')}</label>
                       <select value={bondEditData.category} onChange={e => setBondEditData({ ...bondEditData, category: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none">
-                        <option value="short">短期</option>
-                        <option value="long">长期</option>
+                        <option value="short">{t('shortTerm')}</option>
+                        <option value="long">{t('longTerm')}</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">期限(天)</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('termDays')}</label>
                       <input value={bondEditData.term_days} onChange={e => setBondEditData({ ...bondEditData, term_days: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">利率(%/周)</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('ratePerWeek')}</label>
                       <input value={bondEditData.rate_per_week} onChange={e => setBondEditData({ ...bondEditData, rate_per_week: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">发行额度(m)</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('totalSupplyM')}</label>
                       <input value={bondEditData.total_supply} onChange={e => setBondEditData({ ...bondEditData, total_supply: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                     </div>
                   </div>
                   <button type="submit" className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold py-3 transition-all">
-                    保存修改
+                    {t('saveChanges')}
                   </button>
                 </form>
               </div>
@@ -3088,8 +3524,8 @@ const App = () => {
               <div className="bg-white border-2 border-amber-200 shadow-2xl max-w-md w-full p-8 space-y-6">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="font-bold text-xl text-gray-900">发售债券</h3>
-                    <p className="text-sm text-gray-500 mt-1">创建长期/短期债券产品</p>
+                    <h3 className="font-bold text-xl text-gray-900">{t('createBondTitle')}</h3>
+                    <p className="text-sm text-gray-500 mt-1">{t('createBondSubtitle')}</p>
                   </div>
                   <button onClick={() => setBondIssueModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
                     <X className="w-6 h-6" />
@@ -3097,34 +3533,34 @@ const App = () => {
                 </div>
                 <form onSubmit={handleCreateBondProduct} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">债券名称</label>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{t('bondName')}</label>
                     <input value={bondIssueData.name} onChange={e => setBondIssueData({ ...bondIssueData, name: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">类型</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('category')}</label>
                       <select value={bondIssueData.category} onChange={e => setBondIssueData({ ...bondIssueData, category: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none">
-                        <option value="short">短期</option>
-                        <option value="long">长期</option>
+                        <option value="short">{t('shortTerm')}</option>
+                        <option value="long">{t('longTerm')}</option>
                       </select>
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">期限(天)</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('termDays')}</label>
                       <input value={bondIssueData.term_days} onChange={e => setBondIssueData({ ...bondIssueData, term_days: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                     </div>
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">利率(%/周)</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('ratePerWeek')}</label>
                       <input value={bondIssueData.rate_per_week} onChange={e => setBondIssueData({ ...bondIssueData, rate_per_week: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                     </div>
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">发行额度(m)</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('totalSupplyM')}</label>
                       <input value={bondIssueData.total_supply} onChange={e => setBondIssueData({ ...bondIssueData, total_supply: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                     </div>
                   </div>
                   <button type="submit" className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold py-3 transition-all">
-                    创建并发售
+                    {t('createAndIssue')}
                   </button>
                 </form>
               </div>
@@ -3136,7 +3572,7 @@ const App = () => {
               <div className="bg-white border-2 border-amber-200 shadow-2xl max-w-md w-full p-8 space-y-6">
                 <div className="flex justify-between items-center">
                   <div>
-                    <h3 className="font-bold text-xl text-gray-900">申购债券</h3>
+                    <h3 className="font-bold text-xl text-gray-900">{t('subscribeBondTitle')}</h3>
                     <p className="text-sm text-gray-500 mt-1">{bondSubscribeTarget.name}</p>
                   </div>
                   <button onClick={() => setBondSubscribeModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
@@ -3144,17 +3580,17 @@ const App = () => {
                   </button>
                 </div>
                 <div className="text-sm text-gray-600 space-y-1">
-                  <div>类型：{bondSubscribeTarget.category === 'long' ? '长期' : '短期'}</div>
-                  <div>期限：{bondSubscribeTarget.term_days} 天</div>
-                  <div>利率：{parseFloat(bondSubscribeTarget.rate_per_week || 0).toFixed(3)}% / 周</div>
+                  <div>{t('category')}：{bondSubscribeTarget.category === 'long' ? t('longTerm') : t('shortTerm')}</div>
+                  <div>{t('termLabel')}：{bondSubscribeTarget.term_days} {language === 'zh' ? '天' : 'days'}</div>
+                  <div>{t('rateLabelPerWeek')}：{parseFloat(bondSubscribeTarget.rate_per_week || 0).toFixed(3)}% {t('perWeek')}</div>
                 </div>
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">申购金额(m)</label>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{t('subscribeAmountM')}</label>
                   <input value={bondSubscribeAmount} onChange={e => setBondSubscribeAmount(e.target.value)} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
-                  <p className="text-xs text-gray-500 mt-2">提交后需管理员审批</p>
+                  <p className="text-xs text-gray-500 mt-2">{t('requiresApproval')}</p>
                 </div>
                 <button onClick={submitBondSubscribe} className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold py-3 transition-all">
-                  提交申购
+                  {t('submitSubscribe')}
                 </button>
               </div>
             </div>
@@ -3196,7 +3632,7 @@ const App = () => {
             {planetCards.length === 0 ? (
               <div className="col-span-full bg-white border border-blue-200 p-12 text-center">
                 <Activity className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                <p className="text-gray-400 text-lg">暂无星星名片</p>
+                <p className="text-gray-400 text-lg">{t('noPlanetCards')}</p>
               </div>
             ) : (
               planetCards.map(card => {
@@ -3305,7 +3741,7 @@ const App = () => {
                           value={fundAmount}
                           onChange={(e) => setFundAmount(e.target.value)}
                           className="w-full border-2 border-green-300 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 outline-none"
-                          placeholder="输入金额..."
+                          placeholder={t('amountInputPlaceholder')}
                         />
                         <div className="flex gap-2">
                           <button
@@ -3555,14 +3991,14 @@ const App = () => {
                                   <button
                                     onClick={() => handleUpdateAsset(asset.id)}
                                     className="text-green-600 hover:text-green-800 p-2 hover:bg-green-50 rounded transition-colors"
-                                    title="保存"
+                                    title={t('save')}
                                   >
                                     <CheckCircle className="w-4 h-4" />
                                   </button>
                                   <button
                                     onClick={() => setEditingAssetId(null)}
                                     className="text-gray-600 hover:text-gray-800 p-2 hover:bg-gray-100 rounded transition-colors"
-                                    title="取消"
+                                    title={t('cancel')}
                                   >
                                     <X className="w-4 h-4" />
                                   </button>
@@ -3580,18 +4016,18 @@ const App = () => {
                                       });
                                     }}
                                     className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded transition-colors"
-                                    title="编辑"
+                                    title={t('editShort')}
                                   >
                                     <Edit className="w-4 h-4" />
                                   </button>
                                   <button
                                     onClick={() => {
-                                      if (window.confirm('确认删除此资产记录？')) {
+                                      if (window.confirm(t('confirmDeleteAssetRecord'))) {
                                         handleCRUD('delete', asset.id);
                                       }
                                     }}
                                     className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors"
-                                    title="删除"
+                                    title={t('delete')}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
@@ -3694,16 +4130,16 @@ const App = () => {
     });
     
     const handleDeleteSettlement = async (settleId) => {
-      if (!window.confirm(`确认删除结算周期的 ${settleIds[settleId].length} 条记录？此操作不可撤销！`)) return;
+      if (!window.confirm(String(t('confirmDeleteSettlement')).replace('{count}', settleIds[settleId].length))) return;
       
       try {
         for (const tx of settleIds[settleId]) {
           await supabase.from('transactions').delete().eq('id', tx.id);
         }
-        alert('删除成功！');
+        alert(t('deleteSuccess'));
         setInterestManageModal(false);
       } catch (e) {
-        alert('删除失败: ' + e.message);
+        alert(`${t('deleteFailed')}: ${e.message}`);
       }
     };
     
@@ -3711,7 +4147,7 @@ const App = () => {
       <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
         <div className="bg-white shadow-2xl max-w-3xl w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
           <div className="flex justify-between items-center border-b pb-4">
-            <h3 className="font-bold text-xl text-gray-800">利息结算记录管理</h3>
+            <h3 className="font-bold text-xl text-gray-800">{t('interestSettlementManageTitle')}</h3>
             <button onClick={() => setInterestManageModal(false)}>
               <X className="w-6 h-6 text-gray-400 hover:text-gray-600" />
             </button>
@@ -3731,16 +4167,16 @@ const App = () => {
                   <div className="flex justify-between items-start">
                     <div className="flex-1">
                       <div className="flex items-center gap-3 mb-2">
-                        <span className="text-sm font-semibold text-gray-700">结算 #{idx + 1}</span>
-                        <span className="text-xs text-gray-500">ID: {sid}</span>
+                        <span className="text-sm font-semibold text-gray-700">{t('settlementPrefix')} #{idx + 1}</span>
+                        <span className="text-xs text-gray-500">{t('settlementIdLabel')}: {sid}</span>
                       </div>
                       <div className="text-sm text-gray-600 space-y-1">
-                        <div>⏰ 时间: {time}</div>
-                        <div>📊 记录数: {records.length}条</div>
+                        <div>⏰ {t('settlementTime')}: {time}</div>
+                        <div>📊 {t('settlementCountLabel')}: {records.length}</div>
                         <div className="flex gap-4">
-                          <span className="text-green-600">💰 收入: +{totalIncome.toFixed(3)}m</span>
-                          <span className="text-red-600">💸 支出: -{totalExpense.toFixed(3)}m</span>
-                          <span className="font-semibold text-purple-600">净利: {(totalIncome - totalExpense).toFixed(3)}m</span>
+                          <span className="text-green-600">💰 {t('incomeLabel')}: +{totalIncome.toFixed(3)}m</span>
+                          <span className="text-red-600">💸 {t('expenseLabel')}: -{totalExpense.toFixed(3)}m</span>
+                          <span className="font-semibold text-purple-600">{t('netProfitLabel')}: {(totalIncome - totalExpense).toFixed(3)}m</span>
                         </div>
                       </div>
                     </div>
@@ -3749,14 +4185,14 @@ const App = () => {
                       className="flex items-center gap-1 px-3 py-2 bg-red-100 text-red-700 hover:bg-red-200 rounded transition-colors text-sm font-medium"
                     >
                       <Trash2 className="w-4 h-4" />
-                      删除
+                      {t('delete')}
                     </button>
                   </div>
                 </div>
               );
             })}
             {Object.keys(settleIds).length === 0 && (
-              <div className="text-center text-gray-400 py-8">暂无利息结算记录</div>
+              <div className="text-center text-gray-400 py-8">{t('noSettlementRecords')}</div>
             )}
           </div>
         </div>
@@ -3782,13 +4218,13 @@ const App = () => {
             <div>
               <h2 className="text-4xl font-black tracking-wider mb-2 flex items-center gap-3">
                 <TrendingUp className="w-10 h-10" />
-                银行基金
+                {t('fundPageTitle')}
               </h2>
-              <p className="text-orange-100 font-medium">独立的基金投资管理系统</p>
+              <p className="text-orange-100 font-medium">{t('fundPageSubtitle')}</p>
             </div>
             <div>
               <button onClick={() => setCurrentPage('bank')} className="bg-white/20 hover:bg-white/30 backdrop-blur-sm px-6 py-3 font-bold transition-all border border-white/30">
-                返回银行
+                {t('backToBank')}
               </button>
             </div>
           </div>
@@ -3804,7 +4240,7 @@ const App = () => {
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2 text-gray-700">
                     <TrendingUp className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold text-base">基金账户</span>
+                    <span className="font-semibold text-base">{t('fundAccountTitle')}</span>
                   </div>
                   <div className="flex items-center gap-2 justify-end">
                     <div className="text-base font-semibold text-gray-900">{formatMoney(calculateFundBalance())}</div>
@@ -3814,40 +4250,40 @@ const App = () => {
                   <div className="w-full h-10 px-3 border border-green-200 bg-green-50 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <TrendingUp className="w-4 h-4 text-green-600 shrink-0" />
-                      <span className="text-xs text-gray-600 whitespace-nowrap">基金余额</span>
+                      <span className="text-xs text-gray-600 whitespace-nowrap">{t('fundBalanceLabel')}</span>
                     </div>
                     <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{formatMoney(calculateFundBalance())}</span>
                   </div>
                   <div className="w-full h-10 px-3 border border-green-200 bg-green-50 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <Wallet className="w-4 h-4 text-green-600 shrink-0" />
-                      <span className="text-xs text-gray-600 whitespace-nowrap">银行余额</span>
+                      <span className="text-xs text-gray-600 whitespace-nowrap">{t('bankBalanceLabel')}</span>
                     </div>
                     <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{formatMoney(calculateIdleCash())}</span>
                   </div>
                   <div className="w-full h-10 px-3 border border-purple-200 bg-purple-50 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <Activity className="w-4 h-4 text-purple-600 shrink-0" />
-                      <span className="text-xs text-gray-600 whitespace-nowrap">总收益</span>
+                      <span className="text-xs text-gray-600 whitespace-nowrap">{t('totalProfitLabel')}</span>
                     </div>
                     <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{formatMoney(calculateFundProfit())}</span>
                   </div>
                   <div className="w-full h-10 px-3 border border-blue-200 bg-blue-50 flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2 min-w-0">
                       <Activity className="w-4 h-4 text-blue-600 shrink-0" />
-                      <span className="text-xs text-gray-600 whitespace-nowrap">收益率</span>
+                      <span className="text-xs text-gray-600 whitespace-nowrap">{t('yieldRateLabel')}</span>
                     </div>
                     <span className="text-sm font-semibold text-gray-900 whitespace-nowrap">{calculateFundYieldPercent().toFixed(2)}%</span>
                   </div>
                 </div>
-                <p className="mt-3 text-xs text-gray-500">基金 + 银行 + 收益统计</p>
+                <p className="mt-3 text-xs text-gray-500">{t('fundStatsHint')}</p>
               </div>
               {/* 右侧：管理员公告栏 */}
               <div className="border-l border-green-200 pl-6">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2 text-gray-700">
                     <MessageSquare className="w-5 h-5 text-green-600" />
-                    <span className="font-semibold text-base">管理员公告</span>
+                    <span className="font-semibold text-base">{t('announcement')}</span>
                   </div>
                   {currentUser?.role === 'admin' && (
                     <button
@@ -3857,7 +4293,7 @@ const App = () => {
                       }}
                       className="text-green-600 hover:text-green-700 text-sm font-medium transition-colors"
                     >
-                      编辑
+                      {t('editShort')}
                     </button>
                   )}
                 </div>
@@ -3869,14 +4305,14 @@ const App = () => {
                       onChange={(e) => setFundAnnouncementInput(e.target.value)}
                       className="w-full border border-green-200 px-3 py-2 text-sm focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none resize-none"
                       rows={6}
-                      placeholder="输入公告内容..."
+                      placeholder={t('announcementPlaceholder')}
                     />
                     <div className="flex gap-2">
                       <button
                         onClick={handleUpdateFundAnnouncement}
                         className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium transition-colors"
                       >
-                        保存
+                        {t('save')}
                       </button>
                       <button
                         onClick={() => {
@@ -3885,14 +4321,14 @@ const App = () => {
                         }}
                         className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 text-sm font-medium transition-colors"
                       >
-                        取消
+                        {t('cancel')}
                       </button>
                     </div>
                   </div>
                 ) : (
                   <div className="bg-green-50 border border-green-200 p-4 min-h-[120px]">
                     <p className="text-sm text-gray-700 whitespace-pre-wrap">
-                      {fundAnnouncement.content || '暂无公告内容'}
+                      {fundAnnouncement.content || t('announcementPlaceholder')}
                     </p>
                   </div>
                 )}
@@ -3908,13 +4344,13 @@ const App = () => {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2 text-gray-700">
                       <ArrowDownRight className="w-5 h-5 text-green-600" />
-                      <span className="font-semibold text-base">资金转账</span>
+                      <span className="font-semibold text-base">{t('fundTransferTitle')}</span>
                     </div>
                     <button
                       onClick={handleSettleFundDividends}
                       className="bg-purple-100 hover:bg-purple-200 text-purple-700 px-4 py-2 text-sm font-medium transition-colors"
                     >
-                      结算分红
+                      {t('settleDividends')}
                     </button>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -3923,14 +4359,14 @@ const App = () => {
                       className="bg-gradient-to-r from-green-100 to-green-200 hover:from-green-200 hover:to-green-300 text-green-700 px-4 py-3 font-bold transition-all flex items-center justify-center gap-2 border border-green-300 shadow-sm hover:shadow-md"
                     >
                       <ArrowDownRight className="w-4 h-4" />
-                      银行 → 基金
+                      {t('transferBankToFund')}
                     </button>
                     <button
                       onClick={() => { setTransferModal(true); setTransferType('out'); }}
                       className="bg-gradient-to-r from-teal-100 to-teal-200 hover:from-teal-200 hover:to-teal-300 text-teal-700 px-4 py-3 font-bold transition-all flex items-center justify-center gap-2 border border-teal-300 shadow-sm hover:shadow-md"
                     >
                       <ArrowUpRight className="w-4 h-4" />
-                      基金 → 银行
+                      {t('transferFundToBank')}
                     </button>
                   </div>
                 </div>
@@ -3939,13 +4375,13 @@ const App = () => {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2 text-gray-700">
                       <Lock className="w-5 h-5 text-green-600" />
-                      <span className="font-semibold text-base">资金转账</span>
+                      <span className="font-semibold text-base">{t('fundTransferTitle')}</span>
                     </div>
                   </div>
                   <div className="text-center py-6">
                     <Lock className="w-8 h-8 text-gray-400 mx-auto mb-3" />
-                    <p className="text-gray-500">权限不足</p>
-                    <p className="text-gray-400 text-xs mt-1">只有管理员可以进行基金转账操作</p>
+                    <p className="text-gray-500">{t('permissionDeniedAdminOnly')}</p>
+                    <p className="text-gray-400 text-xs mt-1">{t('fundTransferPermissionHint')}</p>
                   </div>
                 </div>
               )}
@@ -3958,24 +4394,24 @@ const App = () => {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2 text-gray-700">
                       <TrendingUp className="w-5 h-5 text-green-600" />
-                      <span className="font-semibold text-base">基金操作</span>
+                      <span className="font-semibold text-base">{t('fundActionsTitle')}</span>
                     </div>
-                    <div className="text-xs text-gray-500">提交后需管理员审批</div>
+                    <div className="text-xs text-gray-500">{t('requiresAdminApproval')}</div>
                   </div>
                   <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
                     <div className="h-10 w-full border border-blue-200 bg-blue-50 flex items-center justify-center gap-2 px-3">
                       <TrendingUp className="w-4 h-4 text-blue-600" />
-                      <span className="text-xs text-gray-600">申购本金</span>
+                      <span className="text-xs text-gray-600">{t('subscribedPrincipal')}</span>
                       <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundNetSubscribed())}</span>
                     </div>
                     <div className="h-10 w-full border border-purple-200 bg-purple-50 flex items-center justify-center gap-2 px-3">
                       <Activity className="w-4 h-4 text-purple-600" />
-                      <span className="text-xs text-gray-600">预估收益</span>
+                      <span className="text-xs text-gray-600">{t('estimatedProfit')}</span>
                       <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundEstimatedProfit())}</span>
                     </div>
                     <div className="h-10 w-full border border-green-200 bg-green-50 flex items-center justify-center gap-2 px-3">
                       <Wallet className="w-4 h-4 text-green-600" />
-                      <span className="text-xs text-gray-600">基金余额</span>
+                      <span className="text-xs text-gray-600">{t('fundBalanceLabel')}</span>
                       <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundBalance())}</span>
                     </div>
                   </div>
@@ -3985,21 +4421,21 @@ const App = () => {
                       className="h-10 bg-gradient-to-r from-emerald-100 to-green-100 hover:from-emerald-200 hover:to-green-200 text-green-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-green-200"
                     >
                       <PlusCircle className="w-4 h-4" />
-                      申购
+                      {t('subscribeFund')}
                     </button>
                     <button
                       onClick={() => openFundUserModal('redeem')}
                       className="h-10 bg-gradient-to-r from-blue-100 to-sky-100 hover:from-blue-200 hover:to-sky-200 text-blue-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-blue-200"
                     >
                       <ArrowUpRight className="w-4 h-4" />
-                      赎回
+                      {t('redeemFund')}
                     </button>
                     <button
                       onClick={() => openFundUserModal('dividend_withdraw')}
                       className="h-10 bg-gradient-to-r from-purple-100 to-fuchsia-100 hover:from-purple-200 hover:to-fuchsia-200 text-purple-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-purple-200"
                     >
                       <ArrowUpRight className="w-4 h-4" />
-                      提取分红
+                      {t('withdrawDividend')}
                     </button>
                   </div>
                 </div>
@@ -4008,11 +4444,11 @@ const App = () => {
                   <div className="flex items-center justify-between mb-4">
                     <div className="flex items-center gap-2 text-gray-700">
                       <TrendingUp className="w-5 h-5 text-green-600" />
-                      <span className="font-semibold text-base">基金操作</span>
+                      <span className="font-semibold text-base">{t('fundActionsTitle')}</span>
                     </div>
                   </div>
                   <div className="text-center py-6">
-                    <p className="text-gray-500">该区域为普通用户申购/赎回入口</p>
+                    <p className="text-gray-500">{t('fundActionsHint')}</p>
                   </div>
                 </div>
               )}
@@ -4024,7 +4460,7 @@ const App = () => {
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2 text-gray-700">
                 <MessageSquare className="w-5 h-5 text-green-600" />
-                <span className="font-semibold text-base">基金交易记录</span>
+                <span className="font-semibold text-base">{t('fundTransactionsTitle')}</span>
               </div>
               <div className="flex items-center gap-2">
                 {canEditFundTransactions() && (
@@ -4035,7 +4471,7 @@ const App = () => {
                         className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
                       >
                         <Trash2 className="w-4 h-4" />
-                        删除选中 ({selectedTransactions.size})
+                        {t('deleteSelected')} ({selectedTransactions.size})
                       </button>
                     )}
                     <button
@@ -4047,14 +4483,14 @@ const App = () => {
                       }`}
                     >
                       <CheckSquare className="w-4 h-4" />
-                      {showBatchDelete ? '完成选择' : '批量选择'}
+                      {showBatchDelete ? t('doneSelect') : t('batchSelect')}
                     </button>
                     <button
                       onClick={() => setAddFundTxModal(true)}
                       className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2"
                     >
                       <PlusCircle className="w-4 h-4" />
-                      添加记录
+                      {t('addRecord')}
                     </button>
                   </>
                 )}
@@ -4066,7 +4502,7 @@ const App = () => {
               <div className="w-full">
                 <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
                   <TrendingUp className="w-4 h-4 text-green-600" />
-                  基金盈亏记录
+                  {t('profitLossRecords')}
                 </h4>
                 <div className="overflow-hidden">
                   <table className="w-full text-sm table-fixed">
@@ -4081,19 +4517,19 @@ const App = () => {
                             />
                           </th>
                         )}
-                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-32 whitespace-nowrap">时间</th>
-                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-20 whitespace-nowrap">类型</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-700 text-xs w-24 whitespace-nowrap">金额</th>
-                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">备注</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-32 whitespace-nowrap">{t('time')}</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-20 whitespace-nowrap">{t('type')}</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-700 text-xs w-24 whitespace-nowrap">{t('amount')}</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">{t('remarkLabel')}</th>
                         {canEditFundTransactions() && (
-                          <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs w-24">操作</th>
+                          <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs w-24">{t('actions')}</th>
                         )}
                       </tr>
                     </thead>
                     <tbody>
                       {fundTransactions.filter(tx => ['fund_profit', 'fund_loss'].includes(tx.type)).length === 0 ? (
                         <tr>
-                          <td colSpan={canEditFundTransactions() ? (showBatchDelete ? "6" : "5") : "4"} className="text-center py-6 text-gray-400 text-xs">暂无盈亏记录</td>
+                          <td colSpan={canEditFundTransactions() ? (showBatchDelete ? "6" : "5") : "4"} className="text-center py-6 text-gray-400 text-xs">{t('noProfitLossRecords')}</td>
                         </tr>
                       ) : (
                         fundTransactions
@@ -4124,7 +4560,7 @@ const App = () => {
                                   tx.type === 'fund_profit' ? 'bg-emerald-100 text-emerald-700' :
                                   'bg-red-100 text-red-700'
                                 }`}>
-                                  {tx.type === 'fund_profit' ? '收益' : '损失'}
+                                  {tx.type === 'fund_profit' ? t('profit') : t('loss')}
                                 </span>
                               </td>
                               <td className={`py-2 px-3 text-right font-medium text-xs ${
@@ -4142,13 +4578,13 @@ const App = () => {
                                       onClick={() => handleEditFundTx(tx)}
                                       className="inline-flex items-center justify-center whitespace-nowrap bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 text-xs font-medium transition-colors"
                                     >
-                                      编辑
+                                      {t('editShort')}
                                     </button>
                                     <button
                                       onClick={() => handleDeleteFundTx(tx.id)}
                                       className="inline-flex items-center justify-center whitespace-nowrap bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 text-xs font-medium transition-colors"
                                     >
-                                      删除
+                                      {t('delete')}
                                     </button>
                                   </div>
                                 </td>
@@ -4165,7 +4601,7 @@ const App = () => {
               <div className="w-full">
                 <h4 className="text-lg font-semibold text-gray-800 mb-3 flex items-center gap-2">
                   <ArrowDownRight className="w-4 h-4 text-blue-600" />
-                  银行资金记录
+                  {t('bankFundRecords')}
                 </h4>
                 <div className="overflow-hidden">
                   <table className="w-full text-sm table-fixed">
@@ -4180,19 +4616,19 @@ const App = () => {
                             />
                           </th>
                         )}
-                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-32 whitespace-nowrap">时间</th>
-                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-20 whitespace-nowrap">类型</th>
-                        <th className="text-right py-2 px-3 font-semibold text-gray-700 text-xs w-24 whitespace-nowrap">金额</th>
-                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">备注</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-32 whitespace-nowrap">{t('time')}</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs w-20 whitespace-nowrap">{t('type')}</th>
+                        <th className="text-right py-2 px-3 font-semibold text-gray-700 text-xs w-24 whitespace-nowrap">{t('amount')}</th>
+                        <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">{t('remarkLabel')}</th>
                         {canEditFundTransactions() && (
-                          <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs w-24">操作</th>
+                          <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs w-24">{t('actions')}</th>
                         )}
                       </tr>
                     </thead>
                     <tbody>
                       {fundTransactions.filter(tx => tx.type === 'bank_fund').length === 0 ? (
                         <tr>
-                          <td colSpan={canEditFundTransactions() ? (showBatchDelete ? "6" : "5") : "4"} className="text-center py-6 text-gray-400 text-xs">暂无银行资金记录</td>
+                          <td colSpan={canEditFundTransactions() ? (showBatchDelete ? "6" : "5") : "4"} className="text-center py-6 text-gray-400 text-xs">{t('noBankFundRecords')}</td>
                         </tr>
                       ) : (
                         fundTransactions
@@ -4222,7 +4658,7 @@ const App = () => {
                                 <span className={`inline-flex px-2 py-1 text-xs font-medium whitespace-nowrap ${
                                   tx.principal > 0 ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
                                 }`}>
-                                  {tx.principal > 0 ? '转入' : '转出'}
+                                  {tx.principal > 0 ? t('transferIn') : t('transferOut')}
                                 </span>
                               </td>
                               <td className={`py-2 px-3 text-right font-medium text-xs ${
@@ -4240,13 +4676,13 @@ const App = () => {
                                       onClick={() => handleEditFundTx(tx)}
                                       className="inline-flex items-center justify-center whitespace-nowrap bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 text-xs font-medium transition-colors"
                                     >
-                                      编辑
+                                      {t('edit')}
                                     </button>
                                     <button
                                       onClick={() => handleDeleteFundTx(tx.id)}
                                       className="inline-flex items-center justify-center whitespace-nowrap bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 text-xs font-medium transition-colors"
                                     >
-                                      删除
+                                      {t('delete')}
                                     </button>
                                   </div>
                                 </td>
@@ -4266,11 +4702,11 @@ const App = () => {
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white shadow-2xl p-8 max-w-md w-full animate-in">
               <h3 className="text-2xl font-bold text-gray-800 mb-6">
-                {transferType === 'in' ? '银行转基金' : '基金转银行'}
+                {transferType === 'in' ? t('transferBankToFund') : t('transferFundToBank')}
               </h3>
               
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">转账金额 (m单位)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('transferAmountLabel')}</label>
                 <input
                   type="number"
                   required
@@ -4279,15 +4715,15 @@ const App = () => {
                   value={transferAmount}
                   onChange={(e) => setTransferAmount(e.target.value)}
                   className="w-full border-2 border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none"
-                  placeholder="请输入转账金额（如：0.1）"
+                  placeholder={t('transferAmountPlaceholder')}
                 />
               </div>
               
               <div className="mb-6 p-4 bg-green-50">
                 <p className="text-sm text-gray-600">
                   {transferType === 'in' ? 
-                    `将从银行闲置资金转出，银行可用闲置资金：${formatMoney(calculateIdleCash())}` :
-                    `将从基金账户转出，基金可用余额：${formatMoney(calculateFundBalance())}`
+                    String(t('transferHintIn')).replace('{amount}', formatMoney(calculateIdleCash())) :
+                    String(t('transferHintOut')).replace('{amount}', formatMoney(calculateFundBalance()))
                   }
                 </p>
               </div>
@@ -4297,13 +4733,13 @@ const App = () => {
                   onClick={() => { setTransferModal(false); setTransferAmount(''); setTransferType(''); }}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 font-medium transition-colors"
                 >
-                  取消
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={handleFundTransfer}
                   className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-3 font-bold transition-all"
                 >
-                  确认转账
+                  {t('confirmTransfer')}
                 </button>
               </div>
             </div>
@@ -4314,22 +4750,22 @@ const App = () => {
         {addFundTxModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white shadow-2xl p-8 max-w-md w-full animate-in">
-              <h3 className="text-2xl font-bold text-gray-800 mb-6">添加基金交易记录</h3>
+              <h3 className="text-2xl font-bold text-gray-800 mb-6">{t('addFundTx')}</h3>
               
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">记录类型</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('recordType')}</label>
                 <select
                   value={newFundTxData.type}
                   onChange={(e) => setNewFundTxData({...newFundTxData, type: e.target.value})}
                   className="w-full border border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none"
                 >
-                  <option value="fund_profit">基金收益</option>
-                  <option value="fund_loss">基金损失</option>
+                  <option value="fund_profit">{t('fundProfit')}</option>
+                  <option value="fund_loss">{t('fundLoss')}</option>
                 </select>
               </div>
               
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">金额 (m单位)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('amountM')}</label>
                 <input
                   type="number"
                   required
@@ -4338,26 +4774,26 @@ const App = () => {
                   value={newFundTxData.amount}
                   onChange={(e) => setNewFundTxData({...newFundTxData, amount: e.target.value})}
                   className="w-full border border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none"
-                  placeholder="请输入金额（如：0.1）"
+                  placeholder={t('amountPlaceholder01')}
                 />
               </div>
               
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">备注说明</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('remarkLabel')}</label>
                 <textarea
                   value={newFundTxData.remark}
                   onChange={(e) => setNewFundTxData({...newFundTxData, remark: e.target.value})}
                   className="w-full border border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none resize-none"
                   rows={3}
-                  placeholder="请输入备注说明（可选）"
+                  placeholder={t('remarkPlaceholderOptional')}
                 />
               </div>
               
               <div className="mb-6 p-4 bg-green-50">
                 <p className="text-sm text-gray-600">
                   {newFundTxData.type === 'fund_profit' ? 
-                    `将增加基金收益 ${formatMoney(parseFloat(newFundTxData.amount) || 0)}` :
-                    `将记录基金损失 ${formatMoney(parseFloat(newFundTxData.amount) || 0)}`
+                    `${t('willIncreaseFundProfit')} ${formatMoney(parseFloat(newFundTxData.amount) || 0)}` :
+                    `${t('willRecordFundLoss')} ${formatMoney(parseFloat(newFundTxData.amount) || 0)}`
                   }
                 </p>
               </div>
@@ -4367,13 +4803,13 @@ const App = () => {
                   onClick={handleCancelAddFundTx}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 font-medium transition-colors"
                 >
-                  取消
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={handleAddFundTx}
                   className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-3 font-bold transition-all"
                 >
-                  确认添加
+                  {t('confirmAdd')}
                 </button>
               </div>
             </div>
@@ -4386,7 +4822,7 @@ const App = () => {
             <div className="bg-white shadow-2xl p-8 max-w-md w-full animate-in">
               <div className="flex items-center justify-between mb-6">
                 <h3 className="text-2xl font-bold text-gray-800">
-                  {fundUserAction === 'subscribe' ? '基金申购申请' : fundUserAction === 'redeem' ? '基金赎回申请' : '提取分红申请'}
+                  {fundUserAction === 'subscribe' ? t('fundSubscribeRequest') : fundUserAction === 'redeem' ? t('fundRedeemRequest') : t('fundDividendWithdrawRequest')}
                 </h3>
                 <button onClick={() => setFundUserModal(false)}>
                   <X className="w-6 h-6 text-gray-400 hover:text-gray-600" />
@@ -4394,7 +4830,7 @@ const App = () => {
               </div>
 
               <div className="mb-6">
-                <label className="block text-sm font-medium text-gray-700 mb-2">金额 (m单位)</label>
+                <label className="block text-sm font-medium text-gray-700 mb-2">{t('amountM')}</label>
                 <input
                   type="number"
                   required
@@ -4403,13 +4839,13 @@ const App = () => {
                   value={fundUserAmount}
                   onChange={(e) => setFundUserAmount(e.target.value)}
                   className="w-full border border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none"
-                  placeholder="请输入金额（如：0.100）"
+                  placeholder={t('amountPlaceholder0100')}
                 />
               </div>
 
               <div className="mb-6 p-4 bg-green-50 border border-green-200">
                 <p className="text-sm text-gray-600">
-                  提交后将进入管理员审批队列。
+                  {t('submitWillEnterApproval')}
                 </p>
               </div>
 
@@ -4418,13 +4854,13 @@ const App = () => {
                   onClick={() => setFundUserModal(false)}
                   className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 font-medium transition-colors"
                 >
-                  取消
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={submitFundUserRequest}
                   className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-3 font-bold transition-all"
                 >
-                  提交申请
+                  {t('submitRequest')}
                 </button>
               </div>
             </div>
@@ -4435,19 +4871,19 @@ const App = () => {
         {interestManageModal && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
             <div className="bg-white shadow-2xl p-8 max-w-md w-full animate-in">
-              <h3 className="text-2xl font-bold text-gray-800 mb-6">管理利息记录</h3>
+              <h3 className="text-2xl font-bold text-gray-800 mb-6">{t('manageInterestTitle')}</h3>
               <div className="flex flex-wrap gap-4">
                 <button
                   onClick={() => setInterestManageModal(false)}
                   className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-3 font-medium transition-colors"
                 >
-                  取消
+                  {t('cancel')}
                 </button>
                 <button
                   onClick={handleInterestManage}
                   className="bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 text-white px-4 py-3 font-bold transition-all"
                 >
-                  确认
+                  {t('confirm')}
                 </button>
               </div>
             </div>
@@ -4508,7 +4944,7 @@ const App = () => {
             <h1 className="text-3xl font-bold text-slate-800 flex items-center gap-3">
               <span className="text-4xl font-bold bg-gradient-to-r from-blue-600 via-emerald-500 to-blue-600 bg-clip-text text-transparent animate-gradient">{t('loginTitle')}</span> {t('loginSubtitle')}
               <span className="relative overflow-hidden border border-emerald-400 text-emerald-950 text-xs px-2 py-1 font-bold whitespace-nowrap bg-gradient-to-r from-emerald-200 via-emerald-100 to-emerald-200 shadow-[0_0_18px_rgba(16,185,129,0.35)] animate-pulse">
-                琉璃主权资本
+                {t('brandBadge')}
               </span>
               {isAdmin && <span className="bg-blue-100 text-blue-700 text-xs px-2 py-1 rounded font-bold">LSVC</span>}
             </h1>
@@ -4520,7 +4956,7 @@ const App = () => {
                  onClick={() => setLanguage(language === 'zh' ? 'en' : 'zh')}
                  className="bg-white hover:bg-gray-50 text-gray-700 px-3 py-1.5 font-medium transition-colors border border-green-200 text-sm"
                >
-                 {language === 'zh' ? 'EN' : '中文'}
+                 {language === 'zh' ? 'EN' : t('langChinese')}
                </button>
                <div className={`px-4 py-2 font-bold text-lg ${stats.netCashFlow >= -0.001 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
                   {t('netCashFlow')}: {stats.netCashFlow > 0 ? '+' : ''}{formatMoney(stats.netCashFlow)} {t('perWeek')}
@@ -4534,7 +4970,7 @@ const App = () => {
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2 text-gray-700">
               <MessageSquare className="w-5 h-5 text-green-600" />
-              <span className="font-semibold text-base">管理员公告</span>
+              <span className="font-semibold text-base">{t('announcement')}</span>
             </div>
             {currentUser?.role === 'admin' && (
               <button
@@ -4544,7 +4980,7 @@ const App = () => {
                 }}
                 className="text-green-600 hover:text-green-700 text-sm font-medium transition-colors"
               >
-                编辑
+                {t('editShort')}
               </button>
             )}
           </div>
@@ -4595,9 +5031,9 @@ const App = () => {
                 {pendingTx.map(tx => (
                   <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
                     <div>
-                      <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type || 'unknown')}]</span>
-                      <span>{tx.client || '未知'} - {formatMoney(tx.principal || 0)}</span>
-                      <span className="text-xs text-gray-500 block">申请人: {tx.created_by || '未知'}</span>
+                      <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type || 'unknown', language)}]</span>
+                      <span>{tx.client || t('unknown')} - {formatMoney(tx.principal || 0)}</span>
+                      <span className="text-xs text-gray-500 block">{t('applicantLabel')}: {tx.created_by || t('unknown')}</span>
                     </div>
                     <div className="flex gap-2">
                       <button 
@@ -4648,11 +5084,11 @@ const App = () => {
             </button>
             <button onClick={() => setCurrentPage('fund')} className="bg-gradient-to-r from-green-100 to-emerald-100 hover:from-green-200 hover:to-emerald-200 text-green-700 px-8 py-2 font-bold transition-all duration-300 flex items-center gap-2 border border-green-300 shadow-sm hover:shadow-md transform hover:scale-105 active:scale-95">
               <TrendingUp className="w-4 h-4" />
-              银行基金
+              {t('bankFund')}
             </button>
             <button onClick={() => setCurrentPage('bonds')} className="bg-gradient-to-r from-amber-100 to-yellow-100 hover:from-amber-200 hover:to-yellow-200 text-amber-800 px-8 py-2 font-bold transition-all flex items-center gap-2 border border-amber-300">
               <TrendingUp className="w-4 h-4" />
-              银行债券
+              {t('bankBonds')}
             </button>
             {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
             {isAdmin && <button
@@ -4660,7 +5096,7 @@ const App = () => {
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
             >
               <Trash2 className="w-4 h-4" />
-              管理利息记录
+              {t('manageInterestRecords')}
             </button>}
         </div>
 
@@ -4669,7 +5105,7 @@ const App = () => {
           <StatCard title={t('totalAssets')} value={formatMoney(stats.totalAssets)} subtext={''} icon={<ArrowUpRight className="text-green-600" />} />
           <StatCard title={t('totalLiabilities')} value={formatMoney(stats.totalLoans)} subtext={''} icon={<ArrowDownLeft className="text-red-500" />} />
           <StatCard title={t('idleFunds')} value={formatMoney(stats.idleCash)} subtext={t('availableBalance')} icon={<Wallet className="text-yellow-500" />} />
-          <StatCard title={t('totalAssetValue')} value={formatMoney(stats.bankAssetsValue)} subtext="不动产" icon={<Wallet className="text-purple-600" />} />
+          <StatCard title={t('totalAssetValue')} value={formatMoney(stats.bankAssetsValue)} subtext={t('realEstate')} icon={<Wallet className="text-purple-600" />} />
           <StatCard title={t('interestPool')} value={formatMoney(stats.interestPool)} subtext={t('weeklyNetInterest')} icon={<Activity className="text-purple-600" />} />
           <StatCard title={t('approvalQueue')} value={pendingTx.length} subtext={t('pendingItems')} icon={<Shield className="text-blue-600" />} />
         </div>
@@ -4678,7 +5114,7 @@ const App = () => {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            <TableSection title={t('loanAssets')} color="red" icon={ArrowUpRight} 
              data={isAdmin ? displayTx.filter(tx => tx.type === 'loan') : displayTx.filter(tx => tx.type === 'loan' && (tx.status === 'approved' || tx.created_by === currentUser?.username))} 
-             isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} onRepay={(id) => {if(window.confirm('确认还款此笔贷款？')) handleCRUD('repay', id)}} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel}
+             isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} onRepay={(id) => {if(window.confirm(t('confirmRepayLoan'))) handleCRUD('repay', id)}} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel}
              interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_income')} applyInterest={true} />
            
            <div className="space-y-6">
@@ -4697,17 +5133,17 @@ const App = () => {
                <div className="flex flex-wrap gap-3">
                  <div className="px-3 py-2 rounded border border-purple-200 bg-purple-50 flex items-center gap-2">
                    <ArrowDownLeft className="w-4 h-4 text-purple-600" />
-                   <span className="text-xs text-gray-600">注资</span>
+                   <span className="text-xs text-gray-600">{t('injectionShort')}</span>
                    <span className="text-sm font-semibold text-gray-900">{formatMoney(stats.injectionBalance)}</span>
                  </div>
                  <div className="px-3 py-2 rounded border border-green-200 bg-green-50 flex items-center gap-2">
                    <Wallet className="w-4 h-4 text-green-600" />
-                   <span className="text-xs text-gray-600">存款</span>
+                   <span className="text-xs text-gray-600">{t('depositShort')}</span>
                    <span className="text-sm font-semibold text-gray-900">{formatMoney(stats.depositBalance)}</span>
                  </div>
                  <div className="px-3 py-2 rounded border border-blue-200 bg-blue-50 flex items-center gap-2">
                    <TrendingUp className="w-4 h-4 text-blue-600" />
-                   <span className="text-xs text-gray-600">基金</span>
+                   <span className="text-xs text-gray-600">{t('fundShort')}</span>
                    <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundBalance())}</span>
                  </div>
                </div>
@@ -4745,7 +5181,7 @@ const App = () => {
                     <div className="flex justify-between items-center">
                         <div>
                             <h3 className="font-bold text-xl text-gray-900">{editId ? t('edit') : t('create')}</h3>
-                            <p className="text-sm text-gray-500 mt-1">{getLocalizedTypeLabel(modalType)}</p>
+                            <p className="text-sm text-gray-500 mt-1">{getLocalizedTypeLabel(modalType, language)}</p>
                         </div>
                         <button onClick={() => setModalOpen(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
                             <X className="w-6 h-6"/>
@@ -4765,7 +5201,7 @@ const App = () => {
                                 value={formData.client} 
                                 onChange={e => setFormData({...formData, client: e.target.value})} 
                                 className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 disabled:bg-gray-100 disabled:cursor-not-allowed transition-all hover:border-green-300" 
-                                placeholder="输入客户或对象名称"
+                                placeholder={t('clientPlaceholderText')}
                             />
                         </div>
                         
@@ -4840,7 +5276,7 @@ const App = () => {
                                 value={formData.rate} 
                                 className="w-full border-2 border-green-200 px-3 py-2.5 outline-none bg-gray-100 cursor-not-allowed text-gray-500" 
                             />
-                            <p className="text-xs text-gray-500 mt-2 bg-blue-50 p-2">💡 固定 3%，不允许更改</p>
+                            <p className="text-xs text-gray-500 mt-2 bg-blue-50 p-2">{t('fixedRateHint')}</p>
                           </div>
                         )}
                         {!['injection', 'withdrawal', 'withdraw_dep', 'withdraw_inj'].includes(modalType) && (
@@ -4901,16 +5337,50 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
   // 使用单个state管理所有行的展开状态
   const [openActionsId, setOpenActionsId] = React.useState(null);
   const [editingCell, setEditingCell] = React.useState(null); // { id, field, value }
+  const containerRef = React.useRef(null);
+  const tableRef = React.useRef(null);
+  const [tableScale, setTableScale] = React.useState(1);
+  const [scaledHeight, setScaledHeight] = React.useState(null);
   
   const calculateWeeklyInterest = (principal, rate) => {
     return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
   };
+
+  React.useLayoutEffect(() => {
+    const el = containerRef.current;
+    const tbl = tableRef.current;
+    if (!el || !tbl) return;
+
+    const compute = () => {
+      const containerWidth = el.clientWidth;
+      const tableWidth = tbl.scrollWidth;
+      if (!containerWidth || !tableWidth) return;
+
+      const scale = Math.min(1, containerWidth / tableWidth);
+      setTableScale(scale);
+
+      const h = tbl.scrollHeight;
+      setScaledHeight(h ? Math.ceil(h * scale) : null);
+    };
+
+    compute();
+
+    const ro = new ResizeObserver(() => compute());
+    ro.observe(el);
+    ro.observe(tbl);
+
+    window.addEventListener('resize', compute);
+    return () => {
+      window.removeEventListener('resize', compute);
+      ro.disconnect();
+    };
+  }, [data.length, isAdmin, language]);
   
   const handleCellEdit = async (rowId, field, newValue) => {
     try {
       const numValue = parseFloat(newValue);
       if (isNaN(numValue) || numValue < 0) {
-        alert('请输入有效的数字');
+        alert(t('invalidNumber'));
         setEditingCell(null);
         return;
       }
@@ -4919,7 +5389,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
         // 对于利息次数，存储在备注字段中
         const { error } = await supabase
           .from('transactions')
-          .update({ remark: `利息次数:${Math.round(numValue)}` })
+          .update({ remark: `${t('interestCountPrefix')}:${Math.round(numValue)}` })
           .eq('id', rowId);
         
         if (error) throw error;
@@ -4935,7 +5405,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
       
       setEditingCell(null);
     } catch (e) {
-      alert('更新失败: ' + e.message);
+      alert(t('updateFailed') + ': ' + e.message);
       setEditingCell(null);
     }
   };
@@ -4965,14 +5435,16 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
               onClick={onDeleteAll}
               className="ml-4 bg-red-100 text-red-700 hover:bg-red-200 px-3 py-1 rounded text-xs font-medium transition-colors border border-red-300"
             >
-              删除所有
+              {t('deleteAll')}
             </button>
           )}
         </div>
       </div>
 
-      <div className="overflow-x-auto">
-        <table className="min-w-full">
+      <div ref={containerRef} className="overflow-hidden">
+        <div style={{ height: scaledHeight ?? undefined }}>
+          <div style={{ transform: `scale(${tableScale})`, transformOrigin: '0 0' }}>
+            <table ref={tableRef} className="min-w-full">
           <thead className="bg-gray-50">
             <tr>
               <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{t('status')}</th>
@@ -4980,10 +5452,10 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
               <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{t('clientLabel')}</th>
               <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{t('productType')}</th>
               <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">{t('amountLabel')}</th>
-              <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">周利息</th>
-              <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">次数</th>
-              <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">日期</th>
-              {isAdmin && <th className="px-1.5 py-1.5 text-center text-xs font-semibold text-gray-500 whitespace-nowrap">操作</th>}
+              <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">{t('weeklyInterestLabel')}</th>
+              <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">{t('cyclesLabel')}</th>
+              <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{t('dateLabel')}</th>
+              {isAdmin && <th className="px-1.5 py-1.5 text-center text-xs font-semibold text-gray-500 whitespace-nowrap">{t('actions')}</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
@@ -4999,8 +5471,9 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
               const rowTime = row.timestamp ? new Date(row.timestamp) : null;
               // 先尝试从 remark 中解析 settlement_count，如果没有则计算
               let cyclesForRow = 0;
-              if (row.remark && row.remark.includes('利息次数:')) {
-                const match = row.remark.match(/利息次数:(\d+)/);
+              const interestPrefix = `${t('interestCountPrefix')}:`;
+              if (row.remark && row.remark.includes(interestPrefix)) {
+                const match = row.remark.match(new RegExp(`${t('interestCountPrefix')}:\\s*(\\d+)`));
                 cyclesForRow = match ? parseInt(match[1]) : 0;
               } else {
                 cyclesForRow = (applyInterest && rowTime)
@@ -5027,8 +5500,8 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
               return (
                 <tr key={row.id} className={`hover:bg-gray-50 text-xs ${isInterestRecord ? (isIncome ? 'bg-green-50' : 'bg-orange-50') : ''}`}>
                   <td className="px-1.5 py-1.5 whitespace-nowrap">{row.status === 'pending' ? <span className="text-amber-600 bg-amber-50 px-1 py-0.5 rounded text-xs">{t('pending')}</span> : row.status === 'rejected' ? <span className="text-red-600 bg-red-50 px-1 py-0.5 rounded text-xs">{t('rejected')}</span> : <span className="text-green-600 bg-green-50 px-1 py-0.5 rounded text-xs">{t('effective')}</span>}</td>
-                  <td className={`px-1.5 py-1.5 font-bold whitespace-nowrap ${isIncome ? 'text-green-700' : 'text-orange-700'}`}>{getLocalizedTypeLabel(row.type)}</td>
-                  <td className="px-1.5 py-1.5 font-medium truncate max-w-xs">{row.client}</td>
+                  <td className={`px-1.5 py-1.5 font-bold whitespace-nowrap ${isIncome ? 'text-green-700' : 'text-orange-700'}`}>{getLocalizedTypeLabel(row.type, language)}</td>
+                  <td className="px-1.5 py-1.5 font-medium whitespace-nowrap">{row.client}</td>
                   <td className="px-1.5 py-1.5 text-xs whitespace-nowrap"><span className="bg-blue-50 text-blue-700 px-1.5 py-0.5 rounded inline-block text-xs">{productTypeLabel}</span></td>
                   <td className={`px-1.5 py-1.5 text-right font-mono font-bold whitespace-nowrap ${isIncome ? 'text-green-600' : (row.type.includes('withdraw') ? 'text-red-600' : 'text-gray-800')}`}>
                     {isAdmin && !isInterestRecord ? (
@@ -5050,7 +5523,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                         <span 
                           onClick={() => setEditingCell({ id: row.id, field: 'principal', value: row.principal })}
                           className="cursor-pointer hover:bg-blue-100 px-1 rounded"
-                          title="点击编辑"
+                          title={t('clickToEdit')}
                         >
                           {isIncome ? '+' : (row.type.includes('withdraw') ? '-' : '+')}{(totalAmount || 0).toFixed(3)}m
                         </span>
@@ -5080,7 +5553,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                         <span 
                           onClick={() => setEditingCell({ id: row.id, field: 'settlement_count', value: cyclesForRow })}
                           className="cursor-pointer hover:bg-blue-100 px-1 rounded"
-                          title="点击编辑"
+                          title={t('clickToEdit')}
                         >
                           {cyclesForRow}
                         </span>
@@ -5092,19 +5565,19 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                   <td className="px-1.5 py-1.5 text-xs text-gray-500 whitespace-nowrap">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
                   {isAdmin && <td className="px-1.5 py-1.5 text-center relative">
                     <div className="relative inline-block">
-                      <button onClick={() => setOpenActionsId(showActions ? null : row.id)} className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-200" title="操作">
+                      <button onClick={() => setOpenActionsId(showActions ? null : row.id)} className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-200" title={t('actions')}>
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z" /></svg>
                       </button>
                       {showActions && (
                         <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-300 rounded shadow-lg z-10">
                           <button onClick={() => { onEdit(row); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-indigo-600 flex items-center gap-2">
-                            <Edit className="w-3 h-3" /> 编辑
+                            <Edit className="w-3 h-3" /> {t('editShort')}
                           </button>
                           {onRepay && row.type === 'loan' && <button onClick={() => { onRepay(row.id); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-blue-600">
-                            还款
+                            {t('repay')}
                           </button>}
                           <button onClick={() => { onDelete(row.id); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2">
-                            <Trash2 className="w-3 h-3" /> 删除
+                            <Trash2 className="w-3 h-3" /> {t('delete')}
                           </button>
                         </div>
                       )}
@@ -5115,16 +5588,18 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
             })}
             {data.length === 0 && <tr><td colSpan={isAdmin ? "9" : "8"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
           </tbody>
-        </table>
+            </table>
+          </div>
+        </div>
       </div>
     </div>
   );
 };
 
 // ReplyItem 组件 - 递归渲染评论和嵌套回复
-const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyingTo, onDelete, depth = 0, expandedReplies, setExpandedReplies }) => {
+const ReplyItem = ({ reply, postId, currentUser, isAdmin, language, t, replyingTo, setReplyingTo, onDelete, depth = 0, expandedReplies, setExpandedReplies }) => {
   const [replyContent, setReplyContent] = React.useState('');
-  const t = (key) => translations['zh']?.[key] || key;
+  const tFn = t || ((key) => translations[language || 'zh']?.[key] || translations['zh']?.[key] || key);
   
   const canDelete = isAdmin || reply.author === currentUser.username;
   const replyKey = `${postId}-${reply.id}`;
@@ -5140,7 +5615,7 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
         .eq('id', postId)
         .single();
       
-      if (!posts) throw new Error('帖子不存在');
+      if (!posts) throw new Error(tFn('postNotFound'));
       
       const newReply = {
         id: Date.now(),
@@ -5191,14 +5666,14 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
         <div className="flex items-start justify-between mb-2">
           <div className="flex items-center gap-2 flex-1">
             <span className="font-medium text-sm text-indigo-600">{reply.author}</span>
-            <span className="text-xs text-gray-400">{new Date(reply.timestamp).toLocaleString('zh-CN')}</span>
+            <span className="text-xs text-gray-400">{new Date(reply.timestamp).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US')}</span>
           </div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setReplyingTo({ postId, replyId: reply.id })}
               className="text-xs text-gray-500 hover:text-indigo-600 transition-colors"
             >
-              <MessageSquare className="w-3.5 h-3.5 inline" /> 回复
+              <MessageSquare className="w-3.5 h-3.5 inline" /> {tFn('reply')}
             </button>
             {canDelete && (
               <button
@@ -5230,7 +5705,7 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
                     }}
                     className="text-indigo-600 hover:text-indigo-700 font-medium text-xs mt-1"
                   >
-                    {isExpanded ? '收起' : '查看全文'}
+                    {isExpanded ? tFn('collapse') : tFn('viewFull')}
                   </button>
                 )}
               </>
@@ -5245,14 +5720,14 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
               type="text"
               value={replyContent}
               onChange={(e) => setReplyContent(e.target.value)}
-              placeholder="写下你的回复..."
+              placeholder={tFn('replyPlaceholder')}
               className="flex-1 border border-green-200 px-3 py-1.5 text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 outline-none"
             />
             <button
               onClick={handleReplySubmit}
               className="bg-indigo-600 hover:bg-indigo-700 text-white px-3 py-1.5 text-sm font-medium transition-colors flex items-center gap-1"
             >
-              <Send className="w-3.5 h-3.5" /> 回复
+              <Send className="w-3.5 h-3.5" /> {tFn('reply')}
             </button>
           </div>
         )}
@@ -5268,6 +5743,8 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
               postId={postId}
               currentUser={currentUser}
               isAdmin={isAdmin}
+              language={language}
+              t={t}
               replyingTo={replyingTo}
               setReplyingTo={setReplyingTo}
               onDelete={onDelete}
@@ -5283,10 +5760,26 @@ const ReplyItem = ({ reply, postId, currentUser, isAdmin, replyingTo, setReplyin
 };
 
 // 使用错误边界包裹App组件
-const AppWithErrorBoundary = () => (
-  <ErrorBoundary>
-    <App />
-  </ErrorBoundary>
-);
+const AppWithErrorBoundary = () => {
+  const savedLang = (() => {
+    try {
+      return sessionStorage.getItem('language') || localStorage.getItem('language') || 'zh';
+    } catch {
+      return 'zh';
+    }
+  })();
+  const t = (key) => {
+    try {
+      return translations[savedLang]?.[key] || translations['zh']?.[key] || key;
+    } catch {
+      return key;
+    }
+  };
+  return (
+    <ErrorBoundary t={t}>
+      <App />
+    </ErrorBoundary>
+  );
+};
 
 export default AppWithErrorBoundary;
