@@ -817,6 +817,186 @@ const App = () => {
   // 论坛 State
   const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum', 'planet', 'assets', 'fund', 'bonds'
   const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
+
+  const parseInterestCountFromRemark = (remark) => {
+    if (!remark) return null;
+    const prefixes = [
+      `${translations.zh?.interestCountPrefix || '利息次数'}:`,
+      `${translations.en?.interestCountPrefix || 'Interest cycles'}:`,
+      '利息次数:',
+      'Interest cycles:'
+    ];
+    for (const p of prefixes) {
+      if (!remark.includes(p)) continue;
+      const m = remark.match(new RegExp(`${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*(\\d+)`));
+      if (m && m[1] != null) return parseInt(m[1], 10);
+    }
+    return null;
+  };
+
+  const getAccruedInterestForTx = (tx, interestExpenseRecords = []) => {
+    if (!tx) return 0;
+    const principal = parseFloat(tx.principal) || 0;
+    const rate = parseFloat(tx.rate) || 0;
+    if (!principal || !rate) return 0;
+
+    const overrideCycles = parseInterestCountFromRemark(tx.remark);
+    const txTime = tx.timestamp ? new Date(tx.timestamp) : null;
+    const cycles = overrideCycles != null
+      ? overrideCycles
+      : (txTime
+          ? interestExpenseRecords.filter(r => {
+              if (!r.timestamp) return false;
+              const rt = new Date(r.timestamp);
+              return rt >= txTime;
+            }).length
+          : 0);
+
+    const weekly = principal * rate / 100;
+    return weekly * (cycles || 0);
+  };
+
+  const aggregateAccountByClient = (rows, interestExpenseRecords, type, getGroupKey = null) => {
+    const map = new Map();
+    for (const tx of rows) {
+      const clientKey = tx.client || tx.created_by || 'unknown';
+      const groupKey = getGroupKey ? getGroupKey(tx, clientKey) : clientKey;
+      const prev = map.get(groupKey);
+      const principal = parseFloat(tx.principal) || 0;
+      const weekly = (parseFloat(tx.principal) || 0) * (parseFloat(tx.rate) || 0) / 100;
+      const accrued = getAccruedInterestForTx(tx, interestExpenseRecords);
+      if (!prev) {
+        map.set(groupKey, {
+          ...tx,
+          id: `agg-${type}-${groupKey}`,
+          client: clientKey,
+          source_ids: [tx.id],
+          principal_sum: principal,
+          weekly_sum: weekly,
+          accrued_sum: accrued,
+          tx_count: 1,
+          product_type: tx.product_type || ''
+        });
+      } else {
+        prev.source_ids = [...(prev.source_ids || []), tx.id];
+        prev.principal_sum += principal;
+        prev.weekly_sum += weekly;
+        prev.accrued_sum += accrued;
+        prev.tx_count += 1;
+        prev.timestamp = prev.timestamp || tx.timestamp;
+        prev.product_type = prev.product_type === (tx.product_type || '') ? prev.product_type : 'mixed';
+      }
+    }
+
+    return Array.from(map.values()).map(r => {
+      const principal = r.principal_sum || 0;
+      const rate = principal > 0 ? (r.weekly_sum / principal) * 100 : 0;
+      return {
+        ...r,
+        principal: principal,
+        rate: rate
+      };
+    });
+  };
+
+  const getAvailableForClient = (accountType, clientName, productType = null) => {
+    const approved = transactions.filter(tx => tx.status === 'approved');
+    const interestExpenseRecords = approved.filter(tx => tx.type === 'interest_expense' && (accountType === 'injection'
+      ? tx.client === '注资利息支出'
+      : tx.client === '存款利息支出'));
+
+    const baseType = accountType;
+    const withdrawType = accountType === 'injection' ? 'withdraw_inj' : 'withdraw_dep';
+
+    const principals = approved
+      .filter(tx => {
+        if (tx.type !== baseType) return false;
+        if ((tx.client || tx.created_by) !== clientName) return false;
+        if (accountType === 'deposit' && productType) return (tx.product_type || 'normal') === productType;
+        return true;
+      })
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+    const interest = approved
+      .filter(tx => {
+        if (tx.type !== baseType) return false;
+        if ((tx.client || tx.created_by) !== clientName) return false;
+        if (accountType === 'deposit' && productType) return (tx.product_type || 'normal') === productType;
+        return true;
+      })
+      .reduce((sum, tx) => sum + getAccruedInterestForTx(tx, interestExpenseRecords), 0);
+
+    const withdrawn = approved
+      .filter(tx => {
+        if (tx.type !== withdrawType) return false;
+        if ((tx.client || tx.created_by) !== clientName) return false;
+        if (accountType === 'deposit' && productType) return (tx.product_type || 'normal') === productType;
+        return true;
+      })
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+    // 说明：已实现“撤资/取款会从对应账单扣减本金”的机制。
+    // 因此 principals 已经是扣减后的余额，不需要再减 withdrawn，否则会重复扣减。
+    let available = principals + interest;
+
+    if (accountType === 'deposit') {
+      const bondUsed = approved
+        .filter(tx => tx.type === 'bond_subscribe' && tx.created_by === clientName)
+        .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+      available -= bondUsed;
+    }
+
+    return { principals, interest, withdrawn, available };
+  };
+
+  const applyApprovedWithdrawalToBills = async (withdrawTx) => {
+    if (!withdrawTx) return;
+    const amount = parseFloat(withdrawTx.principal) || 0;
+    if (amount <= 0) return;
+
+    const isDepositWithdraw = withdrawTx.type === 'withdraw_dep';
+    const baseType = isDepositWithdraw ? 'deposit' : 'injection';
+    const clientName = withdrawTx.client || withdrawTx.created_by;
+    if (!clientName) return;
+
+    const productType = isDepositWithdraw ? (withdrawTx.product_type || 'normal') : null;
+
+    // 从“已批准”的账单里扣减（优先扣早的）
+    const baseBills = (transactions || [])
+      .filter(t => t.status === 'approved' && t.type === baseType)
+      .filter(t => (t.client || t.created_by) === clientName)
+      .filter(t => {
+        if (!isDepositWithdraw) return true;
+        return (t.product_type || 'normal') === productType;
+      })
+      .filter(t => parseFloat((parseFloat(t.principal) || 0).toFixed(3)) > 0)
+      .slice()
+      .sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+    let remaining = amount;
+    for (const bill of baseBills) {
+      if (remaining <= 0.0000001) break;
+      const cur = parseFloat(bill.principal) || 0;
+      const next = Math.max(0, cur - remaining);
+      const nextRounded = parseFloat(next.toFixed(3));
+      const deducted = cur - next;
+      remaining -= deducted;
+
+      if (nextRounded === 0) {
+        const { error } = await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', bill.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from('transactions')
+          .update({ principal: nextRounded })
+          .eq('id', bill.id);
+        if (error) throw error;
+      }
+    }
+  };
   const [expandedReplies, setExpandedReplies] = useState(new Set()); // 展开的评论ID
   const [posts, setPosts] = useState([]);
   const [newPostModal, setNewPostModal] = useState(false);
@@ -886,7 +1066,9 @@ const App = () => {
   // 批量删除 State
   const [selectedTransactions, setSelectedTransactions] = useState(new Set());
   const [showBatchDelete, setShowBatchDelete] = useState(false);
-  
+  const [editingFundTxId, setEditingFundTxId] = useState(null);
+  const [editingFundTxData, setEditingFundTxData] = useState({ principal: '', rate: '', remark: '' });
+
   // 利息管理 State
   const [interestManageModal, setInterestManageModal] = useState(false);
 
@@ -897,6 +1079,23 @@ const App = () => {
     } catch (e) {
       console.error('Translation error:', e, 'key:', key, 'language:', language);
       return key;
+    }
+  };
+
+  const handleAggregatedDelete = async (row) => {
+    try {
+      if (!row?.source_ids?.length) return;
+      if (!window.confirm(t('confirmDeleteTx'))) return;
+
+      const { error } = await supabase
+        .from('transactions')
+        .delete()
+        .in('id', row.source_ids);
+
+      if (error) throw error;
+      await refreshTransactions();
+    } catch (e) {
+      alert(t('deleteFailed') + ': ' + (e?.message || e));
     }
   };
 
@@ -2395,41 +2594,31 @@ const App = () => {
             payload = { ...payload, rate: 2.5 };
           }
         }
-        // 验证撤资和取款的额度限制
+        // 验证撤资和取款的额度限制（按目标用户名）
         if (payload.type === 'withdraw_inj') {
-          const injections = transactions.filter(tx => tx.status === 'approved' && ['injection'].includes(tx.type))
-            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-          const injInterest = transactions.filter(tx => tx.status === 'approved' && tx.type === 'injection')
-            .reduce((sum, tx) => sum + ((parseFloat(tx.principal) || 0) * (parseFloat(tx.rate) || 0) / 100), 0);
-          const withdrawnInj = transactions.filter(tx => tx.status === 'approved' && tx.type === 'withdraw_inj')
-            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-          const availableInj = injections + injInterest - withdrawnInj;
-          
-          if (injections === 0) {
+          const targetClient = payload.client || currentUser?.username;
+          const { principals, available } = getAvailableForClient('injection', targetClient);
+          if (principals === 0) {
             return alert(language === 'zh' ? '没有注资记录，无法撤资！' : 'No injection records, cannot withdraw!');
           }
-          if (parseFloat(payload.principal) > availableInj) {
-            return alert(language === 'zh' ? `撤资金额不得超过可用金额 ${availableInj.toFixed(3)}m (注资+利息-已撤资)` : `Withdrawal amount cannot exceed available ${availableInj.toFixed(3)}m`);
+          if (parseFloat(payload.principal) > available) {
+            return alert(language === 'zh'
+              ? `撤资金额不得超过可用金额 ${available.toFixed(3)}m (该用户注资+利息-已撤资)`
+              : `Withdrawal amount cannot exceed available ${available.toFixed(3)}m`);
           }
         }
-        
+
         if (payload.type === 'withdraw_dep') {
-          const deposits = transactions.filter(tx => tx.status === 'approved' && ['deposit'].includes(tx.type))
-            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-          const depInterest = transactions.filter(tx => tx.status === 'approved' && tx.type === 'deposit')
-            .reduce((sum, tx) => sum + ((parseFloat(tx.principal) || 0) * (parseFloat(tx.rate) || 0) / 100), 0);
-          const withdrawnDep = transactions.filter(tx => tx.status === 'approved' && tx.type === 'withdraw_dep')
-            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-          const bondUsed = transactions
-            .filter(tx => tx.status === 'approved' && tx.type === 'bond_subscribe' && tx.created_by === currentUser.username)
-            .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-          const availableDep = deposits + depInterest - withdrawnDep - bondUsed;
-          
-          if (deposits === 0) {
+          const targetClient = payload.client || currentUser?.username;
+          const pt = payload.product_type || 'normal';
+          const { principals, available } = getAvailableForClient('deposit', targetClient, pt);
+          if (principals === 0) {
             return alert(language === 'zh' ? '没有存款记录，无法取款！' : 'No deposit records, cannot withdraw!');
           }
-          if (parseFloat(payload.principal) > availableDep) {
-            return alert(language === 'zh' ? `取款金额不得超过可用金额 ${availableDep.toFixed(3)}m (存款+利息-已取款)` : `Withdrawal amount cannot exceed available ${availableDep.toFixed(3)}m`);
+          if (parseFloat(payload.principal) > available) {
+            return alert(language === 'zh'
+              ? `取款金额不得超过可用金额 ${available.toFixed(3)}m (该用户该产品存款+利息-已取款-债券占用)`
+              : `Withdrawal amount cannot exceed available ${available.toFixed(3)}m`);
           }
         }
         
@@ -2442,6 +2631,10 @@ const App = () => {
         };
         const { error } = await supabase.from('transactions').insert([newItem]);
         if (error) throw error;
+
+        if (newItem.status === 'approved' && ['withdraw_inj', 'withdraw_dep'].includes(newItem.type)) {
+          await applyApprovedWithdrawalToBills(newItem);
+        }
         
         setModalOpen(false);
         setFormData({ client: '', principal: '', rate: '' });
@@ -2550,6 +2743,13 @@ const App = () => {
           .update(updateData)
           .eq('id', payload);
         if (error) throw error;
+
+        if (action === 'approve' && txToReview && ['withdraw_inj', 'withdraw_dep'].includes(txToReview.type)) {
+          await applyApprovedWithdrawalToBills({
+            ...txToReview,
+            ...updateData
+          });
+        }
       } else if (action === 'repay') {
         // 还款操作：删除贷款账单，资金回到资金池
         const loanTx = transactions.find(tx => tx.id === payload);
@@ -2627,7 +2827,7 @@ const App = () => {
         client: currentUser.role === 'admin' ? '' : currentUser.username, 
         principal: '', 
         rate: defaultRate,
-        product_type: type === 'deposit' ? 'normal' : (type === 'loan' ? 'interest' : '')
+        product_type: (type === 'deposit' || type === 'withdraw_dep') ? 'normal' : (type === 'loan' ? 'interest' : '')
       });
     }
     setModalOpen(true);
@@ -2665,7 +2865,7 @@ const App = () => {
   const calculateFundBalanceForStats = () => {
     const source = fundTransactions.length
       ? fundTransactions
-      : (transactions || []).filter(tx => ['bank_fund', 'fund_subscribe', 'fund_redeem'].includes(tx.type));
+      : (transactions || []).filter(tx => ['bank_fund', 'fund_subscribe', 'fund_redeem', 'fund_profit', 'fund_loss', 'fund_profit_withdraw', 'fund_dividend_withdraw'].includes(tx.type));
     if (!source.length) return 0;
     const approved = source.filter(tx => tx.status ? tx.status === 'approved' : true);
 
@@ -2679,7 +2879,22 @@ const App = () => {
       .filter(tx => tx.type === 'fund_redeem')
       .reduce((sum, tx) => sum + (parseFloat(tx.rate) || 0), 0);
 
-    return bankNet + subscribed - redeemedPrincipal;
+    const fundProfit = approved
+      .filter(tx => tx.type === 'fund_profit')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const fundLoss = approved
+      .filter(tx => tx.type === 'fund_loss')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const profitWithdraw = approved
+      .filter(tx => tx.type === 'fund_profit_withdraw')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const dividendWithdraw = approved
+      .filter(tx => tx.type === 'fund_dividend_withdraw')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+    const principalBase = bankNet + subscribed - redeemedPrincipal;
+    const nav = principalBase + (fundProfit + fundLoss) - profitWithdraw - dividendWithdraw;
+    return nav;
   };
 
   // --- 统计 ---
@@ -2732,7 +2947,7 @@ const App = () => {
       .reduce((acc, cur) => acc + (parseFloat(cur.principal) || 0), 0);
 
     const fundBalance = calculateFundBalanceForStats();
-    const totalAssets = fundingBase + bankAssetsValue + fundBalance;
+    const totalAssets = (fundingBase - bankFundNetTransfer) + bankAssetsValue + fundBalance;
 
     return {
       loanPrincipal: loans.p,
@@ -2791,7 +3006,38 @@ const App = () => {
 
   // 基金余额显示改为：基金本金
   const calculateFundBalance = () => {
-    return calculateFundPrincipal();
+    const source = fundTransactions.length
+      ? fundTransactions
+      : (transactions || []).filter(tx => ['bank_fund', 'fund_subscribe', 'fund_redeem', 'fund_profit', 'fund_loss', 'fund_profit_withdraw', 'fund_dividend_withdraw'].includes(tx.type));
+    if (!source.length) return 0;
+    const approved = source.filter(tx => tx.status ? tx.status === 'approved' : true);
+
+    const bankNet = approved
+      .filter(tx => tx.type === 'bank_fund')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const subscribed = approved
+      .filter(tx => tx.type === 'fund_subscribe')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const redeemedPrincipal = approved
+      .filter(tx => tx.type === 'fund_redeem')
+      .reduce((sum, tx) => sum + (parseFloat(tx.rate) || 0), 0);
+
+    const fundProfit = approved
+      .filter(tx => tx.type === 'fund_profit')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const fundLoss = approved
+      .filter(tx => tx.type === 'fund_loss')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const profitWithdraw = approved
+      .filter(tx => tx.type === 'fund_profit_withdraw')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const dividendWithdraw = approved
+      .filter(tx => tx.type === 'fund_dividend_withdraw')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+    const principalBase = bankNet + subscribed - redeemedPrincipal;
+    const nav = principalBase + (fundProfit + fundLoss) - profitWithdraw - dividendWithdraw;
+    return nav;
   };
 
   // 计算基金总收益
@@ -3098,6 +3344,77 @@ const App = () => {
   const displayTx = isAdmin ? transactions : transactions.filter(tx => 
     tx.created_by === currentUser?.username || tx.status === 'approved' || ['injection', 'withdraw_inj'].includes(tx.type)
   );
+
+  const approvedInterestExpense = transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense');
+  const injectionInterestExpense = approvedInterestExpense.filter(tx => tx.client === '注资利息支出');
+  const depositInterestExpense = approvedInterestExpense.filter(tx => tx.client === '存款利息支出');
+
+  const getProductTypeLabelForTx = (row) => {
+    if (row.type === 'deposit') {
+      if (row.product_type === 'risk') return t('riskDeposit');
+      if (row.product_type === 'risk5') return t('riskDeposit5');
+      return t('normalDeposit');
+    } else if (row.type === 'loan') {
+      return row.product_type === 'stable' ? t('stableLoan') : t('interestLoan');
+    }
+    return '';
+  };
+
+  const injectionDataForTable = aggregateAccountByClient(
+    displayTx.filter(tx => tx.type === 'injection'),
+    injectionInterestExpense,
+    'injection',
+    (tx, clientKey) => `${clientKey}::${tx.status || 'approved'}`
+  );
+
+  const depositDataForTable = aggregateAccountByClient(
+    displayTx.filter(tx => tx.type === 'deposit'),
+    depositInterestExpense,
+    'deposit',
+    (tx, clientKey) => `${clientKey}::${tx.status || 'approved'}::${tx.product_type || 'normal'}`
+  );
+
+  const handleAggregatedEdit = async (row, field, newValue) => {
+    try {
+      if (!row?.source_ids?.length) return;
+
+      const numValue = parseFloat(newValue);
+      if (isNaN(numValue) || numValue < 0) {
+        alert(t('invalidNumber'));
+        return;
+      }
+
+      const repId = row.source_ids[0];
+      const otherIds = row.source_ids.slice(1);
+
+      if (field === 'settlement_count') {
+        const { error } = await supabase
+          .from('transactions')
+          .update({ remark: `${t('interestCountPrefix')}:${Math.round(numValue)}` })
+          .eq('id', repId);
+        if (error) throw error;
+        return;
+      }
+
+      if (field === 'principal') {
+        const { error: repError } = await supabase
+          .from('transactions')
+          .update({ principal: numValue, rate: row.rate })
+          .eq('id', repId);
+        if (repError) throw repError;
+
+        if (otherIds.length > 0) {
+          const { error: othersError } = await supabase
+            .from('transactions')
+            .delete()
+            .in('id', otherIds);
+          if (othersError) throw othersError;
+        }
+      }
+    } catch (e) {
+      alert(t('updateFailed') + ': ' + e.message);
+    }
+  };
 
   // 如果当前在论坛页面，渲染论坛
   if (currentPage === 'forum') {
@@ -4387,69 +4704,57 @@ const App = () => {
 
             <div>
               {/* 基金操作 */}
-              {currentUser?.role !== 'admin' ? (
-                <div className="bg-white border border-green-200 shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2 text-gray-700">
-                      <TrendingUp className="w-5 h-5 text-green-600" />
-                      <span className="font-semibold text-base">{t('fundActionsTitle')}</span>
-                    </div>
+              <div className="bg-white border border-green-200 shadow-sm p-4">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <TrendingUp className="w-5 h-5 text-green-600" />
+                    <span className="font-semibold text-base">{t('fundActionsTitle')}</span>
+                  </div>
+                  {currentUser?.role !== 'admin' && (
                     <div className="text-xs text-gray-500">{t('requiresAdminApproval')}</div>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
+                  <div className="h-10 w-full border border-blue-200 bg-blue-50 flex items-center justify-center gap-2 px-3">
+                    <TrendingUp className="w-4 h-4 text-blue-600" />
+                    <span className="text-xs text-gray-600">{t('subscribedPrincipal')}</span>
+                    <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundNetSubscribed())}</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="h-10 w-full border border-blue-200 bg-blue-50 flex items-center justify-center gap-2 px-3">
-                      <TrendingUp className="w-4 h-4 text-blue-600" />
-                      <span className="text-xs text-gray-600">{t('subscribedPrincipal')}</span>
-                      <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundNetSubscribed())}</span>
-                    </div>
-                    <div className="h-10 w-full border border-purple-200 bg-purple-50 flex items-center justify-center gap-2 px-3">
-                      <Activity className="w-4 h-4 text-purple-600" />
-                      <span className="text-xs text-gray-600">{t('estimatedProfit')}</span>
-                      <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundEstimatedProfit())}</span>
-                    </div>
-                    <div className="h-10 w-full border border-green-200 bg-green-50 flex items-center justify-center gap-2 px-3">
-                      <Wallet className="w-4 h-4 text-green-600" />
-                      <span className="text-xs text-gray-600">{t('fundBalanceLabel')}</span>
-                      <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundBalance())}</span>
-                    </div>
+                  <div className="h-10 w-full border border-purple-200 bg-purple-50 flex items-center justify-center gap-2 px-3">
+                    <Activity className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs text-gray-600">{t('estimatedProfit')}</span>
+                    <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundEstimatedProfit())}</span>
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <button
-                      onClick={() => openFundUserModal('subscribe')}
-                      className="h-10 bg-gradient-to-r from-emerald-100 to-green-100 hover:from-emerald-200 hover:to-green-200 text-green-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-green-200"
-                    >
-                      <PlusCircle className="w-4 h-4" />
-                      {t('subscribeFund')}
-                    </button>
-                    <button
-                      onClick={() => openFundUserModal('redeem')}
-                      className="h-10 bg-gradient-to-r from-blue-100 to-sky-100 hover:from-blue-200 hover:to-sky-200 text-blue-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-blue-200"
-                    >
-                      <ArrowUpRight className="w-4 h-4" />
-                      {t('redeemFund')}
-                    </button>
-                    <button
-                      onClick={() => openFundUserModal('dividend_withdraw')}
-                      className="h-10 bg-gradient-to-r from-purple-100 to-fuchsia-100 hover:from-purple-200 hover:to-fuchsia-200 text-purple-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-purple-200"
-                    >
-                      <ArrowUpRight className="w-4 h-4" />
-                      {t('withdrawDividend')}
-                    </button>
+                  <div className="h-10 w-full border border-green-200 bg-green-50 flex items-center justify-center gap-2 px-3">
+                    <Wallet className="w-4 h-4 text-green-600" />
+                    <span className="text-xs text-gray-600">{t('fundBalanceLabel')}</span>
+                    <span className="text-sm font-semibold text-gray-900">{formatMoney(calculatePersonalFundBalance())}</span>
                   </div>
                 </div>
-              ) : (
-                <div className="bg-white border border-green-200 shadow-sm p-4">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="flex items-center gap-2 text-gray-700">
-                      <TrendingUp className="w-5 h-5 text-green-600" />
-                      <span className="font-semibold text-base">{t('fundActionsTitle')}</span>
-                    </div>
-                  </div>
-                  <div className="text-center py-6">
-                    <p className="text-gray-500">{t('fundActionsHint')}</p>
-                  </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <button
+                    onClick={() => openFundUserModal('subscribe')}
+                    className="h-10 bg-gradient-to-r from-emerald-100 to-green-100 hover:from-emerald-200 hover:to-green-200 text-green-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-green-200"
+                  >
+                    <PlusCircle className="w-4 h-4" />
+                    {t('subscribeFund')}
+                  </button>
+                  <button
+                    onClick={() => openFundUserModal('redeem')}
+                    className="h-10 bg-gradient-to-r from-blue-100 to-sky-100 hover:from-blue-200 hover:to-sky-200 text-blue-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-blue-200"
+                  >
+                    <ArrowUpRight className="w-4 h-4" />
+                    {t('redeemFund')}
+                  </button>
+                  <button
+                    onClick={() => openFundUserModal('dividend_withdraw')}
+                    className="h-10 bg-gradient-to-r from-purple-100 to-fuchsia-100 hover:from-purple-200 hover:to-fuchsia-200 text-purple-700 px-3 text-sm font-semibold transition-all flex items-center justify-center gap-2 border border-purple-200"
+                  >
+                    <ArrowUpRight className="w-4 h-4" />
+                    {t('withdrawDividend')}
+                  </button>
                 </div>
-              )}
+              </div>
             </div>
           </div>
 
@@ -5029,12 +5334,21 @@ const App = () => {
                   <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
                     <div>
                       <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type || 'unknown', language)}]</span>
-                      <span>{tx.client || t('unknown')} - {formatMoney(tx.principal || 0)}</span>
+                      <span>
+                        {tx.client || t('unknown')} - {formatMoney(tx.principal || 0)}
+                        {tx.type === 'withdraw_dep' && (
+                          <span className="ml-2 text-xs text-gray-500">
+                            ({(tx.product_type || 'normal') === 'risk' ? t('riskDeposit') : (tx.product_type || 'normal') === 'risk5' ? t('riskDeposit5') : t('normalDeposit')})
+                          </span>
+                        )}
+                      </span>
                       <span className="text-xs text-gray-500 block">{t('applicantLabel')}: {tx.created_by || t('unknown')}</span>
                     </div>
                     <div className="flex gap-2">
                       <button 
-                        onClick={() => handleCRUD('approve', tx.id)} 
+                        onClick={async () => {
+                          await handleCRUD('approve', tx.id);
+                        }} 
                         className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200"
                       >
                         <CheckCircle className="w-4 h-4"/>
@@ -5147,11 +5461,17 @@ const App = () => {
                <p className="mt-3 text-xs text-gray-500">{t('injectionAndDeposit')}</p>
              </div>
 
-             {/* 注资账户 - 分开显示 */}
-              <TableSection title={`${t('injectionAccount')} - ${t('injection')}`} color="orange" icon={ArrowDownLeft} 
-                data={isAdmin ? displayTx.filter(tx => tx.type === 'injection') : displayTx.filter(tx => tx.type === 'injection' && (tx.status === 'approved' || tx.created_by === currentUser?.username))} 
-               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
-               interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '注资利息支出')} applyInterest={true} />
+             <TableSection title={`${t('injectionAccount')} - ${t('injection')}`} color="orange" icon={ArrowDownLeft} 
+              data={injectionDataForTable}
+              isAdmin={isAdmin}
+              onEdit={null}
+              onDelete={null}
+              onDeleteAll={null}
+              onManageGroup={null}
+              onAggregatedEdit={isAdmin ? handleAggregatedEdit : null}
+              onAggregatedDelete={isAdmin ? handleAggregatedDelete : null}
+              language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
+              interestRecords={injectionInterestExpense} applyInterest={true} />
               
               <TableSection title={`${t('injectionAccount')} - ${t('withdrawInj')}`} color="orange" icon={ArrowDownLeft} 
                 data={isAdmin ? displayTx.filter(tx => tx.type === 'withdraw_inj') : displayTx.filter(tx => tx.type === 'withdraw_inj' && (tx.status === 'approved' || tx.created_by === currentUser?.username))}
@@ -5160,9 +5480,16 @@ const App = () => {
              {/* 存款账户总余额 - 已按需求移除显示 */}
 
               <TableSection title={`${t('depositAccount')} - ${t('deposit')}`} color="blue" icon={Wallet}
-                data={isAdmin ? displayTx.filter(tx => tx.type === 'deposit') : displayTx.filter(tx => tx.type === 'deposit' && (tx.status === 'approved' || tx.created_by === currentUser?.username))} 
-               isAdmin={isAdmin} onEdit={(tx) => openModal(tx.type, tx)} onDelete={(id) => handleCRUD('delete', id)} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
-               interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_expense' && tx.client === '存款利息支出')} applyInterest={true} />
+              data={depositDataForTable}
+              isAdmin={isAdmin}
+              onEdit={null}
+              onDelete={null}
+              onDeleteAll={null}
+              onManageGroup={null}
+              onAggregatedEdit={isAdmin ? handleAggregatedEdit : null}
+              onAggregatedDelete={isAdmin ? handleAggregatedDelete : null}
+              language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
+              interestRecords={depositInterestExpense} applyInterest={true} />
               
               <TableSection title={`${t('depositAccount')} - ${t('withdrawDep')}`} color="blue" icon={Wallet}
                 data={isAdmin ? displayTx.filter(tx => tx.type === 'withdraw_dep') : displayTx.filter(tx => tx.type === 'withdraw_dep' && (tx.status === 'approved' || tx.created_by === currentUser?.username))}
@@ -5229,6 +5556,29 @@ const App = () => {
                             {formData.product_type === 'risk5' && (
                               <p className="text-xs text-orange-700 mt-2 bg-orange-50 border border-orange-200 p-2">{t('riskNote5')}</p>
                             )}
+                          </div>
+                        )}
+
+                        {/* 产品类型选择 - 取款 */}
+                        {modalType === 'withdraw_dep' && (
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('productType')}</label>
+                            <select 
+                              required 
+                              value={formData.product_type} 
+                              onChange={e => {
+                                const newType = e.target.value;
+                                setFormData({
+                                  ...formData, 
+                                  product_type: newType
+                                });
+                              }} 
+                              className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all hover:border-green-300"
+                            >
+                              <option value="normal">{t('normalDeposit')}</option>
+                              <option value="risk">{t('riskDeposit')}</option>
+                              <option value="risk5">{t('riskDeposit5')}</option>
+                            </select>
                           </div>
                         )}
                         
@@ -5330,7 +5680,7 @@ const StatCard = ({ title, value, subtext, icon }) => (
     </div>
 );
 
-const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, onRepay, onDeleteAll, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
+const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, onRepay, onDeleteAll, onManageGroup, onAggregatedEdit, onAggregatedDelete, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
   // 使用单个state管理所有行的展开状态
   const [openActionsId, setOpenActionsId] = React.useState(null);
   const [editingCell, setEditingCell] = React.useState(null); // { id, field, value }
@@ -5338,6 +5688,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
   const tableRef = React.useRef(null);
   const [tableScale, setTableScale] = React.useState(1);
   const [scaledHeight, setScaledHeight] = React.useState(null);
+  const hasActions = Boolean(isAdmin && (onEdit || onDelete || onManageGroup || onRepay || onAggregatedDelete));
   
   const calculateWeeklyInterest = (principal, rate) => {
     return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
@@ -5452,11 +5803,12 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
               <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">{t('weeklyInterestLabel')}</th>
               <th className="px-1.5 py-1.5 text-right text-xs font-semibold text-gray-500 whitespace-nowrap">{t('cyclesLabel')}</th>
               <th className="px-1.5 py-1.5 text-left text-xs font-semibold text-gray-500 whitespace-nowrap">{t('dateLabel')}</th>
-              {isAdmin && <th className="px-1.5 py-1.5 text-center text-xs font-semibold text-gray-500 whitespace-nowrap">{t('actions')}</th>}
+              {hasActions && <th className="px-1.5 py-1.5 text-center text-xs font-semibold text-gray-500 whitespace-nowrap">{t('actions')}</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {data.map((row) => {
+              const isAggregatedRow = Array.isArray(row.source_ids) && row.source_ids.length > 0;
               const isInterestRecord = ['interest_income', 'interest_expense'].includes(row.type);
               const isIncome = row.type === 'interest_income';
               const weeklyInterest = applyInterest && !isInterestRecord && !row.type.includes('withdraw')
@@ -5507,9 +5859,13 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                           type="number"
                           step="0.001"
                           defaultValue={row.principal}
-                          onBlur={(e) => handleCellEdit(row.id, 'principal', e.target.value)}
+                          onBlur={(e) => {
+                            if (isAggregatedRow && onAggregatedEdit) return onAggregatedEdit(row, 'principal', e.target.value);
+                            return handleCellEdit(row.id, 'principal', e.target.value);
+                          }}
                           onKeyPress={(e) => {
                             if (e.key === 'Enter') {
+                              if (isAggregatedRow && onAggregatedEdit) return onAggregatedEdit(row, 'principal', e.target.value);
                               handleCellEdit(row.id, 'principal', e.target.value);
                             }
                           }}
@@ -5537,9 +5893,13 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                           type="number"
                           step="1"
                           defaultValue={cyclesForRow}
-                          onBlur={(e) => handleCellEdit(row.id, 'settlement_count', e.target.value)}
+                          onBlur={(e) => {
+                            if (isAggregatedRow && onAggregatedEdit) return onAggregatedEdit(row, 'settlement_count', e.target.value);
+                            return handleCellEdit(row.id, 'settlement_count', e.target.value);
+                          }}
                           onKeyPress={(e) => {
                             if (e.key === 'Enter') {
+                              if (isAggregatedRow && onAggregatedEdit) return onAggregatedEdit(row, 'settlement_count', e.target.value);
                               handleCellEdit(row.id, 'settlement_count', e.target.value);
                             }
                           }}
@@ -5560,22 +5920,35 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                     )}
                   </td>
                   <td className="px-1.5 py-1.5 text-xs text-gray-500 whitespace-nowrap">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
-                  {isAdmin && <td className="px-1.5 py-1.5 text-center relative">
+                  {hasActions && <td className="px-1.5 py-1.5 text-center relative">
                     <div className="relative inline-block">
                       <button onClick={() => setOpenActionsId(showActions ? null : row.id)} className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-200" title={t('actions')}>
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z" /></svg>
                       </button>
                       {showActions && (
                         <div className="absolute right-0 mt-1 w-32 bg-white border border-gray-300 rounded shadow-lg z-10">
-                          <button onClick={() => { onEdit(row); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-indigo-600 flex items-center gap-2">
-                            <Edit className="w-3 h-3" /> {t('editShort')}
-                          </button>
+                          {isAggregatedRow && onManageGroup ? (
+                            <button onClick={() => { onManageGroup(row); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-indigo-600 flex items-center gap-2">
+                              <Edit className="w-3 h-3" /> {t('editShort')}
+                            </button>
+                          ) : (
+                            onEdit && <button onClick={() => { onEdit(row); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-indigo-50 text-indigo-600 flex items-center gap-2">
+                              <Edit className="w-3 h-3" /> {t('editShort')}
+                            </button>
+                          )}
                           {onRepay && row.type === 'loan' && <button onClick={() => { onRepay(row.id); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-blue-50 text-blue-600">
                             {t('repay')}
                           </button>}
-                          <button onClick={() => { onDelete(row.id); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2">
-                            <Trash2 className="w-3 h-3" /> {t('delete')}
-                          </button>
+                          {!isAggregatedRow && onDelete && (
+                            <button onClick={() => { onDelete(row.id); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2">
+                              <Trash2 className="w-3 h-3" /> {t('delete')}
+                            </button>
+                          )}
+                          {isAggregatedRow && onAggregatedDelete && (
+                            <button onClick={() => { onAggregatedDelete(row); setOpenActionsId(null); }} className="w-full text-left px-3 py-2 text-xs hover:bg-red-50 text-red-600 flex items-center gap-2">
+                              <Trash2 className="w-3 h-3" /> {t('delete')}
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>
@@ -5583,7 +5956,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                 </tr>
               );
             })}
-            {data.length === 0 && <tr><td colSpan={isAdmin ? "9" : "8"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
+            {data.length === 0 && <tr><td colSpan={hasActions ? "9" : "8"} className="px-6 py-4 text-center text-gray-400">{t('noData')}</td></tr>}
           </tbody>
             </table>
           </div>
