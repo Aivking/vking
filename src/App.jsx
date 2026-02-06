@@ -813,6 +813,8 @@ const App = () => {
   const [fundAnnouncement, setFundAnnouncement] = useState({ id: '', content: '' });
   const [isEditingFundAnnouncement, setIsEditingFundAnnouncement] = useState(false);
   const [fundAnnouncementInput, setFundAnnouncementInput] = useState('');
+
+  const announcementsEnsuredRef = useRef(false);
   
   // 论坛 State
   const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum', 'planet', 'assets', 'fund', 'bonds'
@@ -1564,16 +1566,18 @@ const App = () => {
           if (usersData.length === 0) seedAdminUser();
         }
 
-        const ensureAnnouncement = async (key, defaultContent) => {
+        const fetchLatestAnnouncement = async (key) => {
           const { data, error } = await supabase
             .from('announcements')
             .select('*')
             .eq('title', key)
             .order('id', { ascending: false })
             .limit(1);
+          if (error) throw error;
+          return data && data.length > 0 ? data[0] : null;
+        };
 
-          if (!error && data && data.length > 0) return data[0];
-
+        const createDefaultAnnouncement = async (key, defaultContent) => {
           const { data: created, error: createError } = await supabase
             .from('announcements')
             .insert({
@@ -1586,10 +1590,22 @@ const App = () => {
           return created;
         };
 
+        const ensureOnce = async (key, defaultContent) => {
+          const existing = await fetchLatestAnnouncement(key);
+          if (existing) return existing;
+          return await createDefaultAnnouncement(key, defaultContent);
+        };
+
         const [bankAnn, fundAnn] = await Promise.all([
-          ensureAnnouncement('bank_announcement', '欢迎使用 EUU 超级投行系统'),
-          ensureAnnouncement('fund_announcement', '欢迎使用 EUU 超级投行系统')
+          announcementsEnsuredRef.current
+            ? fetchLatestAnnouncement('bank_announcement')
+            : ensureOnce('bank_announcement', '欢迎使用 EUU 超级投行系统'),
+          announcementsEnsuredRef.current
+            ? fetchLatestAnnouncement('fund_announcement')
+            : ensureOnce('fund_announcement', '欢迎使用 EUU 超级投行系统')
         ]);
+
+        announcementsEnsuredRef.current = true;
 
         if (bankAnn) setBankAnnouncement(bankAnn);
         if (fundAnn) setFundAnnouncement(fundAnn);
