@@ -825,6 +825,10 @@ const App = () => {
 
   const [liuliFlightSearch, setLiuliFlightSearch] = useState('');
   const [liuliProductSearch, setLiuliProductSearch] = useState('');
+  const [liuliFlightPage, setLiuliFlightPage] = useState(1);
+  const [liuliProductPage, setLiuliProductPage] = useState(1);
+  const [liuliFlightModal, setLiuliFlightModal] = useState(false);
+  const [liuliProductModal, setLiuliProductModal] = useState(false);
 
   const parseInterestCountFromRemark = (remark) => {
     if (!remark) return null;
@@ -1122,6 +1126,26 @@ const App = () => {
     });
   }, [liuliFlightsForTable, liuliFlightSearch]);
 
+  const liuliFlightsPageSize = 12;
+  const liuliFlightsTotalPages = useMemo(() => {
+    const len = (liuliFlightsFiltered || []).length;
+    return Math.max(1, Math.ceil(len / liuliFlightsPageSize));
+  }, [liuliFlightsFiltered]);
+
+  const liuliFlightsPaged = useMemo(() => {
+    const page = Math.min(Math.max(1, liuliFlightPage), liuliFlightsTotalPages);
+    const start = (page - 1) * liuliFlightsPageSize;
+    return (liuliFlightsFiltered || []).slice(start, start + liuliFlightsPageSize);
+  }, [liuliFlightsFiltered, liuliFlightPage, liuliFlightsTotalPages]);
+
+  useEffect(() => {
+    setLiuliFlightPage(1);
+  }, [liuliFlightSearch]);
+
+  useEffect(() => {
+    setLiuliFlightPage(p => Math.min(Math.max(1, p), liuliFlightsTotalPages));
+  }, [liuliFlightsTotalPages]);
+
   const liuliProductsForTable = useMemo(() => {
     const approved = (transactions || []).filter(tx => tx.status === 'approved');
     return approved
@@ -1148,14 +1172,32 @@ const App = () => {
     const q = (liuliProductSearch || '').trim().toLowerCase();
     if (!q) return liuliProductsForTable || [];
     return (liuliProductsForTable || []).filter(p => {
-      const hay = [p.name, p.itemName, p.pickup, p.note]
-        .map(x => String(x || '').toLowerCase())
-        .join(' ');
+      const hay = [p.name, p.itemName, p.perDay, p.pickup, p.note].map(x => String(x || '').toLowerCase()).join(' ');
       return hay.includes(q);
     });
   }, [liuliProductsForTable, liuliProductSearch]);
 
-  const addLiuliFlight = () => {
+  const liuliProductsPageSize = 24;
+  const liuliProductsTotalPages = useMemo(() => {
+    const len = (liuliProductsFiltered || []).length;
+    return Math.max(1, Math.ceil(len / liuliProductsPageSize));
+  }, [liuliProductsFiltered]);
+
+  const liuliProductsPaged = useMemo(() => {
+    const page = Math.min(Math.max(1, liuliProductPage), liuliProductsTotalPages);
+    const start = (page - 1) * liuliProductsPageSize;
+    return (liuliProductsFiltered || []).slice(start, start + liuliProductsPageSize);
+  }, [liuliProductsFiltered, liuliProductPage, liuliProductsTotalPages]);
+
+  useEffect(() => {
+    setLiuliProductPage(1);
+  }, [liuliProductSearch]);
+
+  useEffect(() => {
+    setLiuliProductPage(p => Math.min(Math.max(1, p), liuliProductsTotalPages));
+  }, [liuliProductsTotalPages]);
+
+  const addLiuliFlight = async () => {
     const name = (liuliFlightForm.name || '').trim();
     const from = (liuliFlightForm.from || '').trim();
     const to = (liuliFlightForm.to || '').trim();
@@ -1165,36 +1207,49 @@ const App = () => {
     const returnTo = (liuliFlightForm.returnTo || '').trim();
     const returnNote = (liuliFlightForm.returnNote || '').trim();
     const shipType = (liuliFlightForm.shipType || 'SCB').trim();
-    if (!name) return alert(language === 'zh' ? '请填写名称' : 'Please fill in name');
-    if (!from || !to) return alert(language === 'zh' ? '请填写出发地与目的地' : 'Please fill in From and To');
-    if (roundTrip && (!returnFrom || !returnTo)) return alert(language === 'zh' ? '往返模式下请填写返程出发地与目的地' : 'Please fill in return From and To for round trip');
-    (async () => {
-      try {
-        let remark = `to:${to}\nnote:${note}`;
-        if (roundTrip) {
-          remark += `\nreturnFrom:${returnFrom}\nreturnTo:${returnTo}\nreturnNote:${returnNote}`;
-        }
-        remark += `\nshipType:${shipType}`;
-        const newItem = {
-          type: 'liuli_flight',
-          client: name,
-          principal: 0,
-          rate: 0,
-          product_type: from,
-          remark,
-          timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
-          created_by: currentUser?.username || 'unknown',
-          creator_id: currentUser?.id || 'unknown',
-          status: 'approved'
-        };
-        const { error } = await supabase.from('transactions').insert([newItem]);
-        if (error) throw error;
-        await refreshTransactions();
-        setLiuliFlightForm({ name: '', from: '', to: '', note: '', roundTrip: false, returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
-      } catch (e) {
-        alert((language === 'zh' ? '登记失败' : 'Add failed') + ': ' + (e?.message || e));
+
+    if (!name) {
+      alert(language === 'zh' ? '请填写名称' : 'Please fill in name');
+      return false;
+    }
+    if (!from || !to) {
+      alert(language === 'zh' ? '请填写出发地与目的地' : 'Please fill in From and To');
+      return false;
+    }
+    if (roundTrip && (!returnFrom || !returnTo)) {
+      alert(language === 'zh' ? '往返模式下请填写返程出发地与目的地' : 'Please fill in return From and To for round trip');
+      return false;
+    }
+
+    try {
+      let remark = `to:${to}\nnote:${note}`;
+      if (roundTrip) {
+        remark += `\nreturnFrom:${returnFrom}\nreturnTo:${returnTo}\nreturnNote:${returnNote}`;
       }
-    })();
+      remark += `\nshipType:${shipType}`;
+
+      const newItem = {
+        type: 'liuli_flight',
+        client: name,
+        principal: 0,
+        rate: 0,
+        product_type: from,
+        remark,
+        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+        created_by: currentUser?.username || 'unknown',
+        creator_id: currentUser?.id || 'unknown',
+        status: 'approved'
+      };
+
+      const { error } = await supabase.from('transactions').insert([newItem]);
+      if (error) throw error;
+      await refreshTransactions();
+      setLiuliFlightForm({ name: '', from: '', to: '', note: '', roundTrip: false, returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
+      return true;
+    } catch (e) {
+      alert((language === 'zh' ? '登记失败' : 'Add failed') + ': ' + (e?.message || e));
+      return false;
+    }
   };
 
   const deleteLiuliFlight = (id) => {
@@ -1216,37 +1271,49 @@ const App = () => {
     })();
   };
 
-  const addLiuliProduct = () => {
+  const addLiuliProduct = async () => {
     const name = (liuliProductForm.name || '').trim();
     const itemName = (liuliProductForm.itemName || '').trim();
     const pickup = (liuliProductForm.pickup || '').trim();
     const note = (liuliProductForm.note || '').trim();
     const perDayNum = parseFloat(liuliProductForm.perDay);
-    if (!name) return alert(language === 'zh' ? '请填写名称' : 'Please fill in name');
-    if (!itemName) return alert(language === 'zh' ? '请填写物品名称' : 'Please fill in item name');
-    if (!Number.isFinite(perDayNum) || perDayNum < 0) return alert(language === 'zh' ? '每天产量必须是有效数字' : 'Per-day output must be a valid number');
-    (async () => {
-      try {
-        const newItem = {
-          type: 'liuli_product',
-          client: name,
-          principal: perDayNum,
-          rate: 0,
-          product_type: itemName,
-          remark: `pickup:${pickup}\nnote:${note}`,
-          timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
-          created_by: currentUser?.username || 'unknown',
-          creator_id: currentUser?.id || 'unknown',
-          status: 'approved'
-        };
-        const { error } = await supabase.from('transactions').insert([newItem]);
-        if (error) throw error;
-        await refreshTransactions();
-        setLiuliProductForm({ name: '', itemName: '', perDay: '', pickup: '', note: '' });
-      } catch (e) {
-        alert((language === 'zh' ? '登记失败' : 'Add failed') + ': ' + (e?.message || e));
-      }
-    })();
+
+    if (!name) {
+      alert(language === 'zh' ? '请填写名称' : 'Please fill in name');
+      return false;
+    }
+    if (!itemName) {
+      alert(language === 'zh' ? '请填写物品名称' : 'Please fill in item name');
+      return false;
+    }
+    if (!Number.isFinite(perDayNum) || perDayNum < 0) {
+      alert(language === 'zh' ? '每天产量必须是有效数字' : 'Per-day output must be a valid number');
+      return false;
+    }
+
+    try {
+      const newItem = {
+        type: 'liuli_product',
+        client: name,
+        principal: perDayNum,
+        rate: 0,
+        product_type: itemName,
+        remark: `pickup:${pickup}\nnote:${note}`,
+        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+        created_by: currentUser?.username || 'unknown',
+        creator_id: currentUser?.id || 'unknown',
+        status: 'approved'
+      };
+
+      const { error } = await supabase.from('transactions').insert([newItem]);
+      if (error) throw error;
+      await refreshTransactions();
+      setLiuliProductForm({ name: '', itemName: '', perDay: '', pickup: '', note: '' });
+      return true;
+    } catch (e) {
+      alert((language === 'zh' ? '登记失败' : 'Add failed') + ': ' + (e?.message || e));
+      return false;
+    }
   };
 
   const deleteLiuliProduct = (id) => {
@@ -4103,7 +4170,7 @@ const App = () => {
   if (currentPage === 'liuli') {
     return (
       <div className="min-h-screen bg-[#FFFEF9] text-gray-800 p-4 md:p-8 font-sans">
-        <div className="max-w-6xl mx-auto space-y-6">
+        <div className="max-w-7xl mx-auto space-y-6">
           <div className="flex items-center justify-between">
             <button
               onClick={() => setCurrentPage('bank')}
@@ -4117,150 +4184,198 @@ const App = () => {
             </div>
           </div>
 
-          <div className="grid lg:grid-cols-3 gap-6">
-            <div className="space-y-6">
-              <div className="bg-white border border-indigo-100 shadow-sm p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-base font-black">{language === 'zh' ? '飞船航班登记' : 'Flight Register'}</h2>
-                  <div className="text-xs text-gray-500">{(liuliFlightsForTable || []).length}</div>
-                </div>
+          <div className="space-y-6">
+            {liuliFlightModal ? (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+                <div className="bg-white border-2 border-indigo-200 shadow-2xl max-w-lg w-full p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="font-black text-lg">{language === 'zh' ? '飞船航班登记' : 'Flight Register'}</div>
+                    <button
+                      onClick={() => setLiuliFlightModal(false)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
 
-                <input
-                  value={liuliFlightForm.name}
-                  onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder={language === 'zh' ? '名称' : 'Name'}
-                  className="w-full border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
-                />
-                <div className="grid grid-cols-2 gap-3 mt-3">
                   <input
-                    value={liuliFlightForm.from}
-                    onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, from: e.target.value }))}
-                    placeholder={language === 'zh' ? '出发地' : 'From'}
-                    className="border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                    value={liuliFlightForm.name}
+                    onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder={language === 'zh' ? '名称' : 'Name'}
+                    className="w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
                   />
-                  <input
-                    value={liuliFlightForm.to}
-                    onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, to: e.target.value }))}
-                    placeholder={language === 'zh' ? '目的地' : 'To'}
-                    className="border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
-                  />
-                </div>
-                <textarea
-                  value={liuliFlightForm.note}
-                  onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, note: e.target.value }))}
-                  placeholder={language === 'zh' ? '注释' : 'Note'}
-                  rows={2}
-                  className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200 resize-none"
-                />
-                <select
-                  value={liuliFlightForm.shipType}
-                  onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, shipType: e.target.value }))}
-                  className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
-                >
-                  <option value="SCB">SCB (500/500)</option>
-                  <option value="WCB">WCB (3000/1000)</option>
-                  <option value="LCB">LCB (2000/2000)</option>
-                  <option value="HCB">HCB (5000/5000)</option>
-                </select>
-                <div className="mt-3 flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    id="roundTrip"
-                    checked={liuliFlightForm.roundTrip}
-                    onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, roundTrip: e.target.checked }))}
-                    className="w-4 h-4 text-purple-600 border-2 border-indigo-100 rounded focus:ring-2 focus:ring-indigo-300"
-                  />
-                  <label htmlFor="roundTrip" className="text-sm text-gray-700 select-none cursor-pointer">
-                    {language === 'zh' ? '往返' : 'Round Trip'}
-                  </label>
-                </div>
-                {liuliFlightForm.roundTrip && (
-                  <>
-                    <div className="grid grid-cols-2 gap-3 mt-3">
-                      <input
-                        value={liuliFlightForm.returnFrom}
-                        onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, returnFrom: e.target.value }))}
-                        placeholder={language === 'zh' ? '返程出发地' : 'Return From'}
-                        className="border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
-                      />
-                      <input
-                        value={liuliFlightForm.returnTo}
-                        onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, returnTo: e.target.value }))}
-                        placeholder={language === 'zh' ? '返程目的地' : 'Return To'}
-                        className="border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
-                      />
-                    </div>
-                    <textarea
-                      value={liuliFlightForm.returnNote}
-                      onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, returnNote: e.target.value }))}
-                      placeholder={language === 'zh' ? '返程注释' : 'Return Note'}
-                      rows={2}
-                      className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200 resize-none"
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <input
+                      value={liuliFlightForm.from}
+                      onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, from: e.target.value }))}
+                      placeholder={language === 'zh' ? '出发地' : 'From'}
+                      className="border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
                     />
-                  </>
-                )}
-                <button
-                  onClick={addLiuliFlight}
-                  className="mt-3 w-full bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 font-bold transition-colors"
-                >
-                  {language === 'zh' ? '登记航班' : 'Add'}
-                </button>
-              </div>
+                    <input
+                      value={liuliFlightForm.to}
+                      onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, to: e.target.value }))}
+                      placeholder={language === 'zh' ? '目的地' : 'To'}
+                      className="border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                    />
+                  </div>
+                  <textarea
+                    value={liuliFlightForm.note}
+                    onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, note: e.target.value }))}
+                    placeholder={language === 'zh' ? '注释' : 'Note'}
+                    rows={2}
+                    className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200 resize-none"
+                  />
+                  <select
+                    value={liuliFlightForm.shipType}
+                    onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, shipType: e.target.value }))}
+                    className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                  >
+                    <option value="SCB">SCB (500/500)</option>
+                    <option value="WCB">WCB (3000/1000)</option>
+                    <option value="LCB">LCB (2000/2000)</option>
+                    <option value="HCB">HCB (5000/5000)</option>
+                  </select>
+                  <div className="mt-3 flex items-center gap-2">
+                    <input
+                      type="checkbox"
+                      id="liuliRoundTrip"
+                      checked={liuliFlightForm.roundTrip}
+                      onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, roundTrip: e.target.checked }))}
+                      className="w-4 h-4 text-purple-600 border-2 border-indigo-100 rounded focus:ring-2 focus:ring-indigo-300"
+                    />
+                    <label htmlFor="liuliRoundTrip" className="text-sm text-gray-700 select-none cursor-pointer">
+                      {language === 'zh' ? '往返' : 'Round Trip'}
+                    </label>
+                  </div>
+                  {liuliFlightForm.roundTrip && (
+                    <>
+                      <div className="grid grid-cols-2 gap-3 mt-3">
+                        <input
+                          value={liuliFlightForm.returnFrom}
+                          onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, returnFrom: e.target.value }))}
+                          placeholder={language === 'zh' ? '返程出发地' : 'Return From'}
+                          className="border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                        />
+                        <input
+                          value={liuliFlightForm.returnTo}
+                          onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, returnTo: e.target.value }))}
+                          placeholder={language === 'zh' ? '返程目的地' : 'Return To'}
+                          className="border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                        />
+                      </div>
+                      <textarea
+                        value={liuliFlightForm.returnNote}
+                        onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, returnNote: e.target.value }))}
+                        placeholder={language === 'zh' ? '返程注释' : 'Return Note'}
+                        rows={2}
+                        className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200 resize-none"
+                      />
+                    </>
+                  )}
 
-              <div className="bg-white border border-indigo-100 shadow-sm p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-base font-black">{language === 'zh' ? '生产力登记' : 'Productivity Register'}</h2>
-                  <div className="text-xs text-gray-500">{(liuliProductsForTable || []).length}</div>
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setLiuliFlightModal(false)}
+                      className="w-full bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-bold transition-colors border border-indigo-200"
+                    >
+                      {language === 'zh' ? '取消' : 'Cancel'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const ok = await addLiuliFlight();
+                        if (ok) setLiuliFlightModal(false);
+                      }}
+                      className="w-full bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 font-bold transition-colors"
+                    >
+                      {language === 'zh' ? '登记航班' : 'Add'}
+                    </button>
+                  </div>
                 </div>
+              </div>
+            ) : null}
 
-                <input
-                  value={liuliProductForm.name}
-                  onChange={(e) => setLiuliProductForm(prev => ({ ...prev, name: e.target.value }))}
-                  placeholder={language === 'zh' ? '名称' : 'Name'}
-                  className="w-full border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
-                />
-                <input
-                  value={liuliProductForm.itemName}
-                  onChange={(e) => setLiuliProductForm(prev => ({ ...prev, itemName: e.target.value }))}
-                  placeholder={language === 'zh' ? '物品名称' : 'Item Name'}
-                  className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
-                />
-                <div className="grid grid-cols-2 gap-3 mt-3">
+            {liuliProductModal ? (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+                <div className="bg-white border-2 border-indigo-200 shadow-2xl max-w-lg w-full p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="font-black text-lg">{language === 'zh' ? '生产力登记' : 'Productivity Register'}</div>
+                    <button
+                      onClick={() => setLiuliProductModal(false)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+
                   <input
-                    value={liuliProductForm.perDay}
-                    onChange={(e) => setLiuliProductForm(prev => ({ ...prev, perDay: e.target.value }))}
-                    placeholder={language === 'zh' ? '每天产量' : 'Per Day'}
-                    type="number"
-                    step="0.001"
-                    className="border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                    value={liuliProductForm.name}
+                    onChange={(e) => setLiuliProductForm(prev => ({ ...prev, name: e.target.value }))}
+                    placeholder={language === 'zh' ? '名称' : 'Name'}
+                    className="w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
                   />
                   <input
-                    value={liuliProductForm.pickup}
-                    onChange={(e) => setLiuliProductForm(prev => ({ ...prev, pickup: e.target.value }))}
-                    placeholder={language === 'zh' ? '取货地' : 'Pickup'}
-                    className="border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                    value={liuliProductForm.itemName}
+                    onChange={(e) => setLiuliProductForm(prev => ({ ...prev, itemName: e.target.value }))}
+                    placeholder={language === 'zh' ? '物品名称' : 'Item Name'}
+                    className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
                   />
-                </div>
-                <textarea
-                  value={liuliProductForm.note}
-                  onChange={(e) => setLiuliProductForm(prev => ({ ...prev, note: e.target.value }))}
-                  placeholder={language === 'zh' ? '注释' : 'Note'}
-                  rows={2}
-                  className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200 resize-none"
-                />
-                <button
-                  onClick={addLiuliProduct}
-                  className="mt-3 w-full bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 font-bold transition-colors"
-                >
-                  {language === 'zh' ? '登记产量' : 'Add'}
-                </button>
-              </div>
-            </div>
+                  <div className="grid grid-cols-2 gap-3 mt-3">
+                    <input
+                      value={liuliProductForm.perDay}
+                      onChange={(e) => setLiuliProductForm(prev => ({ ...prev, perDay: e.target.value }))}
+                      placeholder={language === 'zh' ? '每天产量' : 'Per Day'}
+                      type="number"
+                      step="0.001"
+                      className="border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                    />
+                    <input
+                      value={liuliProductForm.pickup}
+                      onChange={(e) => setLiuliProductForm(prev => ({ ...prev, pickup: e.target.value }))}
+                      placeholder={language === 'zh' ? '取货地' : 'Pickup'}
+                      className="border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                    />
+                  </div>
+                  <textarea
+                    value={liuliProductForm.note}
+                    onChange={(e) => setLiuliProductForm(prev => ({ ...prev, note: e.target.value }))}
+                    placeholder={language === 'zh' ? '注释' : 'Note'}
+                    rows={2}
+                    className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200 resize-none"
+                  />
 
-            <div className="bg-white border border-indigo-100 shadow-sm p-4">
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setLiuliProductModal(false)}
+                      className="w-full bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-bold transition-colors border border-indigo-200"
+                    >
+                      {language === 'zh' ? '取消' : 'Cancel'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const ok = await addLiuliProduct();
+                        if (ok) setLiuliProductModal(false);
+                      }}
+                      className="w-full bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 font-bold transition-colors"
+                    >
+                      {language === 'zh' ? '登记产量' : 'Add'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            <div className="bg-white border-2 border-indigo-200 p-6 shadow-md">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-base font-black">{language === 'zh' ? '飞船航班信息' : 'Flights'}</h2>
-                <div className="text-xs text-gray-500">{(liuliFlightsFiltered || []).length}</div>
+                <h2 className="text-lg font-black">{language === 'zh' ? '飞船航班信息' : 'Flights'}</h2>
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-gray-500">{(liuliFlightsFiltered || []).length}</div>
+                  <button
+                    onClick={() => setLiuliFlightModal(true)}
+                    className="bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 text-indigo-700 px-4 py-2 text-sm font-bold transition-all border border-indigo-300"
+                  >
+                    {language === 'zh' ? '登记航班' : 'Add'}
+                  </button>
+                </div>
               </div>
               <input
                 value={liuliFlightSearch}
@@ -4268,38 +4383,57 @@ const App = () => {
                 placeholder={language === 'zh' ? '搜索航班...' : 'Search flights...'}
                 className="w-full border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 transition-all mb-3"
               />
-              <div className="space-y-2 max-h-[520px] overflow-auto pr-1">
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => setLiuliFlightPage(p => Math.max(1, p - 1))}
+                  disabled={liuliFlightPage <= 1}
+                  className="px-3 py-1.5 text-sm font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {language === 'zh' ? '上一页' : 'Prev'}
+                </button>
+                <div className="text-xs text-gray-500">
+                  {liuliFlightPage}/{liuliFlightsTotalPages}
+                </div>
+                <button
+                  onClick={() => setLiuliFlightPage(p => Math.min(liuliFlightsTotalPages, p + 1))}
+                  disabled={liuliFlightPage >= liuliFlightsTotalPages}
+                  className="px-3 py-1.5 text-sm font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {language === 'zh' ? '下一页' : 'Next'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 min-h-[320px] items-start">
                 {(liuliFlightsFiltered || []).length === 0 ? (
                   <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无航班记录' : 'No flights yet'}</div>
                 ) : (
-                  (liuliFlightsFiltered || []).map((f, idx) => (
+                  (liuliFlightsPaged || []).map((f, idx) => (
                     <div
                       key={f.id}
-                      className="bg-indigo-50/50 border border-indigo-100 p-3 flex justify-between items-start"
+                      className="bg-gradient-to-br from-white to-indigo-50 border-2 border-indigo-200 p-1.5 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start h-fit self-start"
                     >
                       <div className="flex-1">
-                        <div className="text-xs text-gray-600 mb-1">{f.name || '-'}</div>
-                        <div className="font-bold">
+                        <div className="text-[11px] text-gray-600 mb-0.5 leading-tight">{f.name || '-'}</div>
+                        <div className="font-bold text-[12px] leading-tight">
                           <span className="text-indigo-600">{f.from}</span>
                           <span className="mx-2 text-gray-500">→</span>
                           <span className="text-purple-600">{f.to}</span>
-                          <span className="ml-2 inline-flex items-center text-xs font-extrabold tracking-wider bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-2.5 py-1 rounded-full shadow-sm ring-1 ring-violet-200">{f.shipType || 'SCB'}</span>
+                          <span className="ml-2 inline-flex items-center text-[10px] font-extrabold tracking-wider bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-2 py-0.5 rounded-full shadow-sm ring-1 ring-violet-200">{f.shipType || 'SCB'}</span>
                         </div>
-                        {f.note ? <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{f.note}</div> : null}
+                        {f.note ? <div className="text-[11px] text-gray-600 mt-1 whitespace-pre-wrap leading-snug">{f.note}</div> : null}
                         {(f.returnFrom && f.returnTo) ? (
-                          <div className="mt-2 border-t border-indigo-200 pt-2">
-                            <div className="font-bold text-sm">
+                          <div className="mt-1.5 border-t border-indigo-200 pt-1.5">
+                            <div className="font-bold text-[12px] leading-tight">
                               <span className="text-indigo-600">{f.returnFrom}</span>
                               <span className="mx-2 text-gray-500">→</span>
                               <span className="text-purple-600">{f.returnTo}</span>
                             </div>
-                            {f.returnNote ? <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{f.returnNote}</div> : null}
+                            {f.returnNote ? <div className="text-[11px] text-gray-600 mt-1 whitespace-pre-wrap leading-snug">{f.returnNote}</div> : null}
                           </div>
                         ) : null}
                       </div>
                       <button
                         onClick={() => deleteLiuliFlight(f.id)}
-                        className="text-xs text-red-600 hover:text-red-700 ml-2"
+                        className="text-[10px] text-red-600 hover:text-red-700 ml-2"
                       >
                         {language === 'zh' ? '删除' : 'Delete'}
                       </button>
@@ -4309,10 +4443,18 @@ const App = () => {
               </div>
             </div>
 
-            <div className="bg-white border border-indigo-100 shadow-sm p-4">
+            <div className="bg-white border-2 border-indigo-200 p-6 shadow-md">
               <div className="flex items-center justify-between mb-3">
-                <h2 className="text-base font-black">{language === 'zh' ? '生产力信息' : 'Productivity'}</h2>
-                <div className="text-xs text-gray-500">{(liuliProductsFiltered || []).length}</div>
+                <h2 className="text-lg font-black">{language === 'zh' ? '生产力信息' : 'Productivity'}</h2>
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-gray-500">{(liuliProductsFiltered || []).length}</div>
+                  <button
+                    onClick={() => setLiuliProductModal(true)}
+                    className="bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 text-indigo-700 px-4 py-2 text-sm font-bold transition-all border border-indigo-300"
+                  >
+                    {language === 'zh' ? '登记产量' : 'Add'}
+                  </button>
+                </div>
               </div>
               <input
                 value={liuliProductSearch}
@@ -4320,31 +4462,50 @@ const App = () => {
                 placeholder={language === 'zh' ? '搜索生产力...' : 'Search productivity...'}
                 className="w-full border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 transition-all mb-3"
               />
-              <div className="space-y-2 max-h-[520px] overflow-auto pr-1">
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => setLiuliProductPage(p => Math.max(1, p - 1))}
+                  disabled={liuliProductPage <= 1}
+                  className="px-3 py-1.5 text-sm font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {language === 'zh' ? '上一页' : 'Prev'}
+                </button>
+                <div className="text-xs text-gray-500">
+                  {liuliProductPage}/{liuliProductsTotalPages}
+                </div>
+                <button
+                  onClick={() => setLiuliProductPage(p => Math.min(liuliProductsTotalPages, p + 1))}
+                  disabled={liuliProductPage >= liuliProductsTotalPages}
+                  className="px-3 py-1.5 text-sm font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {language === 'zh' ? '下一页' : 'Next'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 min-h-[320px] items-start">
                 {(liuliProductsFiltered || []).length === 0 ? (
                   <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无登记' : 'No items yet'}</div>
                 ) : (
-                  (liuliProductsFiltered || []).map((p, idx) => (
+                  (liuliProductsPaged || []).map((p, idx) => (
                     <div
                       key={p.id}
-                      className="bg-indigo-50/50 border border-indigo-100 p-3 flex justify-between items-start"
+                      className="bg-gradient-to-br from-white to-indigo-50 border-2 border-indigo-200 p-1.5 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start h-fit self-start"
                     >
                       <div>
-                        <div className="font-bold text-gray-800">{p.name || '-'}</div>
-                        <div className="text-xs text-gray-600 mt-1">{p.itemName || '-'}</div>
-                        <div className="text-xs text-gray-600 mt-1">
+                        <div className="font-bold text-gray-800 text-[11px] leading-tight">{p.name || '-'}</div>
+                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">{p.itemName || '-'}</div>
+                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
                           {language === 'zh' ? '每天产量' : 'Per day'}: <span className="text-purple-600 font-semibold">{Number(p.perDay).toFixed(3)}</span>
                         </div>
                         {p.pickup ? (
-                          <div className="text-xs text-gray-600 mt-1">
+                          <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
                             {language === 'zh' ? '取货地' : 'Pickup'}: <span className="text-indigo-600 font-semibold">{p.pickup}</span>
                           </div>
                         ) : null}
-                        {p.note ? <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{p.note}</div> : null}
+                        {p.note ? <div className="text-[11px] text-gray-600 mt-1 whitespace-pre-wrap leading-snug">{p.note}</div> : null}
                       </div>
                       <button
                         onClick={() => deleteLiuliProduct(p.id)}
-                        className="text-xs text-red-600 hover:text-red-700"
+                        className="text-[10px] text-red-600 hover:text-red-700"
                       >
                         {language === 'zh' ? '删除' : 'Delete'}
                       </button>
