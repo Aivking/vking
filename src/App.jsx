@@ -820,7 +820,7 @@ const App = () => {
 
   const [liuliFlights, setLiuliFlights] = useState([]);
   const [liuliProducts, setLiuliProducts] = useState([]);
-  const [liuliFlightForm, setLiuliFlightForm] = useState({ name: '', from: '', to: '', note: '', roundTrip: false, returnFrom: '', returnTo: '', returnNote: '' });
+  const [liuliFlightForm, setLiuliFlightForm] = useState({ name: '', from: '', to: '', note: '', roundTrip: false, returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
   const [liuliProductForm, setLiuliProductForm] = useState({ name: '', itemName: '', perDay: '', pickup: '', note: '' });
 
   const [liuliFlightSearch, setLiuliFlightSearch] = useState('');
@@ -1087,15 +1087,17 @@ const App = () => {
       .map(tx => {
         const remark = String(tx.remark || '');
         const toMatch = remark.match(/(?:^|\n)to:\s*(.*?)(?:\n|$)/i);
-        const noteMatch = remark.match(/(?:^|\n)note:\s*([\s\S]*?)(?=\nreturnFrom:|\nreturnTo:|\nreturnNote:|$)/i);
+        const noteMatch = remark.match(/(?:^|\n)note:\s*([\s\S]*?)(?=\nreturnFrom:|\nreturnTo:|\nreturnNote:|\nshipType:|$)/i);
         const returnFromMatch = remark.match(/(?:^|\n)returnFrom:\s*(.*?)(?:\n|$)/i);
         const returnToMatch = remark.match(/(?:^|\n)returnTo:\s*(.*?)(?:\n|$)/i);
-        const returnNoteMatch = remark.match(/(?:^|\n)returnNote:\s*([\s\S]*?)(?:\n|$)/i);
+        const returnNoteMatch = remark.match(/(?:^|\n)returnNote:\s*([\s\S]*?)(?=\nshipType:|$)/i);
+        const shipTypeMatch = remark.match(/(?:^|\n)shipType:\s*(.*?)(?:\n|$)/i);
         const to = toMatch ? (toMatch[1] || '').trim() : (tx.rate != null ? String(tx.rate) : '');
         const note = noteMatch ? (noteMatch[1] || '').trim() : remark;
         const returnFrom = returnFromMatch ? (returnFromMatch[1] || '').trim() : '';
         const returnTo = returnToMatch ? (returnToMatch[1] || '').trim() : '';
         const returnNote = returnNoteMatch ? (returnNoteMatch[1] || '').trim() : '';
+        const shipType = shipTypeMatch ? (shipTypeMatch[1] || '').trim() : 'SCB';
         return {
           id: tx.id,
           name: tx.client || '',
@@ -1105,6 +1107,7 @@ const App = () => {
           returnFrom,
           returnTo,
           returnNote,
+          shipType,
           created_at: tx.timestamp || ''
         };
       });
@@ -1114,7 +1117,7 @@ const App = () => {
     const q = (liuliFlightSearch || '').trim().toLowerCase();
     if (!q) return liuliFlightsForTable || [];
     return (liuliFlightsForTable || []).filter(f => {
-      const hay = [f.name, f.from, f.to, f.note, f.returnFrom, f.returnTo, f.returnNote].map(x => String(x || '').toLowerCase()).join(' ');
+      const hay = [f.name, f.from, f.to, f.note, f.returnFrom, f.returnTo, f.returnNote, f.shipType].map(x => String(x || '').toLowerCase()).join(' ');
       return hay.includes(q);
     });
   }, [liuliFlightsForTable, liuliFlightSearch]);
@@ -1161,6 +1164,7 @@ const App = () => {
     const returnFrom = (liuliFlightForm.returnFrom || '').trim();
     const returnTo = (liuliFlightForm.returnTo || '').trim();
     const returnNote = (liuliFlightForm.returnNote || '').trim();
+    const shipType = (liuliFlightForm.shipType || 'SCB').trim();
     if (!name) return alert(language === 'zh' ? '请填写名称' : 'Please fill in name');
     if (!from || !to) return alert(language === 'zh' ? '请填写出发地与目的地' : 'Please fill in From and To');
     if (roundTrip && (!returnFrom || !returnTo)) return alert(language === 'zh' ? '往返模式下请填写返程出发地与目的地' : 'Please fill in return From and To for round trip');
@@ -1170,6 +1174,7 @@ const App = () => {
         if (roundTrip) {
           remark += `\nreturnFrom:${returnFrom}\nreturnTo:${returnTo}\nreturnNote:${returnNote}`;
         }
+        remark += `\nshipType:${shipType}`;
         const newItem = {
           type: 'liuli_flight',
           client: name,
@@ -1185,7 +1190,7 @@ const App = () => {
         const { error } = await supabase.from('transactions').insert([newItem]);
         if (error) throw error;
         await refreshTransactions();
-        setLiuliFlightForm({ name: '', from: '', to: '', note: '', roundTrip: false, returnFrom: '', returnTo: '', returnNote: '' });
+        setLiuliFlightForm({ name: '', from: '', to: '', note: '', roundTrip: false, returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
       } catch (e) {
         alert((language === 'zh' ? '登记失败' : 'Add failed') + ': ' + (e?.message || e));
       }
@@ -4147,6 +4152,16 @@ const App = () => {
                   rows={2}
                   className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200 resize-none"
                 />
+                <select
+                  value={liuliFlightForm.shipType}
+                  onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, shipType: e.target.value }))}
+                  className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                >
+                  <option value="SCB">SCB (500/500)</option>
+                  <option value="WCB">WCB (3000/1000)</option>
+                  <option value="LCB">LCB (2000/2000)</option>
+                  <option value="HCB">HCB (5000/5000)</option>
+                </select>
                 <div className="mt-3 flex items-center gap-2">
                   <input
                     type="checkbox"
@@ -4268,6 +4283,7 @@ const App = () => {
                           <span className="text-indigo-600">{f.from}</span>
                           <span className="mx-2 text-gray-500">→</span>
                           <span className="text-purple-600">{f.to}</span>
+                          <span className="ml-2 inline-flex items-center text-xs font-extrabold tracking-wider bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-2.5 py-1 rounded-full shadow-sm ring-1 ring-violet-200">{f.shipType || 'SCB'}</span>
                         </div>
                         {f.note ? <div className="text-xs text-gray-600 mt-1 whitespace-pre-wrap">{f.note}</div> : null}
                         {(f.returnFrom && f.returnTo) ? (
