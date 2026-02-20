@@ -3612,19 +3612,26 @@ const App = () => {
     return '';
   };
 
-  const injectionDataForTable = aggregateAccountByClient(
-    displayTx.filter(tx => tx.type === 'injection'),
-    injectionInterestExpense,
-    'injection',
-    (tx, clientKey) => `${clientKey}::${tx.status || 'approved'}`
-  );
+  const injectionRows = displayTx.filter(tx => tx.type === 'injection');
+  const depositRows = displayTx.filter(tx => tx.type === 'deposit');
 
-  const depositDataForTable = aggregateAccountByClient(
-    displayTx.filter(tx => tx.type === 'deposit'),
-    depositInterestExpense,
-    'deposit',
-    (tx, clientKey) => `${clientKey}::${tx.status || 'approved'}::${tx.product_type || 'normal'}`
-  );
+  const injectionDataForTable = isAdmin
+    ? injectionRows
+    : aggregateAccountByClient(
+        injectionRows,
+        injectionInterestExpense,
+        'injection',
+        (tx, clientKey) => `${clientKey}::${tx.status || 'approved'}`
+      );
+
+  const depositDataForTable = isAdmin
+    ? depositRows
+    : aggregateAccountByClient(
+        depositRows,
+        depositInterestExpense,
+        'deposit',
+        (tx, clientKey) => `${clientKey}::${tx.status || 'approved'}`
+      );
 
   const handleAggregatedEdit = async (row, field, newValue) => {
     try {
@@ -6073,12 +6080,12 @@ const App = () => {
              <TableSection title={`${t('injectionAccount')} - ${t('injection')}`} color="orange" icon={ArrowDownLeft} 
               data={injectionDataForTable}
               isAdmin={isAdmin}
-              onEdit={null}
-              onDelete={null}
+              onEdit={isAdmin ? (tx) => openModal(tx.type, tx) : null}
+              onDelete={isAdmin ? (id) => handleCRUD('delete', id) : null}
               onDeleteAll={null}
               onManageGroup={null}
-              onAggregatedEdit={isAdmin ? handleAggregatedEdit : null}
-              onAggregatedDelete={isAdmin ? handleAggregatedDelete : null}
+              onAggregatedEdit={null}
+              onAggregatedDelete={null}
               language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
               interestRecords={injectionInterestExpense} applyInterest={true} />
               
@@ -6091,12 +6098,12 @@ const App = () => {
               <TableSection title={`${t('depositAccount')} - ${t('deposit')}`} color="blue" icon={Wallet}
               data={depositDataForTable}
               isAdmin={isAdmin}
-              onEdit={null}
-              onDelete={null}
+              onEdit={isAdmin ? (tx) => openModal(tx.type, tx) : null}
+              onDelete={isAdmin ? (id) => handleCRUD('delete', id) : null}
               onDeleteAll={null}
               onManageGroup={null}
-              onAggregatedEdit={isAdmin ? handleAggregatedEdit : null}
-              onAggregatedDelete={isAdmin ? handleAggregatedDelete : null}
+              onAggregatedEdit={null}
+              onAggregatedDelete={null}
               language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel} 
               interestRecords={depositInterestExpense} applyInterest={true} />
               
@@ -6423,6 +6430,8 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
               const weeklyInterest = applyInterest && !isInterestRecord && !row.type.includes('withdraw')
                 ? calculateWeeklyInterest(row.principal, row.rate)
                 : 0;
+              const aggregatedAccrued = parseFloat(row.accrued_sum || 0);
+              const aggregatedWeekly = parseFloat(row.weekly_sum || 0);
 
               const productTypeLabel = getProductTypeLabel(row);
 
@@ -6430,7 +6439,9 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
               // 先尝试从 remark 中解析 settlement_count，如果没有则计算
               let cyclesForRow = 0;
               const interestPrefix = `${t('interestCountPrefix')}:`;
-              if (row.remark && row.remark.includes(interestPrefix)) {
+              if (isAggregatedRow && aggregatedWeekly > 0) {
+                cyclesForRow = parseFloat((aggregatedAccrued / aggregatedWeekly).toFixed(2));
+              } else if (row.remark && row.remark.includes(interestPrefix)) {
                 const match = row.remark.match(new RegExp(`${t('interestCountPrefix')}:\\s*(\\d+)`));
                 cyclesForRow = match ? parseInt(match[1]) : 0;
               } else {
@@ -6447,7 +6458,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                 ? parseFloat(row.principal || 0)
                 : (row.type.includes('withdraw')
                   ? parseFloat(row.principal || 0)
-                  : (parseFloat(row.principal || 0) + weeklyInterest * cyclesForRow));
+                  : (parseFloat(row.principal || 0) + (isAggregatedRow ? aggregatedAccrued : (weeklyInterest * cyclesForRow))));
 
               const showActions = openActionsId === row.id;
               
