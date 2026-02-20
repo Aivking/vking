@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+﻿import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Activity, Wallet, LogOut, Shield, CheckCircle, XCircle, 
   AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, ArrowDownRight, Settings, PlusCircle, MinusCircle, X, MessageSquare, Send, ThumbsUp, TrendingUp, CheckSquare
@@ -391,6 +391,10 @@ const translations = {
     withdrawDep: '取款',
     manualSettle: '手动结算',
     forceSettle: '强制结算',
+    dailyProfit: '日利润',
+    operatorName: '运营人',
+    dailyProfitPlaceholder: '输入日利润(m)...',
+    operatorNamePlaceholder: '输入运营人名称...',
     settleCountdownLabel: '结算倒计时',
     alreadySettledToday: '今日已结算，已跳过。若需重复结算请使用“强制结算”。',
     forceSettleConfirm1: '将跳过今日重复检查并立即结算，是否继续？',
@@ -712,6 +716,10 @@ const translations = {
     withdrawDep: 'Withdraw Dep.',
     manualSettle: 'Manual Settle',
     forceSettle: 'Force Settle',
+    dailyProfit: 'Daily Profit',
+    operatorName: 'Operator',
+    dailyProfitPlaceholder: 'Enter daily profit (m)...',
+    operatorNamePlaceholder: 'Enter operator name...',
     settleCountdownLabel: 'Settle Countdown',
     alreadySettledToday: 'Already settled today. Use Force Settle to run again.',
     forceSettleConfirm1: 'This will bypass today duplicate check and settle now. Continue?',
@@ -879,6 +887,25 @@ const App = () => {
     return weekly * (cycles || 0);
   };
 
+  const parseBankAssetMeta = (tx) => {
+    const remark = String(tx?.remark || '');
+    const itemMatch = remark.match(/(?:^|\n)itemName:\s*(.*?)(?:\n|$)/i);
+    const profitMatch = remark.match(/(?:^|\n)dailyProfit:\s*([+-]?\d*\.?\d+)(?:\n|$)/i);
+
+    const fallbackItem = remark.includes('\n') ? remark.split('\n')[0] : remark;
+    const itemName = (itemMatch ? itemMatch[1] : fallbackItem || '').trim();
+    const dailyProfit = parseFloat(profitMatch ? profitMatch[1] : 0) || 0;
+    const operatorName = String(tx?.product_type || '').trim();
+
+    return { itemName, dailyProfit, operatorName };
+  };
+
+  const buildBankAssetRemark = (itemName, dailyProfit) => {
+    const cleanItemName = String(itemName || '').trim();
+    const profitNum = parseFloat(dailyProfit) || 0;
+    return `itemName:${cleanItemName}\ndailyProfit:${profitNum}`;
+  };
+
   const aggregateAccountByClient = (rows, interestExpenseRecords, type, getGroupKey = null) => {
     const map = new Map();
     for (const tx of rows) {
@@ -1039,9 +1066,9 @@ const App = () => {
   // 银行资产 State
   const [bankAssets, setBankAssets] = useState([]);
   const [newAssetModal, setNewAssetModal] = useState(false);
-  const [newAssetData, setNewAssetData] = useState({ planetName: '', itemName: '', quantity: '', value: '' });
+  const [newAssetData, setNewAssetData] = useState({ planetName: '', itemName: '', quantity: '', value: '', dailyProfit: '', operatorName: '' });
   const [editingAssetId, setEditingAssetId] = useState(null);
-  const [editAssetData, setEditAssetData] = useState({ planetName: '', itemName: '', quantity: '', value: '' });
+  const [editAssetData, setEditAssetData] = useState({ planetName: '', itemName: '', quantity: '', value: '', dailyProfit: '', operatorName: '' });
   
   // 基金 State
   const FUND_ACCOUNT_KEY = 'global';
@@ -2631,8 +2658,8 @@ const App = () => {
         created_by: currentUser.username,
         creator_id: currentUser.id || currentUser.username,
         status: 'approved', // 直接批准，不需要管理员审批
-        remark: newAssetData.itemName, // 使用remark存储物品名称
-        product_type: 'daily_output' // 标记为每日产出
+        remark: buildBankAssetRemark(newAssetData.itemName, newAssetData.dailyProfit),
+        product_type: String(newAssetData.operatorName || '').trim()
       };
 
       const { error } = await supabase
@@ -2644,7 +2671,7 @@ const App = () => {
       alert(t('assetRegistered'));
       
       setNewAssetModal(false);
-      setNewAssetData({ planetName: '', itemName: '', quantity: '', value: '' });
+      setNewAssetData({ planetName: '', itemName: '', quantity: '', value: '', dailyProfit: '', operatorName: '' });
     } catch (e) {
       alert(t('registerFailed') + ': ' + e.message);
     }
@@ -2661,7 +2688,8 @@ const App = () => {
     try {
       const updateData = {
         client: editAssetData.planetName,
-        remark: editAssetData.itemName,
+        remark: buildBankAssetRemark(editAssetData.itemName, editAssetData.dailyProfit),
+        product_type: String(editAssetData.operatorName || '').trim(),
         principal: parseFloat(editAssetData.quantity) || 0,
         rate: parseFloat(editAssetData.value) || 0
       };
@@ -3200,9 +3228,12 @@ const App = () => {
     const fundingBase = (injections.p - wInj.p) + (deposits.p - wDep.p);
     const totalRevenue = loans.i;
     const totalExpense = (injections.i - wInj.i) + (deposits.i - wDep.i);
+    const assetDailyProfit = approved
+      .filter(tx => tx.type === 'bank_asset')
+      .reduce((sum, tx) => sum + parseBankAssetMeta(tx).dailyProfit, 0);
 
     // 计算利息池 (每周净利息，利率已按周计)
-    const interestPool = (totalRevenue - totalExpense);
+    const interestPool = (totalRevenue - totalExpense) + (assetDailyProfit * 7);
 
     const personalInjections = calcPersonalWithSettled(['injection']);
     const personalDeposits = calcPersonalWithSettled(['deposit']);
@@ -3236,7 +3267,7 @@ const App = () => {
       loanPrincipal: loans.p,
       totalAssets: totalAssets,
       totalLoans: loans.p,
-      netCashFlow: totalRevenue - totalExpense,
+      netCashFlow: interestPool,
       // 主页的银行闲置资金计算：仅受 bank_fund 转账影响（申购/赎回/分红提取不影响银行闲置资金）
       idleCash: fundingBase - loans.p - bankFundNetTransfer,
       interestPool: interestPool,
@@ -4880,100 +4911,65 @@ const App = () => {
                   <p className="text-lg">{t('noAssetsYet')}</p>
                 </div>
               ) : (
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead className="bg-purple-50">
-                      <tr>
-                        <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('planetNameAsset')}</th>
-                        <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('itemName')}</th>
-                        <th className="px-4 py-3 text-right text-sm font-bold text-purple-700">{t('quantity')}</th>
-                        <th className="px-4 py-3 text-right text-sm font-bold text-purple-700">{t('assetValue')}</th>
-                        <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('time')}</th>
-                        <th className="px-4 py-3 text-left text-sm font-bold text-purple-700">{t('applicant')}</th>
-                        {isAdmin && <th className="px-4 py-3 text-center text-sm font-bold text-purple-700">{t('actions')}</th>}
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-purple-100">
-                      {bankAssets.map((asset) => {
-                        const isEditing = editingAssetId === asset.id;
-                        return (
-                        <tr key={asset.id} className="hover:bg-purple-50 transition-colors">
-                          <td className="px-4 py-3 font-semibold text-purple-700">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 items-start">
+                  {bankAssets.map((asset) => {
+                    const isEditing = editingAssetId === asset.id;
+                    const assetMeta = parseBankAssetMeta(asset);
+
+                    return (
+                      <div
+                        key={asset.id}
+                        className="bg-gradient-to-br from-white to-purple-50 border-2 border-purple-200 p-3 shadow-sm hover:shadow-md transition-shadow h-fit"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
                             {isEditing ? (
                               <input
                                 type="text"
                                 value={editAssetData.planetName}
                                 onChange={(e) => setEditAssetData({ ...editAssetData, planetName: e.target.value })}
-                                className="w-full border border-purple-300 px-2 py-1 rounded focus:ring-2 focus:ring-purple-400 outline-none"
+                                className="border border-purple-300 px-2 py-1 rounded text-sm font-semibold text-purple-700 focus:ring-2 focus:ring-purple-400 outline-none"
                               />
-                            ) : asset.client}
-                          </td>
-                          <td className="px-4 py-3 text-gray-700">
-                            {isEditing ? (
-                              <input
-                                type="text"
-                                value={editAssetData.itemName}
-                                onChange={(e) => setEditAssetData({ ...editAssetData, itemName: e.target.value })}
-                                className="w-full border border-purple-300 px-2 py-1 rounded focus:ring-2 focus:ring-purple-400 outline-none"
-                              />
-                            ) : asset.remark}
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono font-bold text-gray-600">
-                            {isEditing ? (
-                              <input
-                                type="number"
-                                step="0.001"
-                                value={editAssetData.quantity}
-                                onChange={(e) => setEditAssetData({ ...editAssetData, quantity: e.target.value })}
-                                className="w-full border border-purple-300 px-2 py-1 rounded focus:ring-2 focus:ring-purple-400 outline-none text-right"
-                              />
-                            ) : asset.principal}
-                          </td>
-                          <td className="px-4 py-3 text-right font-mono font-bold text-purple-600">
-                            {isEditing ? (
-                              <input
-                                type="number"
-                                step="0.001"
-                                value={editAssetData.value}
-                                onChange={(e) => setEditAssetData({ ...editAssetData, value: e.target.value })}
-                                className="w-full border border-purple-300 px-2 py-1 rounded focus:ring-2 focus:ring-purple-400 outline-none text-right"
-                              />
-                            ) : `${(asset.rate || 0).toFixed(3)}m`}
-                          </td>
-                          <td className="px-4 py-3 text-sm text-gray-500">{asset.timestamp?.split(' ')[0] || '-'}</td>
-                          <td className="px-4 py-3 text-sm text-gray-600">{asset.created_by}</td>
+                            ) : (
+                              <div className="font-bold text-purple-700 text-sm">{asset.client}</div>
+                            )}
+                            <div className="text-xs text-gray-500 mt-0.5">{asset.timestamp?.split(' ')[0] || '-'}</div>
+                          </div>
                           {isAdmin && (
-                            <td className="px-4 py-3 text-center">
+                            <div className="flex items-center gap-1">
                               {isEditing ? (
-                                <div className="flex gap-2 justify-center">
+                                <>
                                   <button
                                     onClick={() => handleUpdateAsset(asset.id)}
-                                    className="text-green-600 hover:text-green-800 p-2 hover:bg-green-50 rounded transition-colors"
+                                    className="text-green-600 hover:text-green-800 p-1.5 hover:bg-green-50 rounded transition-colors"
                                     title={t('save')}
                                   >
                                     <CheckCircle className="w-4 h-4" />
                                   </button>
                                   <button
                                     onClick={() => setEditingAssetId(null)}
-                                    className="text-gray-600 hover:text-gray-800 p-2 hover:bg-gray-100 rounded transition-colors"
+                                    className="text-gray-600 hover:text-gray-800 p-1.5 hover:bg-gray-100 rounded transition-colors"
                                     title={t('cancel')}
                                   >
                                     <X className="w-4 h-4" />
                                   </button>
-                                </div>
+                                </>
                               ) : (
-                                <div className="flex gap-2 justify-center">
+                                <>
                                   <button
                                     onClick={() => {
                                       setEditingAssetId(asset.id);
+                                      const editMeta = parseBankAssetMeta(asset);
                                       setEditAssetData({
                                         planetName: asset.client,
-                                        itemName: asset.remark,
+                                        itemName: editMeta.itemName,
                                         quantity: asset.principal,
-                                        value: asset.rate
+                                        value: asset.rate,
+                                        dailyProfit: editMeta.dailyProfit,
+                                        operatorName: editMeta.operatorName
                                       });
                                     }}
-                                    className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 rounded transition-colors"
+                                    className="text-blue-600 hover:text-blue-800 p-1.5 hover:bg-blue-50 rounded transition-colors"
                                     title={t('editShort')}
                                   >
                                     <Edit className="w-4 h-4" />
@@ -4984,20 +4980,102 @@ const App = () => {
                                         handleCRUD('delete', asset.id);
                                       }
                                     }}
-                                    className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 rounded transition-colors"
+                                    className="text-red-600 hover:text-red-800 p-1.5 hover:bg-red-50 rounded transition-colors"
                                     title={t('delete')}
                                   >
                                     <Trash2 className="w-4 h-4" />
                                   </button>
-                                </div>
+                                </>
                               )}
-                            </td>
+                            </div>
                           )}
-                        </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                        </div>
+
+                        <div className="mt-3 space-y-1.5 text-sm">
+                          <div className="text-gray-700">
+                            <span className="text-gray-500 mr-1">{t('itemName')}:</span>
+                            {isEditing ? (
+                              <input
+                                type="text"
+                                value={editAssetData.itemName}
+                                onChange={(e) => setEditAssetData({ ...editAssetData, itemName: e.target.value })}
+                                className="border border-purple-300 px-2 py-1 rounded text-sm focus:ring-2 focus:ring-purple-400 outline-none"
+                              />
+                            ) : (
+                              <span className="font-medium">{assetMeta.itemName}</span>
+                            )}
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-white border border-purple-100 px-2 py-1 rounded">
+                              <div className="text-[11px] text-gray-500">{t('quantity')}</div>
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  value={editAssetData.quantity}
+                                  onChange={(e) => setEditAssetData({ ...editAssetData, quantity: e.target.value })}
+                                  className="w-full border border-purple-300 px-1.5 py-0.5 rounded text-sm text-right focus:ring-2 focus:ring-purple-400 outline-none"
+                                />
+                              ) : (
+                                <div className="font-mono font-semibold text-gray-700">{asset.principal}</div>
+                              )}
+                            </div>
+
+                            <div className="bg-white border border-purple-100 px-2 py-1 rounded">
+                              <div className="text-[11px] text-gray-500">{t('assetValue')}</div>
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  value={editAssetData.value}
+                                  onChange={(e) => setEditAssetData({ ...editAssetData, value: e.target.value })}
+                                  className="w-full border border-purple-300 px-1.5 py-0.5 rounded text-sm text-right focus:ring-2 focus:ring-purple-400 outline-none"
+                                />
+                              ) : (
+                                <div className="font-mono font-semibold text-purple-600">{(asset.rate || 0).toFixed(3)}m</div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="grid grid-cols-2 gap-2">
+                            <div className="bg-white border border-purple-100 px-2 py-1 rounded">
+                              <div className="text-[11px] text-gray-500">{t('dailyProfit')}</div>
+                              {isEditing ? (
+                                <input
+                                  type="number"
+                                  step="0.001"
+                                  value={editAssetData.dailyProfit}
+                                  onChange={(e) => setEditAssetData({ ...editAssetData, dailyProfit: e.target.value })}
+                                  className="w-full border border-purple-300 px-1.5 py-0.5 rounded text-sm text-right focus:ring-2 focus:ring-purple-400 outline-none"
+                                />
+                              ) : (
+                                <div className="font-mono font-semibold text-green-600">{(assetMeta.dailyProfit || 0).toFixed(3)}m</div>
+                              )}
+                            </div>
+
+                            <div className="bg-white border border-purple-100 px-2 py-1 rounded">
+                              <div className="text-[11px] text-gray-500">{t('operatorName')}</div>
+                              {isEditing ? (
+                                <input
+                                  type="text"
+                                  value={editAssetData.operatorName}
+                                  onChange={(e) => setEditAssetData({ ...editAssetData, operatorName: e.target.value })}
+                                  className="w-full border border-purple-300 px-1.5 py-0.5 rounded text-sm focus:ring-2 focus:ring-purple-400 outline-none"
+                                />
+                              ) : (
+                                <div className="font-semibold text-gray-700">{assetMeta.operatorName || '-'}</div>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="text-xs text-gray-500 pt-1 border-t border-purple-100">
+                            {t('applicant')}: <span className="font-medium text-gray-700">{asset.created_by || '-'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -5060,6 +5138,29 @@ const App = () => {
                       onChange={(e) => setNewAssetData({ ...newAssetData, value: e.target.value })}
                       className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
                       placeholder={t('valuePlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('dailyProfit')}</label>
+                    <input
+                      type="number"
+                      required
+                      step="0.001"
+                      value={newAssetData.dailyProfit}
+                      onChange={(e) => setNewAssetData({ ...newAssetData, dailyProfit: e.target.value })}
+                      className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
+                      placeholder={t('dailyProfitPlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 text-gray-700">{t('operatorName')}</label>
+                    <input
+                      type="text"
+                      required
+                      value={newAssetData.operatorName}
+                      onChange={(e) => setNewAssetData({ ...newAssetData, operatorName: e.target.value })}
+                      className="w-full border border-gray-300 px-4 py-2 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none"
+                      placeholder={t('operatorNamePlaceholder')}
                     />
                   </div>
                   <button
