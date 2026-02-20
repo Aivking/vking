@@ -1,5 +1,12 @@
 import { createClient } from '@supabase/supabase-js';
 
+// TEMP TEST MODE:
+// - true: run cron settle checks every 5 minutes (see vercel.json)
+// - bypass Wednesday 12:00-12:02 window
+// - dedupe by hour (one settlement per hour)
+// Switch back to false after verification.
+const TEMP_TEST_MODE = true;
+
 const getShanghaiNow = () => new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
 
 const getShanghaiDateKey = (d) => {
@@ -8,6 +15,13 @@ const getShanghaiDateKey = (d) => {
   const mm = String(d.getMonth() + 1).padStart(2, '0');
   const dd = String(d.getDate()).padStart(2, '0');
   return `${yyyy}-${mm}-${dd}`;
+};
+
+const getShanghaiHourKey = (d) => {
+  if (!d) return '';
+  const dateKey = getShanghaiDateKey(d);
+  const hh = String(d.getHours()).padStart(2, '0');
+  return `${dateKey}-${hh}`;
 };
 
 const isWithinShanghaiSettleWindow = (d) => {
@@ -56,10 +70,10 @@ export default async function handler(req, res) {
     });
 
     const now = getShanghaiNow();
-    if (isVercelCron && !isWithinShanghaiSettleWindow(now)) {
+    if (isVercelCron && !TEMP_TEST_MODE && !isWithinShanghaiSettleWindow(now)) {
       return res.status(200).json({ ok: true, skipped: true, reason: 'outside_settle_window' });
     }
-    const settleKey = getShanghaiDateKey(now);
+    const settleKey = TEMP_TEST_MODE ? getShanghaiHourKey(now) : getShanghaiDateKey(now);
 
     const { data: exists, error: existsError } = await supabase
       .from('transactions')
@@ -151,6 +165,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
+      tempTestMode: TEMP_TEST_MODE,
       settleKey,
       settleId,
       inserted: recordsToInsert.length,

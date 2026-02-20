@@ -390,6 +390,11 @@ const translations = {
     deposit: '存款',
     withdrawDep: '取款',
     manualSettle: '手动结算',
+    forceSettle: '强制结算',
+    settleCountdownLabel: '结算倒计时',
+    alreadySettledToday: '今日已结算，已跳过。若需重复结算请使用“强制结算”。',
+    forceSettleConfirm1: '将跳过今日重复检查并立即结算，是否继续？',
+    forceSettleConfirm2: '请再次确认：本操作会新增一批利息记录，继续吗？',
     // 统计卡片
     totalAssets: '总资产',
     totalLiabilities: '总放贷',
@@ -706,6 +711,11 @@ const translations = {
     deposit: 'Deposit',
     withdrawDep: 'Withdraw Dep.',
     manualSettle: 'Manual Settle',
+    forceSettle: 'Force Settle',
+    settleCountdownLabel: 'Settle Countdown',
+    alreadySettledToday: 'Already settled today. Use Force Settle to run again.',
+    forceSettleConfirm1: 'This will bypass today duplicate check and settle now. Continue?',
+    forceSettleConfirm2: 'Please confirm again: this will add a new batch of interest records. Continue?',
     // Statistics
     totalAssets: 'Total Assets',
     totalLiabilities: 'Total Loans',
@@ -803,6 +813,7 @@ const App = () => {
   const [modalType, setModalType] = useState('loan'); 
   const [formData, setFormData] = useState({ client: '', principal: '', rate: '', product_type: '' });
   const [editId, setEditId] = useState(null);
+  const [forceSettleConfirmStep, setForceSettleConfirmStep] = useState(0);
   const [nextSettleTime, setNextSettleTime] = useState('');
   const [settleCountdown, setSettleCountdown] = useState('');
   
@@ -2670,7 +2681,7 @@ const App = () => {
   };
 
   // --- 自动结算利息 ---
-  const autoSettleInterest = async (settleKeyParam) => {
+  const autoSettleInterest = async (settleKeyParam, force = false) => {
     try {
       const now = getShanghaiNow();
       const settleKey = settleKeyParam || getShanghaiDateKey(now);
@@ -2684,7 +2695,8 @@ const App = () => {
         .limit(1);
 
       if (existsError) throw existsError;
-      if ((exists || []).length > 0) {
+      if (!force && (exists || []).length > 0) {
+        alert(t('alreadySettledToday'));
         console.log('⚠️ 本周已结算过，跳过自动结算', settleKey);
         return;
       }
@@ -2713,6 +2725,8 @@ const App = () => {
       const recordsToInsert = [];
 
       // 生成利息结算记录
+      const forcedMark = force ? '\nforceSettle:true' : '';
+
       if (loanInterest > 0) {
         recordsToInsert.push({
           type: 'interest_income',
@@ -2724,7 +2738,7 @@ const App = () => {
           creator_id: 'system',
           status: 'approved',
           settle_id: settleId,
-          remark: `本周贷款利息自动结算\nautoSettleKey:${settleKey}`
+          remark: `本周贷款利息自动结算\nautoSettleKey:${settleKey}${forcedMark}`
         });
         settledCount++;
       }
@@ -2740,7 +2754,7 @@ const App = () => {
           creator_id: 'system',
           status: 'approved',
           settle_id: settleId,
-          remark: `注资账户利息自动结算\nautoSettleKey:${settleKey}`
+          remark: `注资账户利息自动结算\nautoSettleKey:${settleKey}${forcedMark}`
         });
         settledCount++;
       }
@@ -2756,7 +2770,7 @@ const App = () => {
           creator_id: 'system',
           status: 'approved',
           settle_id: settleId,
-          remark: `存款账户利息自动结算\nautoSettleKey:${settleKey}`
+          remark: `存款账户利息自动结算\nautoSettleKey:${settleKey}${forcedMark}`
         });
         settledCount++;
       }
@@ -2777,6 +2791,23 @@ const App = () => {
       console.error("自动结算利息失败:", e);
       alert(language === 'zh' ? `❌ 结算失败: ${e.message}` : `❌ Settlement failed: ${e.message}`);
     }
+  };
+
+  const handleForceSettleInterest = () => {
+    setForceSettleConfirmStep(1);
+  };
+
+  const cancelForceSettleConfirm = () => {
+    setForceSettleConfirmStep(0);
+  };
+
+  const confirmForceSettleInterest = async () => {
+    if (forceSettleConfirmStep === 1) {
+      setForceSettleConfirmStep(2);
+      return;
+    }
+    setForceSettleConfirmStep(0);
+    await autoSettleInterest(undefined, true);
   };
 
   // --- 业务逻辑 ---
@@ -5872,8 +5903,13 @@ const App = () => {
                >
                  {language === 'zh' ? 'EN' : t('langChinese')}
                </button>
-               <div className={`px-4 py-2 font-bold text-lg ${stats.netCashFlow >= -0.001 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                  {t('netCashFlow')}: {stats.netCashFlow > 0 ? '+' : ''}{formatMoney(stats.netCashFlow)} {t('perWeek')}
+               <div className={`px-4 py-2 ${stats.netCashFlow >= -0.001 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  <div className="font-bold text-lg">
+                    {t('netCashFlow')}: {stats.netCashFlow > 0 ? '+' : ''}{formatMoney(stats.netCashFlow)} {t('perWeek')}
+                  </div>
+                  <div className="text-xs font-medium mt-0.5 opacity-90">
+                    {t('settleCountdownLabel')}: {settleCountdown || '--'}
+                  </div>
                 </div>
              </div>
             <button onClick={handleLogout} className="text-sm text-gray-500 hover:text-red-600 flex items-center gap-1"><LogOut className="w-4 h-4" /> {t('logout')}</button>
@@ -6017,7 +6053,7 @@ const App = () => {
               <TrendingUp className="w-4 h-4" />
               {t('bankBonds')}
             </button>
-            {isAdmin && <Btn icon={PlusCircle} label={`${t('manualSettle')} (${settleCountdown})`} onClick={() => autoSettleInterest()} color="amber" />}
+            {isAdmin && <Btn icon={AlertCircle} label={t('forceSettle')} onClick={handleForceSettleInterest} color="red" />}
             {isAdmin && <button
               onClick={() => setInterestManageModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
@@ -6114,6 +6150,43 @@ const App = () => {
         </div>
 
         {/* Modal */}
+        {forceSettleConfirmStep > 0 && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+            <div className="bg-white border-2 border-green-200 shadow-2xl max-w-md w-full p-8 space-y-6 animate-in fade-in zoom-in-95 duration-200 transition-all hover:border-green-300 hover:shadow-green-200/50">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="font-bold text-xl text-gray-900">{t('forceSettle')}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{t('manualSettle')}</p>
+                </div>
+                <button onClick={cancelForceSettleConfirm} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
+                  <X className="w-6 h-6"/>
+                </button>
+              </div>
+
+              <p className="text-sm text-gray-700">
+                {forceSettleConfirmStep === 1 ? t('forceSettleConfirm1') : t('forceSettleConfirm2')}
+              </p>
+
+              <div className="flex justify-end gap-3">
+                <button
+                  type="button"
+                  onClick={cancelForceSettleConfirm}
+                  className="px-4 py-2 border border-gray-300 text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+                >
+                  {t('cancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={confirmForceSettleInterest}
+                  className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white font-bold transition-colors"
+                >
+                  {t('confirm')}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {modalOpen && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
                 <div className="bg-white border-2 border-green-200 shadow-2xl max-w-md w-full p-8 space-y-6 animate-in fade-in zoom-in-95 duration-200 transition-all hover:border-green-300 hover:shadow-green-200/50">
