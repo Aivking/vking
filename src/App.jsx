@@ -3,7 +3,7 @@ import {
   Activity, Wallet, LogOut, Shield, CheckCircle, XCircle, 
   AlertCircle, Trash2, Edit, Lock, ArrowUpRight, ArrowDownLeft, ArrowDownRight, Settings, PlusCircle, MinusCircle, X, MessageSquare, Send, ThumbsUp, TrendingUp, CheckSquare
 } from 'lucide-react';
-import { supabase } from './supabaseClient';
+import { supabase, isSupabaseConfigured } from './supabaseClient';
 
 // ==========================================
 // 错误边界组件
@@ -60,7 +60,7 @@ class ErrorBoundary extends React.Component {
 // 1. Supabase 配置
 // ==========================================
 
-let isConfigured = true;
+let isConfigured = isSupabaseConfigured;
 let deployMode = 'standalone';
 
 // 事务类型中文映射
@@ -325,9 +325,9 @@ const translations = {
     dateLabel: '日期',
     deleteAll: '删除所有',
     appNotConnectedTitle: '应用尚未连接至数据库',
-    appNotConnectedHint: '检测到您正在独立环境 (如 Vercel) 运行此应用，但尚未配置 Supabase 环境变量。',
-    appNotConnectedVarsHint: '# 请在 Vercel 项目设置 → Environment Variables 中添加以下变量：',
-    appNotConnectedRedeployHint: '配置完成后，请在 Vercel 中重新部署 (Redeploy)。',
+    appNotConnectedHint: '未检测到 Supabase 环境变量。可在本地 .env.local 或部署平台（如 Vercel）中配置。',
+    appNotConnectedVarsHint: '# 请添加以下变量（本地 .env.local，或 Vercel Project Settings -> Environment Variables）：',
+    appNotConnectedRedeployHint: '配置完成后：本地请重启 npm run dev；线上请重新部署。',
     fixedRateHint: '💡 固定 3%，不允许更改',
     langChinese: '中文',
     clientPlaceholderText: '输入客户或对象名称',
@@ -658,9 +658,9 @@ const translations = {
     dateLabel: 'Date',
     deleteAll: 'Delete All',
     appNotConnectedTitle: 'App is not connected to the database',
-    appNotConnectedHint: 'Detected that you are running this app in a standalone environment (e.g., Vercel), but Supabase environment variables are not configured.',
-    appNotConnectedVarsHint: '# Add the following variables in Vercel → Project Settings → Environment Variables:',
-    appNotConnectedRedeployHint: 'After configuration, please redeploy on Vercel.',
+    appNotConnectedHint: 'Supabase environment variables are missing. Configure them in local .env.local or on a deployment platform (e.g., Vercel).',
+    appNotConnectedVarsHint: '# Add the following variables (local .env.local, or Vercel Project Settings -> Environment Variables):',
+    appNotConnectedRedeployHint: 'After configuration: restart npm run dev locally, or redeploy in production.',
     fixedRateHint: '💡 Fixed at 3%, cannot be changed',
     langChinese: '中文',
     clientPlaceholderText: 'Enter client or target name',
