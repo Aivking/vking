@@ -1738,6 +1738,16 @@ const App = () => {
     return next;
   };
 
+  const getShanghaiNow = () => new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
+
+  const getShanghaiDateKey = (d) => {
+    if (!d) return '';
+    const yyyy = d.getFullYear();
+    const mm = String(d.getMonth() + 1).padStart(2, '0');
+    const dd = String(d.getDate()).padStart(2, '0');
+    return `${yyyy}-${mm}-${dd}`;
+  };
+
   // --- 倒计时更新 ---
   useEffect(() => {
     const updateCountdown = () => {
@@ -1757,33 +1767,6 @@ const App = () => {
     const interval = setInterval(updateCountdown, 60000); // 每分钟更新
     return () => clearInterval(interval);
   }, []);
-
-  // --- 检查是否需要自动结算利息 (每周三中午12点) ---
-  useEffect(() => {
-    const checkAndSettleInterest = async () => {
-      if (!currentUser || !supabase) return;
-      
-      const now = new Date(new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai' }));
-      const dayOfWeek = now.getDay(); // 0=周日，3=周三
-      const hours = now.getHours();
-      const minutes = now.getMinutes();
-      
-      // 周三中午12点（检查是否在12:00-12:02分钟内）
-      if (dayOfWeek === 3 && hours === 12 && minutes >= 0 && minutes <= 2) {
-        // 检查是否已经在这个小时内结算过
-        const currentHourKey = `settled_${now.getFullYear()}_${now.getMonth()}_${now.getDate()}_${hours}`;
-        const lastSettled = sessionStorage.getItem(currentHourKey);
-        
-        if (!lastSettled) {
-          // 标记为已结算
-          sessionStorage.setItem(currentHourKey, 'true');
-          await autoSettleInterest();
-        }
-      }
-    };
-
-    checkAndSettleInterest();
-  }, [currentUser]);
 
   // --- 数据同步监听 ---
   useEffect(() => {
@@ -2687,8 +2670,25 @@ const App = () => {
   };
 
   // --- 自动结算利息 ---
-  const autoSettleInterest = async () => {
+  const autoSettleInterest = async (settleKeyParam) => {
     try {
+      const now = getShanghaiNow();
+      const settleKey = settleKeyParam || getShanghaiDateKey(now);
+
+      const { data: exists, error: existsError } = await supabase
+        .from('transactions')
+        .select('id')
+        .eq('status', 'approved')
+        .in('type', ['interest_income', 'interest_expense'])
+        .ilike('remark', `%autoSettleKey:${settleKey}%`)
+        .limit(1);
+
+      if (existsError) throw existsError;
+      if ((exists || []).length > 0) {
+        console.log('⚠️ 本周已结算过，跳过自动结算', settleKey);
+        return;
+      }
+
       const approved = transactions.filter(tx => tx.status === 'approved');
       
       // 计算各类型利息 - 修复累加逻辑
@@ -2707,7 +2707,7 @@ const App = () => {
       
       let settledCount = 0;
       
-      const settleTime = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+      const settleTime = now.toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
       const settleId = Date.now(); // 为本次结算生成唯一ID
 
       const recordsToInsert = [];
@@ -2724,7 +2724,7 @@ const App = () => {
           creator_id: 'system',
           status: 'approved',
           settle_id: settleId,
-          remark: '本周贷款利息自动结算'
+          remark: `本周贷款利息自动结算\nautoSettleKey:${settleKey}`
         });
         settledCount++;
       }
@@ -2740,7 +2740,7 @@ const App = () => {
           creator_id: 'system',
           status: 'approved',
           settle_id: settleId,
-          remark: '注资账户利息自动结算'
+          remark: `注资账户利息自动结算\nautoSettleKey:${settleKey}`
         });
         settledCount++;
       }
@@ -2756,7 +2756,7 @@ const App = () => {
           creator_id: 'system',
           status: 'approved',
           settle_id: settleId,
-          remark: '存款账户利息自动结算'
+          remark: `存款账户利息自动结算\nautoSettleKey:${settleKey}`
         });
         settledCount++;
       }
