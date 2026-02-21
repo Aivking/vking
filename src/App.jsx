@@ -832,6 +832,10 @@ const App = () => {
   const [fundAnnouncement, setFundAnnouncement] = useState({ id: '', content: '' });
   const [isEditingFundAnnouncement, setIsEditingFundAnnouncement] = useState(false);
   const [fundAnnouncementInput, setFundAnnouncementInput] = useState('');
+
+  const [assetsAnnouncement, setAssetsAnnouncement] = useState({ id: '', content: '' });
+  const [isEditingAssetsAnnouncement, setIsEditingAssetsAnnouncement] = useState(false);
+  const [assetsAnnouncementInput, setAssetsAnnouncementInput] = useState('');
   
   // 论坛 State
   const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'forum', 'planet', 'assets', 'fund', 'bonds'
@@ -1859,13 +1863,15 @@ const App = () => {
           return data && data.length > 0 ? data[0] : null;
         };
 
-        const [bankAnn, fundAnn] = await Promise.all([
+        const [bankAnn, fundAnn, assetsAnn] = await Promise.all([
           fetchLatestAnnouncement('bank_announcement'),
-          fetchLatestAnnouncement('fund_announcement')
+          fetchLatestAnnouncement('fund_announcement'),
+          fetchLatestAnnouncement('assets_announcement')
         ]);
 
         if (bankAnn) setBankAnnouncement(bankAnn);
         if (fundAnn) setFundAnnouncement(fundAnn);
+        if (assetsAnn) setAssetsAnnouncement(assetsAnn);
 
         setLoading(false);
       } catch (err) {
@@ -1955,6 +1961,51 @@ const App = () => {
     } catch (e) {
       console.error('更新公告失败:', e);
       alert('更新公告失败: ' + (e?.message || e));
+    }
+  };
+
+  const handleUpdateAssetsAnnouncement = async () => {
+    if (!assetsAnnouncementInput.trim()) return;
+    try {
+      const nextContent = assetsAnnouncementInput;
+      let targetId = assetsAnnouncement.id;
+
+      if (!targetId) {
+        const { data: existingRows, error: existingError } = await supabase
+          .from('announcements')
+          .select('id')
+          .eq('title', 'assets_announcement')
+          .order('id', { ascending: false })
+          .limit(1);
+        if (existingError) throw existingError;
+        targetId = existingRows && existingRows.length > 0 ? existingRows[0].id : '';
+      }
+
+      if (targetId) {
+        const { error } = await supabase
+          .from('announcements')
+          .update({ content: nextContent })
+          .eq('id', targetId);
+        if (error) throw error;
+        setAssetsAnnouncement(prev => ({ ...prev, id: targetId, content: nextContent }));
+      } else {
+        const { data: insertedRow, error } = await supabase
+          .from('announcements')
+          .insert({
+            title: 'assets_announcement',
+            content: nextContent
+          })
+          .select('*')
+          .single();
+        if (error) throw error;
+        setAssetsAnnouncement(insertedRow || { id: '', content: nextContent });
+      }
+
+      setIsEditingAssetsAnnouncement(false);
+      setAssetsAnnouncementInput('');
+    } catch (e) {
+      console.error('更新公告失败:', e);
+      alert(t('announcementUpdateFailed') + ': ' + (e?.message || e));
     }
   };
 
@@ -4896,6 +4947,63 @@ const App = () => {
               <PlusCircle className="w-5 h-5" />
               {t('registerAsset')}
             </button>
+          </div>
+
+          <div className="bg-white shadow-2xl border-2 border-purple-200">
+            <div className="bg-gradient-to-r from-purple-600 to-pink-600 text-white px-6 py-4 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <MessageSquare className="w-5 h-5" />
+                <h3 className="text-xl font-bold">{t('announcement')}</h3>
+              </div>
+              {currentUser?.role === 'admin' && (
+                <button
+                  onClick={() => {
+                    setIsEditingAssetsAnnouncement(true);
+                    setAssetsAnnouncementInput(assetsAnnouncement.content || '');
+                  }}
+                  className="text-sm font-semibold text-white/90 hover:text-white transition-colors"
+                >
+                  {t('editShort')}
+                </button>
+              )}
+            </div>
+
+            <div className="p-4">
+              {isEditingAssetsAnnouncement && currentUser?.role === 'admin' ? (
+                <div className="space-y-3">
+                  <textarea
+                    value={assetsAnnouncementInput}
+                    onChange={(e) => setAssetsAnnouncementInput(e.target.value)}
+                    className="w-full border border-purple-300 px-3 py-2 text-sm focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none resize-none"
+                    rows={5}
+                    placeholder={t('announcementPlaceholder')}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleUpdateAssetsAnnouncement}
+                      className="bg-purple-600 hover:bg-purple-700 text-white px-4 py-2 text-sm font-medium transition-colors"
+                    >
+                      {t('save')}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setIsEditingAssetsAnnouncement(false);
+                        setAssetsAnnouncementInput('');
+                      }}
+                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2 text-sm font-medium transition-colors"
+                    >
+                      {t('cancel')}
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <div className="bg-purple-50 border border-purple-200 p-4 min-h-[100px]">
+                  <p className="text-sm text-gray-700 whitespace-pre-wrap">
+                    {assetsAnnouncement.content || t('noAnnouncement')}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* 资产列表 */}
