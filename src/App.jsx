@@ -7511,12 +7511,18 @@ const App = () => {
                     </div>
                     <span className="text-xs font-bold text-gray-800 truncate">{formatMoney(calculatePersonalFundBalance())}</span>
                   </div>
-                  {currentUserRole === 'liuli_member' && (
-                    <button onClick={() => setCurrentPage('loans')} className="bg-red-50 hover:bg-red-100 text-red-700 py-2 text-[11px] font-medium transition-all flex items-center justify-center gap-1 border border-red-200 min-w-0">
-                      <CheckSquare className="w-3.5 h-3.5 shrink-0" />
-                      <span className="truncate">{language === 'zh' ? '账单' : 'Bills'}</span>
+                  <div className="grid grid-cols-2 gap-1">
+                    <button onClick={() => openModal('loan')} className="bg-orange-50 hover:bg-orange-100 text-orange-700 py-2 text-[11px] font-medium transition-all flex items-center justify-center gap-1 border border-orange-200 min-w-0">
+                      <PlusCircle className="w-3.5 h-3.5 shrink-0" />
+                      <span className="truncate">{language === 'zh' ? '贷款' : 'Loan'}</span>
                     </button>
-                  )}
+                    {currentUserRole === 'liuli_member' && (
+                      <button onClick={() => setCurrentPage('loans')} className="bg-red-50 hover:bg-red-100 text-red-700 py-2 text-[11px] font-medium transition-all flex items-center justify-center gap-1 border border-red-200 min-w-0">
+                        <CheckSquare className="w-3.5 h-3.5 shrink-0" />
+                        <span className="truncate">{language === 'zh' ? '账单' : 'Bills'}</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
               </div>
               <p className="mt-3 text-xs text-gray-500">{t('injectionAndDeposit')}</p>
