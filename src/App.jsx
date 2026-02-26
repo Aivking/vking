@@ -7607,15 +7607,13 @@ const App = () => {
                     <span className="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 font-medium">{recruitmentPosts.length}</span>
                   )}
                 </div>
-                {isAdmin && (
-                  <button
-                    onClick={() => setIsAddingRecruitment(true)}
-                    className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-800 font-medium transition-colors"
-                  >
-                    <PlusCircle className="w-4 h-4" />
-                    {language === 'zh' ? '发布招募' : 'Post'}
-                  </button>
-                )}
+                <button
+                  onClick={() => setIsAddingRecruitment(true)}
+                  className="flex items-center gap-1 text-sm text-purple-600 hover:text-purple-800 font-medium transition-colors"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  {language === 'zh' ? '发布招募' : 'Post'}
+                </button>
               </div>
 
               {isAddingRecruitment && (
@@ -7666,7 +7664,7 @@ const App = () => {
                 <div className="space-y-2">
                   {recruitmentPosts.map(post => (
                     <div key={post.id} className="border border-purple-100 bg-purple-50 p-3 relative">
-                      {isAdmin && (
+                      {(isAdmin || post.postedBy === currentUser?.username) && (
                         <button
                           onClick={() => handleDeleteRecruitmentPost(post.id)}
                           className="absolute top-2 right-2 text-gray-400 hover:text-red-500 transition-colors"
