@@ -1,0 +1,12 @@
+{
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "devCommand": "npm run dev",
+  "framework": "vite",
+  "crons": [
+    {
+      "path": "/api/settle-interest",
+      "schedule": "0 4 * * 3"
+    }
+  ]
+}
