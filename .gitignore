@@ -31,3 +31,4 @@ dist-ssr
 # Build files
 .next
 out
+.git_disabled/
