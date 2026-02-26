@@ -410,6 +410,21 @@ const translations = {
     weeklyNetInterest: '周净利息',
     pendingItems: '笔待处理',
     personalBalance: '个人账户',
+    accountList: '账户列表',
+    openAccountList: '打开账户列表',
+    searchByName: '搜索名称',
+    searchAccountPlaceholder: '输入账号名称...',
+    noAccountsFound: '未找到匹配账户',
+    roleAdmin: '管理员',
+    roleFundManager: '基金管理员',
+    roleUser: '普通账户',
+    roleLiuliMember: '琉璃成员',
+    grantLiuliMember: '授予琉璃成员',
+    revokeLiuliMember: '取消琉璃成员',
+    memberGranted: '已授予琉璃成员资格',
+    memberRevoked: '已取消琉璃成员资格',
+    membershipUpdateFailed: '成员资格更新失败',
+    liuliMemberRequired: '仅琉璃成员可使用成员理财 (9%/周)',
     totalBalance: '资金余额',
     injectionAndDeposit: '注资+存款+利息',
     // 表格
@@ -735,6 +750,21 @@ const translations = {
     weeklyNetInterest: 'Weekly Net Interest',
     pendingItems: 'Pending',
     personalBalance: 'Personal Account',
+    accountList: 'Account List',
+    openAccountList: 'Open Account List',
+    searchByName: 'Search Name',
+    searchAccountPlaceholder: 'Enter account name...',
+    noAccountsFound: 'No matching accounts',
+    roleAdmin: 'Admin',
+    roleFundManager: 'Fund Manager',
+    roleUser: 'Regular Account',
+    roleLiuliMember: 'Liuli Member',
+    grantLiuliMember: 'Grant Liuli Member',
+    revokeLiuliMember: 'Revoke Liuli Member',
+    memberGranted: 'Liuli membership granted',
+    memberRevoked: 'Liuli membership revoked',
+    membershipUpdateFailed: 'Membership update failed',
+    liuliMemberRequired: 'Only Liuli members can use Member Wealth (9%/week)',
     totalBalance: 'Total Balance',
     injectionAndDeposit: 'Injection+Deposit+Interest',
     // Table
@@ -824,6 +854,10 @@ const App = () => {
   const [forceSettleConfirmStep, setForceSettleConfirmStep] = useState(0);
   const [nextSettleTime, setNextSettleTime] = useState('');
   const [settleCountdown, setSettleCountdown] = useState('');
+  const [showRiskEligibilityHint, setShowRiskEligibilityHint] = useState(false);
+  const [accountListModalOpen, setAccountListModalOpen] = useState(false);
+  const [accountSearch, setAccountSearch] = useState('');
+  const [updatingMemberUserId, setUpdatingMemberUserId] = useState(null);
   
   const [bankAnnouncement, setBankAnnouncement] = useState({ id: '', content: '' });
   const [isEditingBankAnnouncement, setIsEditingBankAnnouncement] = useState(false);
@@ -845,13 +879,32 @@ const App = () => {
   const [liuliProducts, setLiuliProducts] = useState([]);
   const [liuliFlightForm, setLiuliFlightForm] = useState({ name: '', from: '', to: '', note: '', roundTrip: false, returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
   const [liuliProductForm, setLiuliProductForm] = useState({ name: '', itemName: '', perDay: '', pickup: '', note: '' });
+  const [liuliMaterialDemandForm, setLiuliMaterialDemandForm] = useState({
+    applicant: '',
+    items: [{ materialName: '', quantity: '' }],
+    note: ''
+  });
+  const [liuliMaterialDemandXitInput, setLiuliMaterialDemandXitInput] = useState('');
+  const [liuliMaterialSupplyForm, setLiuliMaterialSupplyForm] = useState({
+    producer: '',
+    items: [{ materialName: '', perDay: '', unitPrice: '' }],
+    pickup: '',
+    note: ''
+  });
 
   const [liuliFlightSearch, setLiuliFlightSearch] = useState('');
   const [liuliProductSearch, setLiuliProductSearch] = useState('');
+  const [liuliMaterialDemandSearch, setLiuliMaterialDemandSearch] = useState('');
+  const [liuliMaterialSupplySearch, setLiuliMaterialSupplySearch] = useState('');
   const [liuliFlightPage, setLiuliFlightPage] = useState(1);
   const [liuliProductPage, setLiuliProductPage] = useState(1);
+  const [liuliMaterialDemandPage, setLiuliMaterialDemandPage] = useState(1);
+  const [liuliMaterialSupplyPage, setLiuliMaterialSupplyPage] = useState(1);
   const [liuliFlightModal, setLiuliFlightModal] = useState(false);
   const [liuliProductModal, setLiuliProductModal] = useState(false);
+  const [liuliMaterialDemandModal, setLiuliMaterialDemandModal] = useState(false);
+  const [liuliMaterialSupplyModal, setLiuliMaterialSupplyModal] = useState(false);
+  const [liuliActiveTab, setLiuliActiveTab] = useState('flights');
 
   const parseInterestCountFromRemark = (remark) => {
     if (!remark) return null;
@@ -1239,6 +1292,336 @@ const App = () => {
     setLiuliProductPage(p => Math.min(Math.max(1, p), liuliProductsTotalPages));
   }, [liuliProductsTotalPages]);
 
+  const liuliMaterialDemandsForTable = useMemo(() => {
+    const approved = (transactions || []).filter(tx => tx.status === 'approved');
+    return approved
+      .filter(tx => tx.type === 'liuli_material_demand')
+      .map(tx => {
+        const remark = String(tx.remark || '');
+        const itemsMatch = remark.match(/(?:^|\n)items:\s*(.*?)(?:\n|$)/i);
+        const summaryMatch = remark.match(/(?:^|\n)summary:\s*([\s\S]*?)(?=\nnote:|$)/i);
+        const noteMatch = remark.match(/(?:^|\n)note:\s*([\s\S]*)$/i);
+        let items = [];
+        if (itemsMatch && itemsMatch[1]) {
+          try {
+            const raw = decodeURIComponent((itemsMatch[1] || '').trim());
+            const parsed = JSON.parse(raw);
+            if (Array.isArray(parsed)) {
+              items = parsed
+                .map(it => ({
+                  materialName: String(it?.materialName || '').trim(),
+                  quantity: Math.round(Number(it?.quantity) || 0)
+                }))
+                .filter(it => it.materialName && it.quantity > 0);
+            }
+          } catch (_) {
+            items = [];
+          }
+        }
+        return {
+          id: tx.id,
+          applicant: tx.client || tx.created_by || '',
+          items,
+          summary: summaryMatch ? (summaryMatch[1] || '').trim() : remark,
+          note: noteMatch ? (noteMatch[1] || '').trim() : '',
+          created_at: tx.timestamp || '',
+          created_by: tx.created_by || ''
+        };
+      });
+  }, [transactions]);
+
+  const liuliMaterialDemandsFiltered = useMemo(() => {
+    const q = (liuliMaterialDemandSearch || '').trim().toLowerCase();
+    if (!q) return liuliMaterialDemandsForTable || [];
+    return (liuliMaterialDemandsForTable || []).filter(d => {
+      const itemsText = (d.items || []).map(it => `${it.materialName} ${it.quantity}`).join(' ');
+      const hay = [d.applicant, d.summary, d.note, itemsText].map(x => String(x || '').toLowerCase()).join(' ');
+      return hay.includes(q);
+    });
+  }, [liuliMaterialDemandsForTable, liuliMaterialDemandSearch]);
+
+  const liuliMaterialDemandPageSize = 12;
+  const liuliMaterialDemandTotalPages = useMemo(() => {
+    const len = (liuliMaterialDemandsFiltered || []).length;
+    return Math.max(1, Math.ceil(len / liuliMaterialDemandPageSize));
+  }, [liuliMaterialDemandsFiltered]);
+
+  const liuliMaterialDemandsPaged = useMemo(() => {
+    const page = Math.min(Math.max(1, liuliMaterialDemandPage), liuliMaterialDemandTotalPages);
+    const start = (page - 1) * liuliMaterialDemandPageSize;
+    return (liuliMaterialDemandsFiltered || []).slice(start, start + liuliMaterialDemandPageSize);
+  }, [liuliMaterialDemandsFiltered, liuliMaterialDemandPage, liuliMaterialDemandTotalPages]);
+
+  useEffect(() => {
+    setLiuliMaterialDemandPage(1);
+  }, [liuliMaterialDemandSearch]);
+
+  useEffect(() => {
+    setLiuliMaterialDemandPage(p => Math.min(Math.max(1, p), liuliMaterialDemandTotalPages));
+  }, [liuliMaterialDemandTotalPages]);
+
+  const liuliMaterialSuppliesForTable = useMemo(() => {
+    const approved = (transactions || []).filter(tx => tx.status === 'approved');
+    return approved
+      .filter(tx => tx.type === 'liuli_material_supply')
+      .map(tx => {
+        const remark = String(tx.remark || '');
+        const pickupMatch = remark.match(/(?:^|\n)pickup:\s*(.*?)(?:\n|$)/i);
+        const noteMatch = remark.match(/(?:^|\n)note:\s*([\s\S]*)$/i);
+        return {
+          id: tx.id,
+          producer: tx.client || '',
+          materialName: tx.product_type || '',
+          perDay: Math.round(parseFloat(tx.principal) || 0),
+          unitPrice: parseFloat(tx.rate) || 0,
+          pickup: pickupMatch ? (pickupMatch[1] || '').trim() : '',
+          note: noteMatch ? (noteMatch[1] || '').trim() : '',
+          created_at: tx.timestamp || ''
+        };
+      });
+  }, [transactions]);
+
+  const liuliMaterialSuppliesFiltered = useMemo(() => {
+    const q = (liuliMaterialSupplySearch || '').trim().toLowerCase();
+    if (!q) return liuliMaterialSuppliesForTable || [];
+    return (liuliMaterialSuppliesForTable || []).filter(s => {
+      const hay = [s.producer, s.materialName, s.perDay, s.unitPrice, s.pickup, s.note]
+        .map(x => String(x || '').toLowerCase())
+        .join(' ');
+      return hay.includes(q);
+    });
+  }, [liuliMaterialSuppliesForTable, liuliMaterialSupplySearch]);
+
+  const liuliMaterialSupplyPageSize = 12;
+  const liuliMaterialSupplyTotalPages = useMemo(() => {
+    const len = (liuliMaterialSuppliesFiltered || []).length;
+    return Math.max(1, Math.ceil(len / liuliMaterialSupplyPageSize));
+  }, [liuliMaterialSuppliesFiltered]);
+
+  const liuliMaterialSuppliesPaged = useMemo(() => {
+    const page = Math.min(Math.max(1, liuliMaterialSupplyPage), liuliMaterialSupplyTotalPages);
+    const start = (page - 1) * liuliMaterialSupplyPageSize;
+    return (liuliMaterialSuppliesFiltered || []).slice(start, start + liuliMaterialSupplyPageSize);
+  }, [liuliMaterialSuppliesFiltered, liuliMaterialSupplyPage, liuliMaterialSupplyTotalPages]);
+
+  useEffect(() => {
+    setLiuliMaterialSupplyPage(1);
+  }, [liuliMaterialSupplySearch]);
+
+  useEffect(() => {
+    setLiuliMaterialSupplyPage(p => Math.min(Math.max(1, p), liuliMaterialSupplyTotalPages));
+  }, [liuliMaterialSupplyTotalPages]);
+
+  const addLiuliMaterialDemand = async () => {
+    const applicant = (liuliMaterialDemandForm.applicant || '').trim() || currentUser?.username || '';
+    const note = (liuliMaterialDemandForm.note || '').trim();
+    const normalizedItems = (liuliMaterialDemandForm.items || [])
+      .map(it => ({
+        materialName: String(it?.materialName || '').trim(),
+        quantity: Number(it?.quantity)
+      }))
+      .filter(it => it.materialName && Number.isInteger(it.quantity) && it.quantity > 0);
+
+    if (!applicant) {
+      alert(language === 'zh' ? '请填写申请人' : 'Please fill in applicant');
+      return false;
+    }
+    if (normalizedItems.length === 0) {
+      alert(language === 'zh' ? '请至少填写一条有效建材（名称+整数数量）' : 'Please add at least one valid material item (integer quantity)');
+      return false;
+    }
+
+    try {
+      const summary = normalizedItems
+        .map(it => `${it.materialName} x ${it.quantity}`)
+        .join('\n');
+      const encodedItems = encodeURIComponent(JSON.stringify(normalizedItems));
+      const newItem = {
+        type: 'liuli_material_demand',
+        client: applicant,
+        principal: 0,
+        rate: 0,
+        product_type: '',
+        remark: `items:${encodedItems}\nsummary:${summary}\nnote:${note}`,
+        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+        created_by: currentUser?.username || 'unknown',
+        creator_id: currentUser?.id || 'unknown',
+        status: 'approved'
+      };
+
+      const { error } = await supabase.from('transactions').insert([newItem]);
+      if (error) throw error;
+      await refreshTransactions();
+      setLiuliMaterialDemandForm({ applicant: '', items: [{ materialName: '', quantity: '' }], note: '' });
+      setLiuliMaterialDemandXitInput('');
+      return true;
+    } catch (e) {
+      alert((language === 'zh' ? '提交失败' : 'Submit failed') + ': ' + (e?.message || e));
+      return false;
+    }
+  };
+
+  const importLiuliMaterialDemandFromXit = () => {
+    const rawInput = String(liuliMaterialDemandXitInput || '').trim();
+    if (!rawInput) {
+      alert(language === 'zh' ? '请先粘贴 XIT/PRUNplanner JSON' : 'Please paste XIT/PRUNplanner JSON first');
+      return;
+    }
+
+    try {
+      let jsonText = rawInput;
+      const fenced = rawInput.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+      if (fenced && fenced[1]) jsonText = fenced[1];
+
+      const parsed = JSON.parse(jsonText);
+      const matMap = new Map();
+      const visited = new Set();
+
+      const collectMaterials = (node) => {
+        if (!node || typeof node !== 'object') return;
+        if (visited.has(node)) return;
+        visited.add(node);
+
+        if (node.materials && typeof node.materials === 'object' && !Array.isArray(node.materials)) {
+          Object.entries(node.materials).forEach(([name, qty]) => {
+            const materialName = String(name || '').trim();
+            const quantity = Math.round(Number(qty));
+            if (!materialName || !Number.isFinite(quantity) || quantity <= 0) return;
+            matMap.set(materialName, (matMap.get(materialName) || 0) + quantity);
+          });
+        }
+
+        if (Array.isArray(node)) {
+          node.forEach(collectMaterials);
+          return;
+        }
+
+        Object.values(node).forEach(collectMaterials);
+      };
+
+      collectMaterials(parsed);
+
+      if (matMap.size === 0) {
+        alert(language === 'zh' ? '未识别到 materials 字段中的建材数据' : 'No materials found in JSON');
+        return;
+      }
+
+      const importedItems = Array.from(matMap.entries()).map(([materialName, quantity]) => ({
+        materialName,
+        quantity: String(Math.round(Number(quantity)))
+      }));
+
+      setLiuliMaterialDemandForm(prev => ({
+        ...prev,
+        items: importedItems
+      }));
+
+      alert(
+        language === 'zh'
+          ? `已导入 ${importedItems.length} 种建材`
+          : `Imported ${importedItems.length} material items`
+      );
+    } catch (e) {
+      alert((language === 'zh' ? 'XIT JSON 解析失败' : 'Failed to parse XIT JSON') + ': ' + (e?.message || e));
+    }
+  };
+
+  const deleteLiuliMaterialDemand = (id) => {
+    (async () => {
+      try {
+        const tx = (transactions || []).find(t => t.id === id);
+        if (!tx) return;
+        const isOwner = (tx.created_by && currentUser?.username && tx.created_by === currentUser.username);
+        if (!isOwner && currentUser?.role !== 'admin') {
+          alert(language === 'zh' ? '无权限删除' : 'No permission');
+          return;
+        }
+        const { error } = await supabase.from('transactions').delete().eq('id', id);
+        if (error) throw error;
+        await refreshTransactions();
+      } catch (e) {
+        alert((language === 'zh' ? '删除失败' : 'Delete failed') + ': ' + (e?.message || e));
+      }
+    })();
+  };
+
+  const addLiuliMaterialSupply = async () => {
+    const producer = (liuliMaterialSupplyForm.producer || '').trim() || currentUser?.username || '';
+    const pickup = (liuliMaterialSupplyForm.pickup || '').trim();
+    const note = (liuliMaterialSupplyForm.note || '').trim();
+    const normalizedItems = (liuliMaterialSupplyForm.items || [])
+      .map(it => ({
+        materialName: String(it?.materialName || '').trim(),
+        perDay: Number(it?.perDay),
+        unitPrice: parseFloat(it?.unitPrice)
+      }))
+      .filter(it =>
+        it.materialName &&
+        Number.isInteger(it.perDay) &&
+        it.perDay >= 0 &&
+        Number.isFinite(it.unitPrice) &&
+        it.unitPrice >= 0
+      );
+
+    if (!producer) {
+      alert(language === 'zh' ? '请填写生产者名称' : 'Please fill in producer');
+      return false;
+    }
+    if (normalizedItems.length === 0) {
+      alert(language === 'zh' ? '请至少填写一条有效建材（名称+整数日产量+单价）' : 'Please add at least one valid material item (integer output + price)');
+      return false;
+    }
+
+    try {
+      const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+      const rows = normalizedItems.map(it => ({
+        type: 'liuli_material_supply',
+        client: producer,
+        principal: it.perDay,
+        rate: it.unitPrice,
+        product_type: it.materialName,
+        remark: `pickup:${pickup}\nnote:${note}`,
+        timestamp: now,
+        created_by: currentUser?.username || 'unknown',
+        creator_id: currentUser?.id || 'unknown',
+        status: 'approved'
+      }));
+
+      const { error } = await supabase.from('transactions').insert(rows);
+      if (error) throw error;
+      await refreshTransactions();
+      setLiuliMaterialSupplyForm({
+        producer: '',
+        items: [{ materialName: '', perDay: '', unitPrice: '' }],
+        pickup: '',
+        note: ''
+      });
+      return true;
+    } catch (e) {
+      alert((language === 'zh' ? '登记失败' : 'Add failed') + ': ' + (e?.message || e));
+      return false;
+    }
+  };
+
+  const deleteLiuliMaterialSupply = (id) => {
+    (async () => {
+      try {
+        const tx = (transactions || []).find(t => t.id === id);
+        if (!tx) return;
+        const isOwner = (tx.created_by && currentUser?.username && tx.created_by === currentUser.username);
+        if (!isOwner && currentUser?.role !== 'admin') {
+          alert(language === 'zh' ? '无权限删除' : 'No permission');
+          return;
+        }
+        const { error } = await supabase.from('transactions').delete().eq('id', id);
+        if (error) throw error;
+        await refreshTransactions();
+      } catch (e) {
+        alert((language === 'zh' ? '删除失败' : 'Delete failed') + ': ' + (e?.message || e));
+      }
+    })();
+  };
+
   const addLiuliFlight = async () => {
     const name = (liuliFlightForm.name || '').trim();
     const from = (liuliFlightForm.from || '').trim();
@@ -1384,6 +1767,53 @@ const App = () => {
     } catch (e) {
       console.error('Translation error:', e, 'key:', key, 'language:', language);
       return key;
+    }
+  };
+
+  const getRoleDisplayKey = (role) => {
+    if (role === 'admin') return 'roleAdmin';
+    if (role === 'fund_manager') return 'roleFundManager';
+    if (role === 'liuli_member') return 'roleLiuliMember';
+    return 'roleUser';
+  };
+
+  const getUserByName = (username) => {
+    return (registeredUsers || []).find(u => u.username === username);
+  };
+
+  const isLiuliEligibleUser = (user) => {
+    const role = String(user?.role || '').toLowerCase();
+    return role === 'admin' || role === 'liuli_member';
+  };
+
+  const handleToggleLiuliMember = async (userRow) => {
+    try {
+      if (currentUser?.role !== 'admin') return;
+      if (!userRow?.id) return;
+      if (userRow.role === 'admin' || userRow.role === 'fund_manager') return;
+
+      const nextRole = userRow.role === 'liuli_member' ? 'user' : 'liuli_member';
+      setUpdatingMemberUserId(userRow.id);
+
+      const { error } = await supabase
+        .from('users')
+        .update({ role: nextRole })
+        .eq('id', userRow.id);
+      if (error) throw error;
+
+      setRegisteredUsers(prev => (prev || []).map(u => (u.id === userRow.id ? { ...u, role: nextRole } : u)));
+
+      if (currentUser?.id === userRow.id || currentUser?.username === userRow.username) {
+        const updatedCurrent = { ...currentUser, role: nextRole };
+        setCurrentUser(updatedCurrent);
+        sessionStorage.setItem('current_bank_user_v2', JSON.stringify(updatedCurrent));
+      }
+
+      alert(nextRole === 'liuli_member' ? t('memberGranted') : t('memberRevoked'));
+    } catch (e) {
+      alert(`${t('membershipUpdateFailed')}: ${e?.message || e}`);
+    } finally {
+      setUpdatingMemberUserId(null);
     }
   };
 
@@ -2700,6 +3130,7 @@ const App = () => {
     e.preventDefault();
     
     try {
+      const isAdminUser = currentUser?.role === 'admin';
       const assetRecord = {
         type: 'bank_asset',
         client: newAssetData.planetName, // 星球名称
@@ -2708,7 +3139,7 @@ const App = () => {
         timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
         created_by: currentUser.username,
         creator_id: currentUser.id || currentUser.username,
-        status: 'approved', // 直接批准，不需要管理员审批
+        status: isAdminUser ? 'approved' : 'pending',
         remark: buildBankAssetRemark(newAssetData.itemName, newAssetData.dailyProfit),
         product_type: String(newAssetData.operatorName || '').trim()
       };
@@ -2719,7 +3150,7 @@ const App = () => {
 
       if (error) throw error;
 
-      alert(t('assetRegistered'));
+      alert(isAdminUser ? t('assetRegistered') : t('submitWillEnterApproval'));
       
       setNewAssetModal(false);
       setNewAssetData({ planetName: '', itemName: '', quantity: '', value: '', dailyProfit: '', operatorName: '' });
@@ -2730,9 +3161,21 @@ const App = () => {
   
   // 获取所有银行资产
   useEffect(() => {
-    const assets = transactions.filter(tx => tx.type === 'bank_asset' && tx.status === 'approved');
+    const isAdminUser = String(currentUser?.role || '').toLowerCase() === 'admin';
+    const assets = (transactions || [])
+      .filter(tx => tx.type === 'bank_asset')
+      .filter((tx) => {
+        if (isAdminUser) return true;
+        if (tx.status === 'approved') return true;
+        return tx.created_by === currentUser?.username;
+      })
+      .sort((a, b) => {
+        const ta = new Date(a.created_at || a.timestamp || 0).getTime();
+        const tb = new Date(b.created_at || b.timestamp || 0).getTime();
+        return tb - ta;
+      });
     setBankAssets(assets);
-  }, [transactions]);
+  }, [transactions, currentUser?.username, currentUser?.role]);
   
   // 编辑资产
   const handleUpdateAsset = async (assetId) => {
@@ -2769,7 +3212,7 @@ const App = () => {
         .from('transactions')
         .select('id')
         .eq('status', 'approved')
-        .in('type', ['interest_income', 'interest_expense'])
+        .in('type', ['interest_income', 'interest_expense', 'injection', 'withdraw_inj'])
         .ilike('remark', `%autoSettleKey:${settleKey}%`)
         .limit(1);
 
@@ -2795,6 +3238,10 @@ const App = () => {
       const loanInterest = calc(['loan']);
       const injectionInterest = calc(['injection']);
       const depositInterest = calc(['deposit']);
+      const assetDailyProfit = approved
+        .filter(tx => tx.type === 'bank_asset')
+        .reduce((sum, tx) => sum + parseBankAssetMeta(tx).dailyProfit, 0);
+      const assetWeeklyProfit = assetDailyProfit * 7;
       
       let settledCount = 0;
       
@@ -2854,13 +3301,47 @@ const App = () => {
         settledCount++;
       }
 
+      if (assetWeeklyProfit > 0) {
+        recordsToInsert.push({
+          type: 'injection',
+          client: 'EUU',
+          principal: assetWeeklyProfit,
+          rate: 0,
+          timestamp: settleTime,
+          created_by: 'System',
+          creator_id: 'system',
+          status: 'approved',
+          settle_id: settleId,
+          remark: `银行资产日利润自动结算 -> EUU注资\nautoSettleKey:${settleKey}${forcedMark}`
+        });
+        settledCount++;
+      } else if (assetWeeklyProfit < 0) {
+        recordsToInsert.push({
+          type: 'withdraw_inj',
+          client: 'EUU',
+          principal: Math.abs(assetWeeklyProfit),
+          rate: 0,
+          timestamp: settleTime,
+          created_by: 'System',
+          creator_id: 'system',
+          status: 'approved',
+          settle_id: settleId,
+          remark: `银行资产日利润自动结算(亏损) -> EUU扣款\nautoSettleKey:${settleKey}${forcedMark}`
+        });
+        settledCount++;
+      }
+
       if (recordsToInsert.length > 0) {
         const { error } = await supabase.from('transactions').insert(recordsToInsert);
         if (error) throw error;
 
+        const settledIncome = loanInterest;
+        const settledExpense = injectionInterest + depositInterest;
+        const euuInjection = Math.max(0, assetWeeklyProfit);
+        const euuDeduction = Math.max(0, -assetWeeklyProfit);
         const msg = language === 'zh' 
-          ? `✅ 结算成功！\n收入: +${loanInterest.toFixed(3)}m\n支出: -${(injectionInterest + depositInterest).toFixed(3)}m\n共生成 ${settledCount} 条记录`
-          : `✅ Settlement successful!\nIncome: +${loanInterest.toFixed(3)}m\nExpense: -${(injectionInterest + depositInterest).toFixed(3)}m\nGenerated ${settledCount} records`;
+          ? `✅ 结算成功！\n收入: +${settledIncome.toFixed(3)}m\n支出: -${settledExpense.toFixed(3)}m\nEUU注资(资产周利润): +${euuInjection.toFixed(3)}m\nEUU扣款(资产周亏损): -${euuDeduction.toFixed(3)}m\n共生成 ${settledCount} 条记录`
+          : `✅ Settlement successful!\nIncome: +${settledIncome.toFixed(3)}m\nExpense: -${settledExpense.toFixed(3)}m\nEUU injection (asset weekly profit): +${euuInjection.toFixed(3)}m\nEUU deduction (asset weekly loss): -${euuDeduction.toFixed(3)}m\nGenerated ${settledCount} records`;
         alert(msg);
         console.log('✅ 自动结算利息成功');
       } else {
@@ -2949,6 +3430,13 @@ const App = () => {
       if (action === 'create') {
         if (payload.type === 'deposit') {
           if (payload.product_type === 'risk') {
+            const targetClientName = String(payload.client || '').trim() || currentUser?.username;
+            const targetClientUser = getUserByName(targetClientName) || (targetClientName === currentUser?.username ? (getUserByName(currentUser?.username) || currentUser) : null);
+            if (!isLiuliEligibleUser(targetClientUser)) {
+              return alert(t('liuliMemberRequired'));
+            }
+          }
+          if (payload.product_type === 'risk') {
             payload = { ...payload, rate: 9 };
           } else if (payload.product_type === 'risk5') {
             payload = { ...payload, rate: 5 };
@@ -3035,6 +3523,14 @@ const App = () => {
         }
         
         if (action === 'approve' && txToReview) {
+          if (txToReview.type === 'deposit' && txToReview.product_type === 'risk') {
+            const targetClientName = String(txToReview.client || txToReview.created_by || '').trim();
+            const targetClientUser = getUserByName(targetClientName);
+            if (!isLiuliEligibleUser(targetClientUser)) {
+              throw new Error(t('liuliMemberRequired'));
+            }
+          }
+
           if (txToReview.type === 'fund_dividend_withdraw') {
             const available = (() => {
               const approvedAll = transactions.filter(t => t.status === 'approved');
@@ -3169,6 +3665,7 @@ const App = () => {
 
   const openModal = (type, editItem = null) => {
     setModalType(type);
+    setShowRiskEligibilityHint(false);
     if (editItem) {
       setEditId(editItem.id);
       setFormData({ 
@@ -3311,8 +3808,15 @@ const App = () => {
       .filter(tx => tx.type === 'bank_fund')
       .reduce((acc, cur) => acc + (parseFloat(cur.principal) || 0), 0);
 
+    // 已结算利息净额：正数增加闲置资金，负数扣减闲置资金
+    const settledInterestNet = approved.reduce((sum, tx) => {
+      if (tx.type === 'interest_income') return sum + (parseFloat(tx.principal) || 0);
+      if (tx.type === 'interest_expense') return sum - (parseFloat(tx.principal) || 0);
+      return sum;
+    }, 0);
+
     const fundBalance = calculateFundBalanceForStats();
-    const totalAssets = (fundingBase - bankFundNetTransfer) + bankAssetsValue + fundBalance;
+    const totalAssets = (fundingBase - bankFundNetTransfer + settledInterestNet) + bankAssetsValue + fundBalance;
 
     return {
       loanPrincipal: loans.p,
@@ -3320,7 +3824,7 @@ const App = () => {
       totalLoans: loans.p,
       netCashFlow: interestPool,
       // 主页的银行闲置资金计算：仅受 bank_fund 转账影响（申购/赎回/分红提取不影响银行闲置资金）
-      idleCash: fundingBase - loans.p - bankFundNetTransfer,
+      idleCash: fundingBase - loans.p - bankFundNetTransfer + settledInterestNet,
       interestPool: interestPool,
       injectionBalance: injectionBalance,
       depositBalance: depositBalance,
@@ -3634,12 +4138,20 @@ const App = () => {
       .filter(tx => tx.type === 'bank_fund')
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
 
-    const idleCash = injections.p - loans.p - bankFundNetTransfer;
+    // 已结算利息净额：每周结算后会进入闲置资金（负数则扣减）
+    const settledInterestNet = approved.reduce((sum, tx) => {
+      if (tx.type === 'interest_income') return sum + (parseFloat(tx.principal) || 0);
+      if (tx.type === 'interest_expense') return sum - (parseFloat(tx.principal) || 0);
+      return sum;
+    }, 0);
+
+    const idleCash = injections.p - loans.p - bankFundNetTransfer + settledInterestNet;
     
     console.log('银行闲置资金计算（当前状态）:', {
       总负债: injections.p,
       贷款资产: loans.p,
       银行基金净转账: bankFundNetTransfer,
+      已结算利息净额: settledInterestNet,
       闲置资金: idleCash
     });
     
@@ -3703,7 +4215,21 @@ const App = () => {
     );
   }
 
-  const isAdmin = currentUser.role === 'admin';
+  const currentUserRecord = getUserByName(currentUser?.username) || currentUser;
+  const currentUserRole = currentUserRecord?.role || currentUser?.role || 'user';
+  const isAdmin = currentUserRole === 'admin';
+  const canUseRiskDeposit = isLiuliEligibleUser(currentUserRecord);
+  const depositTargetNameForForm = isAdmin ? String(formData?.client || '').trim() : String(currentUser?.username || '').trim();
+  const depositTargetUserForForm = depositTargetNameForForm ? (getUserByName(depositTargetNameForForm) || (depositTargetNameForForm === currentUser?.username ? currentUserRecord : null)) : null;
+  const canSelectRiskDeposit = modalType === 'deposit' ? isLiuliEligibleUser(depositTargetUserForForm) : canUseRiskDeposit;
+
+  const accountUsersFiltered = (() => {
+    const q = String(accountSearch || '').trim().toLowerCase();
+    const sorted = [...(registeredUsers || [])].sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')));
+    if (!q) return sorted;
+    return sorted.filter(u => String(u.username || '').toLowerCase().includes(q));
+  })();
+
   const pendingTx = Array.isArray(transactions) ? transactions.filter(tx => tx && tx.id && tx.status === 'pending') : [];
   // 注资账单公开所有人可见，其他账单显示：自己的所有记录 + 已批准的他人记录
   const displayTx = isAdmin ? transactions : transactions.filter(tx => 
@@ -4304,6 +4830,51 @@ const App = () => {
             </div>
           </div>
 
+          <div className="bg-white border-2 border-indigo-200 p-2 shadow-sm">
+            <div className="flex items-center gap-2 overflow-x-auto">
+              <button
+                onClick={() => setLiuliActiveTab('flights')}
+                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
+                  liuliActiveTab === 'flights'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                }`}
+              >
+                {language === 'zh' ? '飞船航班信息' : 'Flights'}
+              </button>
+              <button
+                onClick={() => setLiuliActiveTab('productivity')}
+                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
+                  liuliActiveTab === 'productivity'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                }`}
+              >
+                {language === 'zh' ? '生产力信息' : 'Productivity'}
+              </button>
+              <button
+                onClick={() => setLiuliActiveTab('material_requests')}
+                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
+                  liuliActiveTab === 'material_requests'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                }`}
+              >
+                {language === 'zh' ? '建材汇总申请' : 'Material Requests'}
+              </button>
+              <button
+                onClick={() => setLiuliActiveTab('material_supply')}
+                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
+                  liuliActiveTab === 'material_supply'
+                    ? 'bg-indigo-600 text-white border-indigo-600'
+                    : 'bg-indigo-50 text-indigo-700 border-indigo-200 hover:bg-indigo-100'
+                }`}
+              >
+                {language === 'zh' ? '建材生产信息' : 'Material Supply'}
+              </button>
+            </div>
+          </div>
+
           <div className="space-y-6">
             {liuliFlightModal ? (
               <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
@@ -4484,6 +5055,282 @@ const App = () => {
               </div>
             ) : null}
 
+            {liuliMaterialDemandModal ? (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+                <div className="bg-white border-2 border-indigo-200 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="font-black text-lg">{language === 'zh' ? '建材汇总申请' : 'Material Request Summary'}</div>
+                    <button
+                      onClick={() => setLiuliMaterialDemandModal(false)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+
+                  <input
+                    value={liuliMaterialDemandForm.applicant}
+                    onChange={(e) => setLiuliMaterialDemandForm(prev => ({ ...prev, applicant: e.target.value }))}
+                    placeholder={language === 'zh' ? '申请人（默认当前账号）' : 'Applicant (default current user)'}
+                    className="w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                  />
+                  <div className="mt-3 border-2 border-indigo-100 p-3 space-y-2">
+                    <div className="text-sm font-semibold text-gray-700">
+                      {language === 'zh' ? 'XIT/PRUNplanner 快捷导入（JSON）' : 'XIT/PRUNplanner Quick Import (JSON)'}
+                    </div>
+                    <textarea
+                      value={liuliMaterialDemandXitInput}
+                      onChange={(e) => setLiuliMaterialDemandXitInput(e.target.value)}
+                      placeholder={language === 'zh'
+                        ? '粘贴 XIT JSON（会自动提取 groups/materials）'
+                        : 'Paste XIT JSON (extracts groups/materials automatically)'}
+                      rows={4}
+                      className="w-full border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 resize-y"
+                    />
+                    <div className="flex justify-end">
+                      <button
+                        type="button"
+                        onClick={importLiuliMaterialDemandFromXit}
+                        className="text-xs px-3 py-1.5 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100 font-semibold"
+                      >
+                        {language === 'zh' ? '解析导入建材明细' : 'Parse & Import'}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-3 border-2 border-indigo-100 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold text-gray-700">
+                        {language === 'zh' ? '建材明细（名称 + 数量）' : 'Material Items (Name + Quantity)'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLiuliMaterialDemandForm(prev => ({
+                            ...prev,
+                            items: [...(prev.items || []), { materialName: '', quantity: '' }]
+                          }))
+                        }
+                        className="text-xs px-2 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                      >
+                        {language === 'zh' ? '新增一行' : 'Add Row'}
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {(liuliMaterialDemandForm.items || []).map((item, idx) => (
+                        <div key={`mat-demand-${idx}`} className="grid grid-cols-[1fr_140px_64px] gap-2">
+                          <input
+                            value={item.materialName}
+                            onChange={(e) =>
+                              setLiuliMaterialDemandForm(prev => {
+                                const next = [...(prev.items || [])];
+                                next[idx] = { ...next[idx], materialName: e.target.value };
+                                return { ...prev, items: next };
+                              })
+                            }
+                            placeholder={language === 'zh' ? '建材名称' : 'Material Name'}
+                            className="border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300"
+                          />
+                          <input
+                            value={item.quantity}
+                            onChange={(e) =>
+                              setLiuliMaterialDemandForm(prev => {
+                                const next = [...(prev.items || [])];
+                                next[idx] = { ...next[idx], quantity: e.target.value };
+                                return { ...prev, items: next };
+                              })
+                            }
+                            placeholder={language === 'zh' ? '数量' : 'Qty'}
+                            type="number"
+                            step="1"
+                            min="1"
+                            className="border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLiuliMaterialDemandForm(prev => {
+                                const oldItems = prev.items || [];
+                                if (oldItems.length <= 1) return prev;
+                                const next = oldItems.filter((_, i) => i !== idx);
+                                return { ...prev, items: next };
+                              })
+                            }
+                            className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold"
+                          >
+                            {language === 'zh' ? '删除' : 'Remove'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <textarea
+                    value={liuliMaterialDemandForm.note}
+                    onChange={(e) => setLiuliMaterialDemandForm(prev => ({ ...prev, note: e.target.value }))}
+                    placeholder={language === 'zh' ? '备注（可选）' : 'Note (optional)'}
+                    rows={2}
+                    className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200 resize-none"
+                  />
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setLiuliMaterialDemandModal(false)}
+                      className="w-full bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-bold transition-colors border border-indigo-200"
+                    >
+                      {language === 'zh' ? '取消' : 'Cancel'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const ok = await addLiuliMaterialDemand();
+                        if (ok) setLiuliMaterialDemandModal(false);
+                      }}
+                      className="w-full bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 font-bold transition-colors"
+                    >
+                      {language === 'zh' ? '提交申请' : 'Submit'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {liuliMaterialSupplyModal ? (
+              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+                <div className="bg-white border-2 border-indigo-200 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <div className="font-black text-lg">{language === 'zh' ? '建材产能登记' : 'Material Supply Register'}</div>
+                    <button
+                      onClick={() => setLiuliMaterialSupplyModal(false)}
+                      className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
+                    >
+                      <X className="w-6 h-6" />
+                    </button>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      value={liuliMaterialSupplyForm.producer}
+                      onChange={(e) => setLiuliMaterialSupplyForm(prev => ({ ...prev, producer: e.target.value }))}
+                      placeholder={language === 'zh' ? '生产者（默认当前账号）' : 'Producer (default current user)'}
+                      className="border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                    />
+                    <div />
+                  </div>
+
+                  <div className="mt-3 border-2 border-indigo-100 p-3 space-y-2">
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold text-gray-700">
+                        {language === 'zh' ? '建材明细（名称 + 日产量 + 单价）' : 'Material Items (Name + Output + Price)'}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLiuliMaterialSupplyForm(prev => ({
+                            ...prev,
+                            items: [...(prev.items || []), { materialName: '', perDay: '', unitPrice: '' }]
+                          }))
+                        }
+                        className="text-xs px-2 py-1 bg-indigo-50 border border-indigo-200 text-indigo-700 hover:bg-indigo-100"
+                      >
+                        {language === 'zh' ? '新增一行' : 'Add Row'}
+                      </button>
+                    </div>
+                    <div className="space-y-2">
+                      {(liuliMaterialSupplyForm.items || []).map((item, idx) => (
+                        <div key={`mat-supply-${idx}`} className="grid grid-cols-[1fr_130px_120px_64px] gap-2">
+                          <input
+                            value={item.materialName}
+                            onChange={(e) =>
+                              setLiuliMaterialSupplyForm(prev => {
+                                const next = [...(prev.items || [])];
+                                next[idx] = { ...next[idx], materialName: e.target.value };
+                                return { ...prev, items: next };
+                              })
+                            }
+                            placeholder={language === 'zh' ? '建材名称' : 'Material Name'}
+                            className="border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300"
+                          />
+                          <input
+                            value={item.perDay}
+                            onChange={(e) =>
+                              setLiuliMaterialSupplyForm(prev => {
+                                const next = [...(prev.items || [])];
+                                next[idx] = { ...next[idx], perDay: e.target.value };
+                                return { ...prev, items: next };
+                              })
+                            }
+                            placeholder={language === 'zh' ? '日产量' : 'Output'}
+                            type="number"
+                            step="1"
+                            min="0"
+                            className="border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300"
+                          />
+                          <input
+                            value={item.unitPrice}
+                            onChange={(e) =>
+                              setLiuliMaterialSupplyForm(prev => {
+                                const next = [...(prev.items || [])];
+                                next[idx] = { ...next[idx], unitPrice: e.target.value };
+                                return { ...prev, items: next };
+                              })
+                            }
+                            placeholder={language === 'zh' ? '单价' : 'Price'}
+                            type="number"
+                            step="0.001"
+                            className="border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300"
+                          />
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setLiuliMaterialSupplyForm(prev => {
+                                const oldItems = prev.items || [];
+                                if (oldItems.length <= 1) return prev;
+                                const next = oldItems.filter((_, i) => i !== idx);
+                                return { ...prev, items: next };
+                              })
+                            }
+                            className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold"
+                          >
+                            {language === 'zh' ? '删除' : 'Remove'}
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                  <input
+                    value={liuliMaterialSupplyForm.pickup}
+                    onChange={(e) => setLiuliMaterialSupplyForm(prev => ({ ...prev, pickup: e.target.value }))}
+                    placeholder={language === 'zh' ? '交付/取货地点（可选）' : 'Delivery/Pickup (optional)'}
+                    className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200"
+                  />
+                  <textarea
+                    value={liuliMaterialSupplyForm.note}
+                    onChange={(e) => setLiuliMaterialSupplyForm(prev => ({ ...prev, note: e.target.value }))}
+                    placeholder={language === 'zh' ? '备注（可选）' : 'Note (optional)'}
+                    rows={2}
+                    className="mt-3 w-full border-2 border-indigo-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-300 focus:border-indigo-300 transition-all hover:border-indigo-200 resize-none"
+                  />
+
+                  <div className="mt-4 grid grid-cols-2 gap-3">
+                    <button
+                      onClick={() => setLiuliMaterialSupplyModal(false)}
+                      className="w-full bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-bold transition-colors border border-indigo-200"
+                    >
+                      {language === 'zh' ? '取消' : 'Cancel'}
+                    </button>
+                    <button
+                      onClick={async () => {
+                        const ok = await addLiuliMaterialSupply();
+                        if (ok) setLiuliMaterialSupplyModal(false);
+                      }}
+                      className="w-full bg-violet-500 hover:bg-violet-600 text-white px-4 py-2 font-bold transition-colors"
+                    >
+                      {language === 'zh' ? '登记建材' : 'Save'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ) : null}
+
+            {liuliActiveTab === 'flights' && (
             <div className="bg-white border-2 border-indigo-200 p-6 shadow-md">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-black">{language === 'zh' ? '飞船航班信息' : 'Flights'}</h2>
@@ -4562,7 +5409,9 @@ const App = () => {
                 )}
               </div>
             </div>
+            )}
 
+            {liuliActiveTab === 'productivity' && (
             <div className="bg-white border-2 border-indigo-200 p-6 shadow-md">
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-black">{language === 'zh' ? '生产力信息' : 'Productivity'}</h2>
@@ -4614,7 +5463,7 @@ const App = () => {
                         <div className="font-bold text-gray-800 text-[11px] leading-tight">{p.name || '-'}</div>
                         <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">{p.itemName || '-'}</div>
                         <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
-                          {language === 'zh' ? '每天产量' : 'Per day'}: <span className="text-purple-600 font-semibold">{Number(p.perDay).toFixed(3)}</span>
+                          {language === 'zh' ? '每天产量' : 'Per day'}: <span className="text-purple-600 font-semibold">{Math.round(Number(p.perDay) || 0)}</span>
                         </div>
                         {p.pickup ? (
                           <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
@@ -4634,6 +5483,172 @@ const App = () => {
                 )}
               </div>
             </div>
+            )}
+
+            {liuliActiveTab === 'material_requests' && (
+            <div className="bg-white border-2 border-indigo-200 p-6 shadow-md">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-black">{language === 'zh' ? '建材汇总申请' : 'Material Requests'}</h2>
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-gray-500">{(liuliMaterialDemandsFiltered || []).length}</div>
+                  <button
+                    onClick={() => setLiuliMaterialDemandModal(true)}
+                    className="bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 text-indigo-700 px-4 py-2 text-sm font-bold transition-all border border-indigo-300"
+                  >
+                    {language === 'zh' ? '填写申请' : 'Add Request'}
+                  </button>
+                </div>
+              </div>
+              <input
+                value={liuliMaterialDemandSearch}
+                onChange={(e) => setLiuliMaterialDemandSearch(e.target.value)}
+                placeholder={language === 'zh' ? '搜索建材申请...' : 'Search material requests...'}
+                className="w-full border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 transition-all mb-3"
+              />
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => setLiuliMaterialDemandPage(p => Math.max(1, p - 1))}
+                  disabled={liuliMaterialDemandPage <= 1}
+                  className="px-3 py-1.5 text-sm font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {language === 'zh' ? '上一页' : 'Prev'}
+                </button>
+                <div className="text-xs text-gray-500">
+                  {liuliMaterialDemandPage}/{liuliMaterialDemandTotalPages}
+                </div>
+                <button
+                  onClick={() => setLiuliMaterialDemandPage(p => Math.min(liuliMaterialDemandTotalPages, p + 1))}
+                  disabled={liuliMaterialDemandPage >= liuliMaterialDemandTotalPages}
+                  className="px-3 py-1.5 text-sm font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {language === 'zh' ? '下一页' : 'Next'}
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 min-h-[220px] items-start">
+                {(liuliMaterialDemandsFiltered || []).length === 0 ? (
+                  <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无建材申请' : 'No material requests yet'}</div>
+                ) : (
+                  (liuliMaterialDemandsPaged || []).map((d) => (
+                    <div
+                      key={d.id}
+                      className="bg-gradient-to-br from-white to-indigo-50 border-2 border-indigo-200 p-2 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start h-fit self-start"
+                    >
+                      <div className="flex-1">
+                        <div className="font-bold text-[12px] text-gray-800">{d.applicant || '-'}</div>
+                        {(d.items || []).length > 0 ? (
+                          <div className="mt-2 space-y-1.5">
+                            {(d.items || []).map((it, i) => (
+                              <div
+                                key={`${d.id}-item-${i}`}
+                                className="flex items-center justify-between gap-2 bg-white border border-indigo-100 px-2 py-1"
+                              >
+                                <span className="text-[13px] font-extrabold tracking-wide text-indigo-700">
+                                  {it.materialName}
+                                </span>
+                                <span className="inline-flex items-center px-2 py-0.5 text-[12px] font-extrabold text-purple-700 bg-purple-100 border border-purple-200">
+                                  x {Math.round(Number(it.quantity) || 0)}
+                                </span>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="mt-1 text-[11px] text-gray-700 whitespace-pre-wrap leading-snug">{d.summary || '-'}</div>
+                        )}
+                        {d.note ? (
+                          <div className="mt-1 text-[11px] text-gray-500 whitespace-pre-wrap leading-snug">
+                            {language === 'zh' ? '备注' : 'Note'}: {d.note}
+                          </div>
+                        ) : null}
+                      </div>
+                      <button
+                        onClick={() => deleteLiuliMaterialDemand(d.id)}
+                        className="text-[10px] text-red-600 hover:text-red-700 ml-2"
+                      >
+                        {language === 'zh' ? '删除' : 'Delete'}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            )}
+
+            {liuliActiveTab === 'material_supply' && (
+            <div className="bg-white border-2 border-indigo-200 p-6 shadow-md">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-black">{language === 'zh' ? '建材生产信息' : 'Material Supply'}</h2>
+                <div className="flex items-center gap-3">
+                  <div className="text-xs text-gray-500">{(liuliMaterialSuppliesFiltered || []).length}</div>
+                  <button
+                    onClick={() => setLiuliMaterialSupplyModal(true)}
+                    className="bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 text-indigo-700 px-4 py-2 text-sm font-bold transition-all border border-indigo-300"
+                  >
+                    {language === 'zh' ? '登记建材' : 'Add Supply'}
+                  </button>
+                </div>
+              </div>
+              <input
+                value={liuliMaterialSupplySearch}
+                onChange={(e) => setLiuliMaterialSupplySearch(e.target.value)}
+                placeholder={language === 'zh' ? '搜索建材产能...' : 'Search material supply...'}
+                className="w-full border border-indigo-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-indigo-200 focus:border-indigo-300 transition-all mb-3"
+              />
+              <div className="flex items-center justify-between mb-3">
+                <button
+                  onClick={() => setLiuliMaterialSupplyPage(p => Math.max(1, p - 1))}
+                  disabled={liuliMaterialSupplyPage <= 1}
+                  className="px-3 py-1.5 text-sm font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {language === 'zh' ? '上一页' : 'Prev'}
+                </button>
+                <div className="text-xs text-gray-500">
+                  {liuliMaterialSupplyPage}/{liuliMaterialSupplyTotalPages}
+                </div>
+                <button
+                  onClick={() => setLiuliMaterialSupplyPage(p => Math.min(liuliMaterialSupplyTotalPages, p + 1))}
+                  disabled={liuliMaterialSupplyPage >= liuliMaterialSupplyTotalPages}
+                  className="px-3 py-1.5 text-sm font-bold border border-indigo-200 text-indigo-700 bg-white hover:bg-indigo-50 disabled:opacity-40 disabled:cursor-not-allowed"
+                >
+                  {language === 'zh' ? '下一页' : 'Next'}
+                </button>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 min-h-[220px] items-start">
+                {(liuliMaterialSuppliesFiltered || []).length === 0 ? (
+                  <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无建材产能登记' : 'No material supply yet'}</div>
+                ) : (
+                  (liuliMaterialSuppliesPaged || []).map((s) => (
+                    <div
+                      key={s.id}
+                      className="bg-gradient-to-br from-white to-indigo-50 border-2 border-indigo-200 p-2 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start h-fit self-start"
+                    >
+                      <div>
+                        <div className="font-bold text-gray-800 text-[11px] leading-tight">{s.producer || '-'}</div>
+                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">{s.materialName || '-'}</div>
+                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
+                          {language === 'zh' ? '日产量' : 'Per day'}: <span className="text-purple-600 font-semibold">{Math.round(Number(s.perDay) || 0)}</span>
+                        </div>
+                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
+                          {language === 'zh' ? '单价' : 'Unit Price'}: <span className="text-fuchsia-600 font-semibold">{Number(s.unitPrice).toFixed(3)}</span>
+                        </div>
+                        {s.pickup ? (
+                          <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
+                            {language === 'zh' ? '交付地' : 'Delivery'}: <span className="text-indigo-600 font-semibold">{s.pickup}</span>
+                          </div>
+                        ) : null}
+                        {s.note ? <div className="text-[11px] text-gray-600 mt-1 whitespace-pre-wrap leading-snug">{s.note}</div> : null}
+                      </div>
+                      <button
+                        onClick={() => deleteLiuliMaterialSupply(s.id)}
+                        className="text-[10px] text-red-600 hover:text-red-700"
+                      >
+                        {language === 'zh' ? '删除' : 'Delete'}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            )}
           </div>
         </div>
       </div>
@@ -5023,6 +6038,16 @@ const App = () => {
                   {bankAssets.map((asset) => {
                     const isEditing = editingAssetId === asset.id;
                     const assetMeta = parseBankAssetMeta(asset);
+                    const statusLabel = asset.status === 'pending'
+                      ? t('pending')
+                      : asset.status === 'rejected'
+                        ? t('rejected')
+                        : t('approved');
+                    const statusClass = asset.status === 'pending'
+                      ? 'text-amber-700 bg-amber-100 border-amber-200'
+                      : asset.status === 'rejected'
+                        ? 'text-red-700 bg-red-100 border-red-200'
+                        : 'text-green-700 bg-green-100 border-green-200';
 
                     return (
                       <div
@@ -5042,8 +6067,11 @@ const App = () => {
                               <div className="font-bold text-purple-700 text-sm">{asset.client}</div>
                             )}
                             <div className="text-xs text-gray-500 mt-0.5">{asset.timestamp?.split(' ')[0] || '-'}</div>
+                            <div className={`inline-flex items-center mt-1 px-1.5 py-0.5 text-[10px] font-bold border rounded ${statusClass}`}>
+                              {statusLabel}
+                            </div>
                           </div>
-                          {isAdmin && (
+                          {isAdmin && asset.status === 'approved' && (
                             <div className="flex items-center gap-1">
                               {isEditing ? (
                                 <>
@@ -5271,6 +6299,11 @@ const App = () => {
                       placeholder={t('operatorNamePlaceholder')}
                     />
                   </div>
+                  {!isAdmin && (
+                    <div className="text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-2">
+                      {t('requiresAdminApproval')}
+                    </div>
+                  )}
                   <button
                     type="submit"
                     className="w-full bg-gradient-to-r from-purple-100 to-purple-200 hover:from-purple-200 hover:to-purple-300 text-purple-700 font-bold py-3 transition-all border border-purple-300"
@@ -6293,10 +7326,15 @@ const App = () => {
              {/* 个人账户 */}
              <div className="bg-white border border-green-200 rounded-lg shadow-sm p-4">
                <div className="flex items-center justify-between mb-3">
-                 <div className="flex items-center gap-2 text-gray-700">
-                   <Wallet className="w-5 h-5 text-green-600" />
-                   <span className="font-semibold text-base">{t('personalBalance')}</span>
-                 </div>
+               <div className="flex items-center gap-2 text-gray-700">
+                  <Wallet className="w-5 h-5 text-green-600" />
+                  <span className="font-semibold text-base">{t('personalBalance')}</span>
+                  {currentUserRole === 'liuli_member' && (
+                    <span className="px-2 py-0.5 text-xs font-bold text-purple-700 bg-purple-100 border border-purple-200">
+                      {t('roleLiuliMember')}
+                    </span>
+                  )}
+                </div>
                  <div className="flex items-center gap-2 justify-end">
                    <div className="text-base font-semibold text-gray-900">{formatMoney(stats.personalTotalBalance)}</div>
                    <div className="text-xl leading-none animate-bounce">💲</div>
@@ -6320,6 +7358,16 @@ const App = () => {
                  </div>
                </div>
                <p className="mt-3 text-xs text-gray-500">{t('injectionAndDeposit')}</p>
+               {isAdmin && (
+                 <div className="mt-3">
+                   <button
+                     onClick={() => setAccountListModalOpen(true)}
+                     className="px-3 py-2 rounded border border-indigo-200 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-semibold transition-colors"
+                   >
+                     {t('openAccountList')}
+                   </button>
+                 </div>
+               )}
              </div>
 
              <TableSection title={`${t('injectionAccount')} - ${t('injection')}`} color="orange" icon={ArrowDownLeft} 
@@ -6359,6 +7407,75 @@ const App = () => {
         </div>
 
         {/* Modal */}
+        {accountListModalOpen && isAdmin && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
+            <div className="bg-white border-2 border-indigo-200 shadow-2xl max-w-2xl w-full p-6 space-y-4">
+              <div className="flex justify-between items-center border-b border-indigo-100 pb-3">
+                <h3 className="text-xl font-bold text-gray-900">{t('accountList')}</h3>
+                <button
+                  onClick={() => {
+                    setAccountListModalOpen(false);
+                    setAccountSearch('');
+                  }}
+                  className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
+                >
+                  <X className="w-6 h-6" />
+                </button>
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 mb-2">{t('searchByName')}</label>
+                <input
+                  type="text"
+                  value={accountSearch}
+                  onChange={(e) => setAccountSearch(e.target.value)}
+                  placeholder={t('searchAccountPlaceholder')}
+                  className="w-full border border-indigo-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-indigo-400 focus:border-indigo-400"
+                />
+              </div>
+
+              <div className="max-h-[420px] overflow-y-auto border border-indigo-100">
+                {accountUsersFiltered.length === 0 ? (
+                  <div className="p-6 text-sm text-gray-500 text-center">{t('noAccountsFound')}</div>
+                ) : (
+                  <div className="divide-y divide-indigo-50">
+                    {accountUsersFiltered.map((u) => {
+                      const role = u.role || 'user';
+                      const canToggleMember = role === 'user' || role === 'liuli_member';
+                      const isLiuliMember = role === 'liuli_member';
+                      return (
+                        <div key={u.id || u.username} className="p-3 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-semibold text-gray-900 truncate">{u.username || '-'}</div>
+                            <div className="text-xs text-gray-500 mt-1">{t(getRoleDisplayKey(role))}</div>
+                          </div>
+                          <div className="shrink-0">
+                            {canToggleMember ? (
+                              <button
+                                onClick={() => handleToggleLiuliMember(u)}
+                                disabled={updatingMemberUserId === u.id}
+                                className={`px-3 py-1.5 text-xs font-semibold border transition-colors ${
+                                  isLiuliMember
+                                    ? 'border-red-200 bg-red-50 hover:bg-red-100 text-red-700'
+                                    : 'border-emerald-200 bg-emerald-50 hover:bg-emerald-100 text-emerald-700'
+                                } disabled:opacity-60 disabled:cursor-not-allowed`}
+                              >
+                                {isLiuliMember ? t('revokeLiuliMember') : t('grantLiuliMember')}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-gray-400">-</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
         {forceSettleConfirmStep > 0 && (
           <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
             <div className="bg-white border-2 border-green-200 shadow-2xl max-w-md w-full p-8 space-y-6 animate-in fade-in zoom-in-95 duration-200 transition-all hover:border-green-300 hover:shadow-green-200/50">
@@ -6421,7 +7538,19 @@ const App = () => {
                                 required 
                                 disabled={!isAdmin && !editId} 
                                 value={formData.client} 
-                                onChange={e => setFormData({...formData, client: e.target.value})} 
+                                onChange={e => {
+                                  const nextClient = e.target.value;
+                                  if (modalType === 'deposit' && isAdmin && formData.product_type === 'risk') {
+                                    const nextTarget = getUserByName(String(nextClient || '').trim());
+                                    if (!isLiuliEligibleUser(nextTarget)) {
+                                      setShowRiskEligibilityHint(false);
+                                      setFormData({ ...formData, client: nextClient, product_type: 'risk5', rate: '5' });
+                                      return;
+                                    }
+                                  }
+                                  if (modalType === 'deposit') setShowRiskEligibilityHint(false);
+                                  setFormData({ ...formData, client: nextClient });
+                                }} 
                                 className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 disabled:bg-gray-100 disabled:cursor-not-allowed transition-all hover:border-green-300" 
                                 placeholder={t('clientPlaceholderText')}
                             />
@@ -6436,6 +7565,11 @@ const App = () => {
                               value={formData.product_type} 
                               onChange={e => {
                                 const newType = e.target.value;
+                                if (newType === 'risk' && !canSelectRiskDeposit) {
+                                  setShowRiskEligibilityHint(true);
+                                  return;
+                                }
+                                setShowRiskEligibilityHint(false);
                                 setFormData({
                                   ...formData, 
                                   product_type: newType,
@@ -6448,6 +7582,9 @@ const App = () => {
                               <option value="risk">{t('riskDeposit')}</option>
                               <option value="risk5">{t('riskDeposit5')}</option>
                             </select>
+                            {showRiskEligibilityHint && (
+                              <p className="text-xs text-red-700 mt-2 bg-red-50 border border-red-200 p-2 font-semibold">{t('liuliMemberRequired')}</p>
+                            )}
                             {formData.product_type === 'risk' && (
                               <p className="text-xs text-red-700 mt-2 bg-red-50 border border-red-200 p-2 font-semibold">{t('riskNote')}</p>
                             )}
