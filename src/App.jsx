@@ -2287,6 +2287,22 @@ const App = () => {
     return `${yyyy}-${mm}-${dd}`;
   };
 
+  // 返回"当前时间对应的本次结算周key"
+  // 结算时间：每周三 12:00 上海时间；若还未到本周三 12:00，则返回上周三的 key
+  const getSettleWeekKey = (now) => {
+    const d = new Date(now);
+    const day = d.getDay(); // 0=Sun, 3=Wed
+    const daysToLastWed = (day - 3 + 7) % 7;
+    const lastWed = new Date(d);
+    lastWed.setDate(d.getDate() - daysToLastWed);
+    lastWed.setHours(12, 0, 0, 0);
+    // 今天是周三但还没到 12:00，用上周三
+    if (daysToLastWed === 0 && d < lastWed) {
+      lastWed.setDate(lastWed.getDate() - 7);
+    }
+    return getShanghaiDateKey(lastWed);
+  };
+
   // --- 倒计时更新 ---
   useEffect(() => {
     const updateCountdown = () => {
@@ -2337,7 +2353,22 @@ const App = () => {
           .lt('rejected_at', twentyHoursAgo);
 
         // 获取交易数据
-        await refreshTransactions();
+        const { txData } = await refreshTransactions();
+
+        // 自动结算利息：用已拉到的数据判断本周是否已结算，避免额外 DB 查询
+        const now = getShanghaiNow();
+        const weekKey = getSettleWeekKey(now);
+        const alreadySettledThisWeek = (txData || []).some(tx =>
+          tx.status === 'approved' &&
+          ['interest_income', 'interest_expense', 'injection', 'withdraw_inj'].includes(tx.type) &&
+          (tx.remark || '').includes(`autoSettleKey:${weekKey}`)
+        );
+        if (!alreadySettledThisWeek) {
+          // 静默结算，不弹窗；函数内部会再做一次幂等 DB 检查防并发
+          autoSettleInterest(weekKey, false, true).catch(e =>
+            console.error('自动结算失败:', e)
+          );
+        }
 
         // 获取用户数据
         const { data: usersData, error: usersError } = await supabase
@@ -3371,10 +3402,10 @@ const App = () => {
   };
 
   // --- 自动结算利息 ---
-  const autoSettleInterest = async (settleKeyParam, force = false) => {
+  const autoSettleInterest = async (settleKeyParam, force = false, silent = false) => {
     try {
       const now = getShanghaiNow();
-      const settleKey = settleKeyParam || getShanghaiDateKey(now);
+      const settleKey = settleKeyParam || getSettleWeekKey(now);
 
       const { data: exists, error: existsError } = await supabase
         .from('transactions')
@@ -3386,13 +3417,18 @@ const App = () => {
 
       if (existsError) throw existsError;
       if (!force && (exists || []).length > 0) {
-        alert(t('alreadySettledToday'));
+        if (!silent) alert(t('alreadySettledToday'));
         console.log('⚠️ 本周已结算过，跳过自动结算', settleKey);
         return;
       }
 
-      const approved = transactions.filter(tx => tx.status === 'approved');
-      
+      // 直接从 DB 查询最新数据，避免使用可能过时的 state
+      const { data: freshTx } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('status', 'approved');
+      const approved = freshTx || [];
+
       // 计算各类型利息 - 修复累加逻辑
       const calc = (types) => {
         const result = approved
@@ -3507,17 +3543,17 @@ const App = () => {
         const settledExpense = injectionInterest + depositInterest;
         const euuInjection = Math.max(0, assetWeeklyProfit);
         const euuDeduction = Math.max(0, -assetWeeklyProfit);
-        const msg = language === 'zh' 
+        const msg = language === 'zh'
           ? `✅ 结算成功！\n收入: +${settledIncome.toFixed(3)}m\n支出: -${settledExpense.toFixed(3)}m\nEUU注资(资产周利润): +${euuInjection.toFixed(3)}m\nEUU扣款(资产周亏损): -${euuDeduction.toFixed(3)}m\n共生成 ${settledCount} 条记录`
           : `✅ Settlement successful!\nIncome: +${settledIncome.toFixed(3)}m\nExpense: -${settledExpense.toFixed(3)}m\nEUU injection (asset weekly profit): +${euuInjection.toFixed(3)}m\nEUU deduction (asset weekly loss): -${euuDeduction.toFixed(3)}m\nGenerated ${settledCount} records`;
-        alert(msg);
-        console.log('✅ 自动结算利息成功');
+        if (!silent) alert(msg);
+        console.log('✅ 自动结算利息成功', settleKey);
       } else {
-        alert(language === 'zh' ? '⚠️ 没有可结算的利息' : '⚠️ No interest to settle');
+        if (!silent) alert(language === 'zh' ? '⚠️ 没有可结算的利息' : '⚠️ No interest to settle');
       }
     } catch (e) {
       console.error("自动结算利息失败:", e);
-      alert(language === 'zh' ? `❌ 结算失败: ${e.message}` : `❌ Settlement failed: ${e.message}`);
+      if (!silent) alert(language === 'zh' ? `❌ 结算失败: ${e.message}` : `❌ Settlement failed: ${e.message}`);
     }
   };
 
