@@ -4369,7 +4369,15 @@ const App = () => {
             </p>
           </div>
           <form onSubmit={authMode === 'login' ? handleLogin : handleRegister} className="space-y-4">
-            <input type="text" required placeholder={t('accountPlaceholder')} value={authInput.username} onChange={e => setAuthInput({...authInput, username: e.target.value})} className="w-full border-2 border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none" />
+            <div>
+              <input type="text" required placeholder={t('accountPlaceholder')} value={authInput.username} onChange={e => setAuthInput({...authInput, username: e.target.value})} className="w-full border-2 border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none" />
+              <p className="mt-1.5 text-xs text-amber-700 bg-amber-50 border border-amber-200 px-3 py-1.5 flex items-center gap-1.5">
+                <span className="shrink-0">⚠️</span>
+                {language === 'zh'
+                  ? (authMode === 'register' ? '请使用您的公司董事名称作为账号，勿使用邮箱或其他格式' : '账号为您的公司董事名称')
+                  : (authMode === 'register' ? 'Use your company director name as username, not email or other formats' : 'Your username is your company director name')}
+              </p>
+            </div>
             <input type="password" required placeholder={t('passwordPlaceholder')} value={authInput.password} onChange={e => setAuthInput({...authInput, password: e.target.value})} className="w-full border-2 border-green-200 px-4 py-3 focus:ring-2 focus:ring-green-400 focus:border-green-400 outline-none" />
             {authError && <div className="bg-red-50 text-red-600 text-sm p-3 rounded-lg flex items-center gap-2 border border-red-200"><AlertCircle className="w-4 h-4"/>{authError}</div>}
             <button disabled={connectionStatus !== 'connected'} type="submit" className="w-full bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 disabled:bg-slate-400 text-white font-bold py-3 transition-all shadow-lg">{authMode === 'login' ? t('loginButton') : t('registerButton')}</button>
