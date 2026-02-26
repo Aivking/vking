@@ -2353,22 +2353,7 @@ const App = () => {
           .lt('rejected_at', twentyHoursAgo);
 
         // 获取交易数据
-        const { txData } = await refreshTransactions();
-
-        // 自动结算利息：用已拉到的数据判断本周是否已结算，避免额外 DB 查询
-        const now = getShanghaiNow();
-        const weekKey = getSettleWeekKey(now);
-        const alreadySettledThisWeek = (txData || []).some(tx =>
-          tx.status === 'approved' &&
-          ['interest_income', 'interest_expense', 'injection', 'withdraw_inj'].includes(tx.type) &&
-          (tx.remark || '').includes(`autoSettleKey:${weekKey}`)
-        );
-        if (!alreadySettledThisWeek) {
-          // 静默结算，不弹窗；函数内部会再做一次幂等 DB 检查防并发
-          autoSettleInterest(weekKey, false, true).catch(e =>
-            console.error('自动结算失败:', e)
-          );
-        }
+        await refreshTransactions();
 
         // 获取用户数据
         const { data: usersData, error: usersError } = await supabase
