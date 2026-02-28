@@ -5119,6 +5119,7 @@ const App = () => {
                     <option value="WCB">WCB (3000/1000)</option>
                     <option value="LCB">LCB (2000/2000)</option>
                     <option value="HCB">HCB (5000/5000)</option>
+                    <option value="VCB">VCB (1000/3000)</option>
                   </select>
                   <div className="mt-3 flex items-center gap-2">
                     <input
