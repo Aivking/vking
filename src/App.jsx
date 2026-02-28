@@ -81,6 +81,7 @@ const typeLabels = {
   'bond_issue': '债券发售',
   'bond_subscribe': '债券申购',
   'bond_redeem': '债券赎回',
+  'bond_redeem_user': '债券赎回明细',
   'fund_subscribe': '基金申购',
   'fund_redeem': '基金赎回',
   'fund_dividend': '基金分红',
@@ -832,6 +833,7 @@ const translations = {
       'bond_issue': 'Bond Issue',
       'bond_subscribe': 'Bond Subscribe',
       'bond_redeem': 'Bond Redeem',
+      'bond_redeem_user': 'Bond Redeem Detail',
       'fund_subscribe': 'Fund Subscribe',
       'fund_redeem': 'Fund Redeem',
       'fund_dividend': 'Fund Dividend',
@@ -1180,11 +1182,14 @@ const App = () => {
   const [editFlightData, setEditFlightData] = useState({ name: '', from: '', to: '', note: '', returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
   const [editingHoldingId, setEditingHoldingId] = useState(null);
   const [editHoldingData, setEditHoldingData] = useState({ client: '', principal: '', rate: '' });
+  const [editingRedeemId, setEditingRedeemId] = useState(null);
+  const [editRedeemData, setEditRedeemData] = useState({ client: '', principal: '', rate: '' });
   const [fundingCardId, setFundingCardId] = useState(null);
   const [fundAmount, setFundAmount] = useState('');
   const [fundSource, setFundSource] = useState('personal'); // 'personal' | 'bank'
   const [withdrawingCardId, setWithdrawingCardId] = useState(null);
   const [withdrawAmount, setWithdrawAmount] = useState('');
+  const [expandedFundingCards, setExpandedFundingCards] = useState({});
   
   // 银行资产 State
   const [bankAssets, setBankAssets] = useState([]);
@@ -1809,6 +1814,38 @@ const App = () => {
     }
   };
 
+  const handleDeleteRedeem = async (id) => {
+    if (!window.confirm(language === 'zh' ? '确定删除此赎回记录？' : 'Delete this redeem record?')) return;
+    try {
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (error) throw error;
+      await refreshTransactions();
+    } catch (e) {
+      alert((language === 'zh' ? '删除失败：' : 'Delete failed: ') + (e?.message || e));
+    }
+  };
+
+  const handleUpdateRedeem = async (id) => {
+    const principal = parseFloat(editRedeemData.principal);
+    const rate = parseFloat(editRedeemData.rate);
+    if (!editRedeemData.client.trim() || !Number.isFinite(principal) || principal <= 0) {
+      alert(language === 'zh' ? '请填写有效的债券名称和本金' : 'Please fill in valid bond name and principal');
+      return;
+    }
+    try {
+      const { error } = await supabase.from('transactions').update({
+        client: editRedeemData.client.trim(),
+        principal,
+        rate: Number.isFinite(rate) ? rate : 0,
+      }).eq('id', id);
+      if (error) throw error;
+      await refreshTransactions();
+      setEditingRedeemId(null);
+    } catch (e) {
+      alert((language === 'zh' ? '更新失败：' : 'Update failed: ') + (e?.message || e));
+    }
+  };
+
   const handleUpdateFlight = async (id) => {
     const { name, from, to, note, returnFrom, returnTo, returnNote, shipType } = editFlightData;
     if (!name.trim() || !from.trim() || !to.trim()) {
@@ -2129,25 +2166,49 @@ const App = () => {
         .eq('id', bond.tx_id);
       if (endErr) throw endErr;
 
-      // 统计当前债券所有人的已审批持仓总额，用于生成赎回账单
+      // 统计当前债券所有人的已审批持仓，用于生成赎回账单
       const approvedAll = (transactions || []).filter(tx => tx.status === 'approved');
-      const totalApproved = approvedAll
+      const subscriberRecords = approvedAll
         .filter(tx => tx.type === 'bond_subscribe')
         .filter(tx => {
           const issueId = parseBondIssueIdFromRemark(tx.remark);
           return issueId ? (String(issueId) === String(bond.tx_id)) : (tx.client === bond.name);
-        })
-        .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+        });
+      const totalApproved = subscriberRecords.reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+      const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
 
-      // 写入一条全员可见的赎回账单记录
-      await handleCRUD('create', {
+      // 先写入每位认购人的个人赎回明细记录（在状态刷新前完成）
+      if (subscriberRecords.length > 0) {
+        const perUserRecords = subscriberRecords.map(sub => ({
+          type: 'bond_redeem_user',
+          client: bond.name,
+          principal: parseFloat(sub.principal) || 0,
+          rate: parseFloat(sub.rate) || parseFloat(bond.rate_per_week) || 0,
+          timestamp: now,
+          created_by: sub.created_by,
+          creator_id: sub.creator_id || sub.created_by,
+          status: 'approved',
+          remark: `issue_id:${bond.tx_id} 个人赎回`,
+          product_type: bond.category === 'long' ? 'bond_long' : 'bond_short'
+        }));
+        const { error: perUserErr } = await supabase.from('transactions').insert(perUserRecords);
+        if (perUserErr) throw new Error('创建赎回明细失败: ' + perUserErr.message);
+      }
+
+      // 再写入全员可见的赎回汇总记录（handleCRUD 会内部刷新一次）
+      const { error: summaryErr } = await supabase.from('transactions').insert([{
         type: 'bond_redeem',
         client: bond.name,
         principal: totalApproved,
-        rate: 0,
+        rate: parseFloat(bond.rate_per_week) || 0,
         product_type: bond.category === 'long' ? 'bond_long' : 'bond_short',
-        remark: `issue_id:${bond.tx_id} 全额赎回` 
-      });
+        remark: `issue_id:${bond.tx_id} 全额赎回`,
+        timestamp: now,
+        created_by: currentUser.username,
+        creator_id: currentUser.id || currentUser.username,
+        status: 'approved'
+      }]);
+      if (summaryErr) throw new Error('创建汇总记录失败: ' + summaryErr.message);
 
       // 再取消所有持仓/申购（包含 pending/approved），释放占用（保留账单历史）
       const cancelData = {
@@ -4094,7 +4155,11 @@ const App = () => {
     // withdraw_inj/withdraw_dep 审批时已通过 applyApprovedWithdrawalToBills 直接
     // 修改了原注资/存款记录的 principal，无需再次扣减，否则会双重计算。
     const bondSubscribes = calc(['bond_subscribe']);
-    const fundingBase = injections.p + deposits.p + bondSubscribes.p;
+    // 债券赎回利息支出（本金已由申购记录变 rejected 自然消除）
+    const bondRedeemInterest = approved
+      .filter(tx => tx.type === 'bond_redeem_user')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0) * (parseFloat(tx.rate) || 0) / 100, 0);
+    const fundingBase = injections.p + deposits.p + bondSubscribes.p - bondRedeemInterest;
     const totalRevenue = loans.i;
     const totalExpense = injections.i + deposits.i;
     const assetDailyProfit = approved
@@ -4477,10 +4542,15 @@ const App = () => {
       .filter(tx => tx.type === 'bank_planet_withdraw')
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
 
-    // 债券申购：计入银行总余额（已批准的认购资金归银行管理）
+    // 债券申购：计入银行总余额（已批准的认购资金归银行管理；赎回后申购记录变 rejected 自动清零）
     const bondSubscribeTotal = approved
       .filter(tx => tx.type === 'bond_subscribe')
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+    // 债券赎回利息支出：银行额外付出利息（本金已通过申购记录变 rejected 自然消除）
+    const bondRedeemInterest = approved
+      .filter(tx => tx.type === 'bond_redeem_user')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0) * (parseFloat(tx.rate) || 0) / 100, 0);
 
     // 已结算利息净额：每周结算后会进入闲置资金（负数则扣减）
     const settledInterestNet = approved.reduce((sum, tx) => {
@@ -4489,7 +4559,7 @@ const App = () => {
       return sum;
     }, 0);
 
-    const idleCash = injections.p + bondSubscribeTotal - loans.p - bankFundNetTransfer - bankPlanetFundTotal + bankPlanetWithdrawTotal + settledInterestNet;
+    const idleCash = injections.p + bondSubscribeTotal - bondRedeemInterest - loans.p - bankFundNetTransfer - bankPlanetFundTotal + bankPlanetWithdrawTotal + settledInterestNet;
     
     console.log('银行闲置资金计算（当前状态）:', {
       总负债: injections.p,
@@ -4977,51 +5047,145 @@ const App = () => {
             )}
           </div>
 
-          {/* 我的持仓明细 */}
-          {(() => {
-            const myHoldings = approvedAll.filter(tx => tx.type === 'bond_subscribe' && tx.created_by === currentUser?.username);
-            return (
-              <div className="bg-white border border-amber-200 shadow-sm p-4">
-                <div className="flex items-center justify-between mb-3">
-                  <div className="font-semibold text-gray-800">{language === 'zh' ? '我的持仓明细' : 'My Holdings'}</div>
-                  <div className="text-xs text-gray-500">{language === 'zh' ? `共 ${myHoldings.length} 笔` : `${myHoldings.length} records`}</div>
-                </div>
-                {myHoldings.length === 0 ? (
-                  <div className="text-center text-gray-400 py-6 text-sm">{language === 'zh' ? '暂无持仓' : 'No holdings'}</div>
-                ) : (
-                  <div className="overflow-x-auto">
-                    <table className="min-w-full text-xs">
-                      <thead>
-                        <tr className="text-left text-gray-500 border-b border-amber-200">
-                          <th className="py-2 pr-4">{language === 'zh' ? '债券名称' : 'Bond'}</th>
-                          <th className="py-2 pr-4">{language === 'zh' ? '申购金额' : 'Amount'}</th>
-                          <th className="py-2 pr-4">{language === 'zh' ? '总利率' : 'Rate'}</th>
-                          <th className="py-2 pr-4">{language === 'zh' ? '申购时间' : 'Date'}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {myHoldings.map(row => (
-                          <tr key={row.id} className="border-b border-gray-100 text-gray-700">
-                            <td className="py-2 pr-4 font-semibold text-amber-700">{row.client || '-'}</td>
-                            <td className="py-2 pr-4 font-bold">{formatMoney(row.principal)}</td>
-                            <td className="py-2 pr-4">{parseFloat(row.rate || 0).toFixed(2)}%</td>
-                            <td className="py-2 pr-4 whitespace-nowrap text-gray-500">{row.timestamp || row.created_at || '-'}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                      <tfoot>
-                        <tr className="border-t-2 border-amber-200">
-                          <td className="py-2 pr-4 font-bold text-gray-700">{language === 'zh' ? '合计' : 'Total'}</td>
-                          <td className="py-2 pr-4 font-bold text-amber-600">{formatMoney(myHoldings.reduce((s, r) => s + (parseFloat(r.principal) || 0), 0))}</td>
-                          <td colSpan={2}></td>
-                        </tr>
-                      </tfoot>
-                    </table>
+          {/* 我的持仓明细 + 赎回账单 */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {/* 左：持仓明细 */}
+            {(() => {
+              const myHoldings = approvedAll.filter(tx => tx.type === 'bond_subscribe' && tx.created_by === currentUser?.username);
+              return (
+                <div className="bg-white border border-amber-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-semibold text-gray-800">{language === 'zh' ? '我的持仓明细（已审批）' : 'My Holdings'}</div>
+                    <div className="text-xs text-gray-500">{language === 'zh' ? `共 ${myHoldings.length} 笔` : `${myHoldings.length} records`}</div>
                   </div>
-                )}
-              </div>
-            );
-          })()}
+                  {myHoldings.length === 0 ? (
+                    <div className="text-center text-gray-400 py-6 text-sm">{language === 'zh' ? '暂无持仓' : 'No holdings'}</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-gray-500 border-b border-amber-200">
+                            <th className="py-2 pr-3">{language === 'zh' ? '债券名称' : 'Bond'}</th>
+                            <th className="py-2 pr-3">{language === 'zh' ? '申购金额' : 'Amount'}</th>
+                            <th className="py-2 pr-3">{language === 'zh' ? '总利率' : 'Rate'}</th>
+                            <th className="py-2 pr-3">{language === 'zh' ? '申购时间' : 'Date'}</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {myHoldings.map(row => (
+                            <tr key={row.id} className="border-b border-gray-100 text-gray-700">
+                              <td className="py-2 pr-3 font-semibold text-amber-700">{row.client || '-'}</td>
+                              <td className="py-2 pr-3 font-bold">{formatMoney(row.principal)}</td>
+                              <td className="py-2 pr-3">{parseFloat(row.rate || 0).toFixed(2)}%</td>
+                              <td className="py-2 pr-3 whitespace-nowrap text-gray-500">{row.timestamp || row.created_at || '-'}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-amber-200">
+                            <td className="py-2 pr-3 font-bold text-gray-700">{language === 'zh' ? '合计' : 'Total'}</td>
+                            <td className="py-2 pr-3 font-bold text-amber-600">{formatMoney(myHoldings.reduce((s, r) => s + (parseFloat(r.principal) || 0), 0))}</td>
+                            <td colSpan={2}></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+
+            {/* 右：赎回账单 */}
+            {(() => {
+              const allRedeems = (transactions || [])
+                .filter(tx => tx.type === 'bond_redeem_user' && (isAdmin || tx.created_by === currentUser?.username))
+                .slice().sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
+              return (
+                <div className="bg-white border border-green-200 shadow-sm p-4">
+                  <div className="flex items-center justify-between mb-3">
+                    <div className="font-semibold text-gray-800">{language === 'zh' ? (isAdmin ? '全员赎回账单（管理员）' : '我的赎回账单') : (isAdmin ? 'All Redeem Bills (Admin)' : 'My Redeem Bills')}</div>
+                    <div className="text-xs text-gray-500">{language === 'zh' ? `共 ${allRedeems.length} 笔` : `${allRedeems.length} records`}</div>
+                  </div>
+                  {allRedeems.length === 0 ? (
+                    <div className="text-center text-gray-400 py-6 text-sm">{language === 'zh' ? '暂无赎回记录' : 'No redeem records'}</div>
+                  ) : (
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full text-xs">
+                        <thead>
+                          <tr className="text-left text-gray-500 border-b border-green-200">
+                            {isAdmin && <th className="py-2 pr-3">{language === 'zh' ? '用户' : 'User'}</th>}
+                            <th className="py-2 pr-3">{language === 'zh' ? '债券' : 'Bond'}</th>
+                            <th className="py-2 pr-3">{language === 'zh' ? '本金' : 'Principal'}</th>
+                            <th className="py-2 pr-3">{language === 'zh' ? '利息' : 'Interest'}</th>
+                            <th className="py-2 pr-3">{language === 'zh' ? '合计' : 'Total'}</th>
+                            <th className="py-2 pr-3">{language === 'zh' ? '时间' : 'Date'}</th>
+                            {isAdmin && <th className="py-2 pr-3">{language === 'zh' ? '操作' : 'Actions'}</th>}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {allRedeems.map(row => {
+                            const p = parseFloat(row.principal) || 0;
+                            const interest = p * (parseFloat(row.rate) || 0) / 100;
+                            const total = p + interest;
+                            return editingRedeemId === row.id ? (
+                              <tr key={row.id} className="border-b border-green-100 bg-green-50">
+                                {isAdmin && <td className="py-2 pr-2 text-blue-700 font-semibold">{row.created_by || '-'}</td>}
+                                <td className="py-2 pr-2">
+                                  <input className="border border-green-300 rounded px-1.5 py-1 text-xs w-full outline-none" value={editRedeemData.client} onChange={e => setEditRedeemData(d => ({ ...d, client: e.target.value }))} />
+                                </td>
+                                <td className="py-2 pr-2">
+                                  <input type="number" className="border border-green-300 rounded px-1.5 py-1 text-xs w-20 outline-none" value={editRedeemData.principal} onChange={e => setEditRedeemData(d => ({ ...d, principal: e.target.value }))} />
+                                </td>
+                                <td className="py-2 pr-2">
+                                  <input type="number" className="border border-green-300 rounded px-1.5 py-1 text-xs w-14 outline-none" value={editRedeemData.rate} onChange={e => setEditRedeemData(d => ({ ...d, rate: e.target.value }))} placeholder="%" />
+                                </td>
+                                <td className="py-2 pr-2 text-gray-400 text-[10px]">{language === 'zh' ? '(自动)' : 'auto'}</td>
+                                <td className="py-2 pr-2 whitespace-nowrap text-gray-500">{row.timestamp || '-'}</td>
+                                {isAdmin && (
+                                  <td className="py-2 pr-2">
+                                    <div className="flex gap-1">
+                                      <button onClick={() => handleUpdateRedeem(row.id)} className="bg-green-500 hover:bg-green-600 text-white text-[10px] font-bold px-2 py-1 rounded">{language === 'zh' ? '保存' : 'Save'}</button>
+                                      <button onClick={() => setEditingRedeemId(null)} className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-[10px] font-bold px-2 py-1 rounded">{language === 'zh' ? '取消' : 'Cancel'}</button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            ) : (
+                              <tr key={row.id} className="border-b border-gray-100 text-gray-700 hover:bg-green-50">
+                                {isAdmin && <td className="py-2 pr-3 font-semibold text-blue-700">{row.created_by || '-'}</td>}
+                                <td className="py-2 pr-3 font-semibold text-amber-700">{row.client || '-'}</td>
+                                <td className="py-2 pr-3 font-bold">{formatMoney(p)}</td>
+                                <td className="py-2 pr-3 text-green-600 font-semibold">+{formatMoney(interest)}</td>
+                                <td className="py-2 pr-3 font-bold text-emerald-700">{formatMoney(total)}</td>
+                                <td className="py-2 pr-3 whitespace-nowrap text-gray-500">{row.timestamp || row.created_at || '-'}</td>
+                                {isAdmin && (
+                                  <td className="py-2 pr-3 whitespace-nowrap">
+                                    <div className="flex gap-1">
+                                      <button onClick={() => { setEditingRedeemId(row.id); setEditRedeemData({ client: row.client || '', principal: row.principal || '', rate: row.rate || '' }); }} className="bg-blue-100 hover:bg-blue-200 text-blue-700 text-[10px] font-bold px-2 py-1 rounded">{language === 'zh' ? '编辑' : 'Edit'}</button>
+                                      <button onClick={() => handleDeleteRedeem(row.id)} className="bg-red-100 hover:bg-red-200 text-red-700 text-[10px] font-bold px-2 py-1 rounded">{language === 'zh' ? '删除' : 'Delete'}</button>
+                                    </div>
+                                  </td>
+                                )}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                        <tfoot>
+                          <tr className="border-t-2 border-green-200">
+                            <td colSpan={isAdmin ? 2 : 1} className="py-2 pr-3 font-bold text-gray-700">{language === 'zh' ? '合计' : 'Total'}</td>
+                            <td className="py-2 pr-3 font-bold text-amber-600">{formatMoney(allRedeems.reduce((s, r) => s + (parseFloat(r.principal) || 0), 0))}</td>
+                            <td className="py-2 pr-3 font-bold text-green-600">+{formatMoney(allRedeems.reduce((s, r) => s + (parseFloat(r.principal) || 0) * (parseFloat(r.rate) || 0) / 100, 0))}</td>
+                            <td className="py-2 pr-3 font-bold text-emerald-700">{formatMoney(allRedeems.reduce((s, r) => { const p = parseFloat(r.principal) || 0; return s + p + p * (parseFloat(r.rate) || 0) / 100; }, 0))}</td>
+                            <td colSpan={isAdmin ? 2 : 1}></td>
+                          </tr>
+                        </tfoot>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
 
           {/* 管理员：全员持仓总账单 */}
           {isAdmin && (() => {
@@ -6316,31 +6480,44 @@ const App = () => {
                       </div>
                     )}
 
-                    {/* 注资名单 */}
-                    <div className="bg-gray-50 border border-gray-200 p-2 mb-2 max-h-28 overflow-y-auto">
-                      <p className="text-[10px] font-medium text-gray-700 mb-1">{t('fundingList')}</p>
-                      {(() => {
-                        const fundingList = getCardFundingList(card.client);
-                        return fundingList.length > 0 ? (
-                          <div className="space-y-0.5">
-                            {fundingList.map((fund, idx) => (
-                              <div key={idx} className={`flex justify-between items-center text-[10px] px-1.5 py-0.5 border ${fund.type === 'bank_planet_withdraw' ? 'bg-orange-50 border-orange-100' : fund.type === 'bank_planet_fund' ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'}`}>
-                                <span className="text-gray-700 font-medium">
-                                  {fund.created_by || '匿名'}
-                                  {fund.type === 'bank_planet_fund' && <span className="ml-1 text-blue-500 text-[9px]">[银行注]</span>}
-                                  {fund.type === 'bank_planet_withdraw' && <span className="ml-1 text-orange-500 text-[9px]">[撤回]</span>}
-                                </span>
-                                <span className={`font-bold ${fund.type === 'bank_planet_withdraw' ? 'text-orange-600' : fund.type === 'bank_planet_fund' ? 'text-blue-600' : 'text-green-600'}`}>
-                                  {fund.type === 'bank_planet_withdraw' ? '-' : '+'}{formatMoney(fund.principal)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <p className="text-[10px] text-gray-400 text-center py-1">{t('noFundingYet')}</p>
-                        );
-                      })()}
-                    </div>
+                    {/* 注资名单（折叠） */}
+                    {(() => {
+                      const fundingList = getCardFundingList(card.client);
+                      const isExpanded = expandedFundingCards[card.id];
+                      return (
+                        <div className="mb-2">
+                          <button
+                            onClick={() => setExpandedFundingCards(prev => ({ ...prev, [card.id]: !prev[card.id] }))}
+                            className="w-full flex items-center justify-between text-[10px] font-medium text-gray-600 hover:text-gray-800 bg-gray-50 hover:bg-gray-100 border border-gray-200 px-2 py-1 transition-colors"
+                          >
+                            <span>{t('fundingList')}（{fundingList.length}）</span>
+                            <span>{isExpanded ? '▲' : '▼'}</span>
+                          </button>
+                          {isExpanded && (
+                            <div className="border border-t-0 border-gray-200 bg-gray-50 p-1.5 max-h-28 overflow-y-auto">
+                              {fundingList.length > 0 ? (
+                                <div className="space-y-0.5">
+                                  {fundingList.map((fund, idx) => (
+                                    <div key={idx} className={`flex justify-between items-center text-[10px] px-1.5 py-0.5 border ${fund.type === 'bank_planet_withdraw' ? 'bg-orange-50 border-orange-100' : fund.type === 'bank_planet_fund' ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'}`}>
+                                      <span className="text-gray-700 font-medium">
+                                        {fund.created_by || '匿名'}
+                                        {fund.type === 'bank_planet_fund' && <span className="ml-1 text-blue-500 text-[9px]">[银行注]</span>}
+                                        {fund.type === 'bank_planet_withdraw' && <span className="ml-1 text-orange-500 text-[9px]">[撤回]</span>}
+                                      </span>
+                                      <span className={`font-bold ${fund.type === 'bank_planet_withdraw' ? 'text-orange-600' : fund.type === 'bank_planet_fund' ? 'text-blue-600' : 'text-green-600'}`}>
+                                        {fund.type === 'bank_planet_withdraw' ? '-' : '+'}{formatMoney(fund.principal)}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-[10px] text-gray-400 text-center py-1">{t('noFundingYet')}</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
 
                     {/* 注资功能 */}
                     {isFunding ? (
