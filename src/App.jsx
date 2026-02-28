@@ -4051,7 +4051,8 @@ const App = () => {
     const deposits = calc(['deposit']);
     // withdraw_inj/withdraw_dep 审批时已通过 applyApprovedWithdrawalToBills 直接
     // 修改了原注资/存款记录的 principal，无需再次扣减，否则会双重计算。
-    const fundingBase = injections.p + deposits.p;
+    const bondSubscribes = calc(['bond_subscribe']);
+    const fundingBase = injections.p + deposits.p + bondSubscribes.p;
     const totalRevenue = loans.i;
     const totalExpense = injections.i + deposits.i;
     const assetDailyProfit = approved
@@ -4085,6 +4086,11 @@ const App = () => {
       .filter(tx => tx.type === 'bank_fund')
       .reduce((acc, cur) => acc + (parseFloat(cur.principal) || 0), 0);
 
+    // 划拨银行注星：从闲置资金扣除
+    const bankPlanetFundTotal = approved
+      .filter(tx => tx.type === 'bank_planet_fund')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
     // 已结算利息净额：正数增加闲置资金，负数扣减闲置资金
     const settledInterestNet = approved.reduce((sum, tx) => {
       if (tx.type === 'interest_income') return sum + (parseFloat(tx.principal) || 0);
@@ -4093,15 +4099,14 @@ const App = () => {
     }, 0);
 
     const fundBalance = calculateFundBalanceForStats();
-    const totalAssets = (fundingBase - bankFundNetTransfer + settledInterestNet) + bankAssetsValue + fundBalance;
+    const totalAssets = (fundingBase - bankFundNetTransfer - bankPlanetFundTotal + settledInterestNet) + bankAssetsValue + fundBalance;
 
     return {
       loanPrincipal: loans.p,
       totalAssets: totalAssets,
       totalLoans: loans.p,
       netCashFlow: interestPool,
-      // 主页的银行闲置资金计算：仅受 bank_fund 转账影响（申购/赎回/分红提取不影响银行闲置资金）
-      idleCash: fundingBase - loans.p - bankFundNetTransfer + settledInterestNet,
+      idleCash: fundingBase - loans.p - bankFundNetTransfer - bankPlanetFundTotal + settledInterestNet,
       interestPool: interestPool,
       injectionBalance: injectionBalance,
       depositBalance: depositBalance,
