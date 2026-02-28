@@ -75,6 +75,7 @@ const typeLabels = {
   'loan_repayment': '还款',
   'planet_fund': '星星基金',
   'bank_planet_fund': '划拨银行注星',
+  'bank_planet_withdraw': '撤回星星资金',
   'planet_card': '星星名片',
   'bank_asset': '风投项目',
   'bond_issue': '债券发售',
@@ -825,6 +826,7 @@ const translations = {
       'interest_expense': 'Interest Expense',
       'planet_fund': 'Star Fund',
       'bank_planet_fund': 'Bank→Star Transfer',
+      'bank_planet_withdraw': 'Star→Bank Recall',
       'planet_card': 'Star Card',
       'bank_asset': 'VC Project',
       'bond_issue': 'Bond Issue',
@@ -1181,6 +1183,8 @@ const App = () => {
   const [fundingCardId, setFundingCardId] = useState(null);
   const [fundAmount, setFundAmount] = useState('');
   const [fundSource, setFundSource] = useState('personal'); // 'personal' | 'bank'
+  const [withdrawingCardId, setWithdrawingCardId] = useState(null);
+  const [withdrawAmount, setWithdrawAmount] = useState('');
   
   // 银行资产 State
   const [bankAssets, setBankAssets] = useState([]);
@@ -3380,17 +3384,55 @@ const App = () => {
     }
   };
 
+  const handlePlanetFundWithdraw = async (cardId) => {
+    const amount = parseFloat(withdrawAmount);
+    if (isNaN(amount) || amount <= 0) {
+      alert(t('invalidNumber'));
+      return;
+    }
+    const card = planetCards.find(c => c.id === cardId);
+    const available = getCardFund(card.client);
+    if (amount > available) {
+      alert(language === 'zh' ? `星星可用资金不足，当前：${formatMoney(available)}` : `Insufficient star fund: ${formatMoney(available)}`);
+      return;
+    }
+    try {
+      const { error } = await supabase.from('transactions').insert([{
+        type: 'bank_planet_withdraw',
+        client: card.client,
+        principal: amount,
+        rate: 0,
+        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+        created_by: currentUser.username,
+        creator_id: currentUser.id || currentUser.username,
+        status: 'approved',
+        remark: `从 ${card.client} 撤回资金至银行`
+      }]);
+      if (error) throw error;
+      await refreshTransactions();
+      alert(language === 'zh' ? `已成功从 ${card.client} 撤回 ${formatMoney(amount)}` : `Recalled ${formatMoney(amount)} from ${card.client}`);
+      setWithdrawAmount('');
+      setWithdrawingCardId(null);
+    } catch (e) {
+      alert(t('submitFailed') + ': ' + e.message);
+    }
+  };
+
   // 计算每个星星的资金总额
   const getCardFund = (cardName) => {
-    return transactions
+    const inflow = transactions
       .filter(tx => ['planet_fund', 'bank_planet_fund'].includes(tx.type) && tx.client === cardName && tx.status === 'approved')
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    const outflow = transactions
+      .filter(tx => tx.type === 'bank_planet_withdraw' && tx.client === cardName && tx.status === 'approved')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+    return Math.max(0, inflow - outflow);
   };
 
   // 获取注资记录列表
   const getCardFundingList = (cardName) => {
     return transactions
-      .filter(tx => ['planet_fund', 'bank_planet_fund'].includes(tx.type) && tx.client === cardName && tx.status === 'approved')
+      .filter(tx => ['planet_fund', 'bank_planet_fund', 'bank_planet_withdraw'].includes(tx.type) && tx.client === cardName && tx.status === 'approved')
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   };
 
@@ -4091,6 +4133,11 @@ const App = () => {
       .filter(tx => tx.type === 'bank_planet_fund')
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
 
+    // 从星星撤回资金：归还到银行余额
+    const bankPlanetWithdrawTotal = approved
+      .filter(tx => tx.type === 'bank_planet_withdraw')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
     // 已结算利息净额：正数增加闲置资金，负数扣减闲置资金
     const settledInterestNet = approved.reduce((sum, tx) => {
       if (tx.type === 'interest_income') return sum + (parseFloat(tx.principal) || 0);
@@ -4099,14 +4146,14 @@ const App = () => {
     }, 0);
 
     const fundBalance = calculateFundBalanceForStats();
-    const totalAssets = (fundingBase - bankFundNetTransfer - bankPlanetFundTotal + settledInterestNet) + bankAssetsValue + fundBalance;
+    const totalAssets = (fundingBase - bankFundNetTransfer - bankPlanetFundTotal + bankPlanetWithdrawTotal + settledInterestNet) + bankAssetsValue + fundBalance;
 
     return {
       loanPrincipal: loans.p,
       totalAssets: totalAssets,
       totalLoans: loans.p,
       netCashFlow: interestPool,
-      idleCash: fundingBase - loans.p - bankFundNetTransfer - bankPlanetFundTotal + settledInterestNet,
+      idleCash: fundingBase - loans.p - bankFundNetTransfer - bankPlanetFundTotal + bankPlanetWithdrawTotal + settledInterestNet,
       interestPool: interestPool,
       injectionBalance: injectionBalance,
       depositBalance: depositBalance,
@@ -4425,6 +4472,11 @@ const App = () => {
       .filter(tx => tx.type === 'bank_planet_fund')
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
 
+    // 从星星撤回资金：归还到银行余额
+    const bankPlanetWithdrawTotal = approved
+      .filter(tx => tx.type === 'bank_planet_withdraw')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
     // 债券申购：计入银行总余额（已批准的认购资金归银行管理）
     const bondSubscribeTotal = approved
       .filter(tx => tx.type === 'bond_subscribe')
@@ -4437,7 +4489,7 @@ const App = () => {
       return sum;
     }, 0);
 
-    const idleCash = injections.p + bondSubscribeTotal - loans.p - bankFundNetTransfer - bankPlanetFundTotal + settledInterestNet;
+    const idleCash = injections.p + bondSubscribeTotal - loans.p - bankFundNetTransfer - bankPlanetFundTotal + bankPlanetWithdrawTotal + settledInterestNet;
     
     console.log('银行闲置资金计算（当前状态）:', {
       总负债: injections.p,
@@ -6272,12 +6324,15 @@ const App = () => {
                         return fundingList.length > 0 ? (
                           <div className="space-y-0.5">
                             {fundingList.map((fund, idx) => (
-                              <div key={idx} className={`flex justify-between items-center text-[10px] px-1.5 py-0.5 border ${fund.type === 'bank_planet_fund' ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'}`}>
+                              <div key={idx} className={`flex justify-between items-center text-[10px] px-1.5 py-0.5 border ${fund.type === 'bank_planet_withdraw' ? 'bg-orange-50 border-orange-100' : fund.type === 'bank_planet_fund' ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'}`}>
                                 <span className="text-gray-700 font-medium">
                                   {fund.created_by || '匿名'}
-                                  {fund.type === 'bank_planet_fund' && <span className="ml-1 text-blue-500 text-[9px]">[银行]</span>}
+                                  {fund.type === 'bank_planet_fund' && <span className="ml-1 text-blue-500 text-[9px]">[银行注]</span>}
+                                  {fund.type === 'bank_planet_withdraw' && <span className="ml-1 text-orange-500 text-[9px]">[撤回]</span>}
                                 </span>
-                                <span className={`font-bold ${fund.type === 'bank_planet_fund' ? 'text-blue-600' : 'text-green-600'}`}>{formatMoney(fund.principal)}</span>
+                                <span className={`font-bold ${fund.type === 'bank_planet_withdraw' ? 'text-orange-600' : fund.type === 'bank_planet_fund' ? 'text-blue-600' : 'text-green-600'}`}>
+                                  {fund.type === 'bank_planet_withdraw' ? '-' : '+'}{formatMoney(fund.principal)}
+                                </span>
                               </div>
                             ))}
                           </div>
@@ -6334,6 +6389,36 @@ const App = () => {
                           </button>
                         </div>
                       </div>
+                    ) : withdrawingCardId === card.id ? (
+                      <div className="space-y-2">
+                        <div className="flex items-center justify-between bg-orange-50 border border-orange-200 px-2 py-1 rounded text-[11px]">
+                          <span className="text-orange-700">{language === 'zh' ? '可撤回余额' : 'Withdrawable'}</span>
+                          <span className="text-orange-800 font-bold">{formatMoney(cardFund)}</span>
+                        </div>
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          value={withdrawAmount}
+                          onChange={e => setWithdrawAmount(e.target.value)}
+                          className="w-full border-2 border-orange-300 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-orange-400"
+                          placeholder={t('amountInputPlaceholder')}
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handlePlanetFundWithdraw(card.id)}
+                            className="flex-1 bg-orange-500 hover:bg-orange-600 text-white px-3 py-2 text-sm font-bold transition-colors"
+                          >
+                            {language === 'zh' ? '确认撤回' : 'Confirm'}
+                          </button>
+                          <button
+                            onClick={() => { setWithdrawingCardId(null); setWithdrawAmount(''); }}
+                            className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 text-sm font-bold transition-colors"
+                          >
+                            {t('cancel')}
+                          </button>
+                        </div>
+                      </div>
                     ) : (
                       <div className="flex gap-2">
                         <button
@@ -6342,6 +6427,15 @@ const App = () => {
                         >
                           {t('fundForDev')}
                         </button>
+                        {isAdmin && cardFund > 0 && (
+                          <button
+                            onClick={() => { setWithdrawingCardId(card.id); setWithdrawAmount(''); }}
+                            className="bg-orange-100 hover:bg-orange-200 text-orange-700 px-3 py-2 text-sm font-bold transition-colors border border-orange-300"
+                            title={language === 'zh' ? '撤回资金至银行' : 'Recall funds to bank'}
+                          >
+                            {language === 'zh' ? '撤回' : 'Recall'}
+                          </button>
+                        )}
                         {(isAdmin || currentUser.role === 'global_admin') && (
                           isEditing ? (
                             <>
