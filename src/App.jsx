@@ -186,7 +186,7 @@ const translations = {
     bondName: '债券名称',
     category: '类型',
     termDays: '期限(天)',
-    ratePerWeek: '利率(%/周)',
+    ratePerWeek: '总利率(%)',
     totalSupplyM: '发行额度(m)',
     saveChanges: '保存修改',
     createBondTitle: '发售债券',
@@ -543,7 +543,7 @@ const translations = {
     bondName: 'Bond Name',
     category: 'Category',
     termDays: 'Term (days)',
-    ratePerWeek: 'Rate (%/week)',
+    ratePerWeek: 'Total Rate (%)',
     totalSupplyM: 'Total Supply (m)',
     saveChanges: 'Save Changes',
     createBondTitle: 'Issue Bond',
@@ -1174,6 +1174,8 @@ const App = () => {
   const [editCardData, setEditCardData] = useState({ name: '', description: '', progress: 0 });
   const [editingFlightId, setEditingFlightId] = useState(null);
   const [editFlightData, setEditFlightData] = useState({ name: '', from: '', to: '', note: '', returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
+  const [editingHoldingId, setEditingHoldingId] = useState(null);
+  const [editHoldingData, setEditHoldingData] = useState({ client: '', principal: '', rate: '' });
   const [fundingCardId, setFundingCardId] = useState(null);
   const [fundAmount, setFundAmount] = useState('');
   
@@ -1764,6 +1766,38 @@ const App = () => {
         alert((language === 'zh' ? '删除失败' : 'Delete failed') + ': ' + (e?.message || e));
       }
     })();
+  };
+
+  const handleDeleteHolding = async (id) => {
+    if (!window.confirm(language === 'zh' ? '确认删除该持仓记录？' : 'Confirm delete this holding?')) return;
+    try {
+      const { error } = await supabase.from('transactions').delete().eq('id', id);
+      if (error) throw error;
+      await refreshTransactions();
+    } catch (e) {
+      alert((language === 'zh' ? '删除失败：' : 'Delete failed: ') + (e?.message || e));
+    }
+  };
+
+  const handleUpdateHolding = async (id) => {
+    const principal = parseFloat(editHoldingData.principal);
+    const rate = parseFloat(editHoldingData.rate);
+    if (!editHoldingData.client.trim() || !Number.isFinite(principal) || principal <= 0) {
+      alert(language === 'zh' ? '请填写有效的债券名称和金额' : 'Please fill in valid bond name and amount');
+      return;
+    }
+    try {
+      const { error } = await supabase.from('transactions').update({
+        client: editHoldingData.client.trim(),
+        principal,
+        rate: Number.isFinite(rate) ? rate : 0,
+      }).eq('id', id);
+      if (error) throw error;
+      await refreshTransactions();
+      setEditingHoldingId(null);
+    } catch (e) {
+      alert((language === 'zh' ? '更新失败：' : 'Update failed: ') + (e?.message || e));
+    }
   };
 
   const handleUpdateFlight = async (id) => {
@@ -4819,40 +4853,22 @@ const App = () => {
                         </div>
                       </div>
                       <div className="mt-2 text-sm text-gray-600">{t('termLabel')}：{p.term_days} {language === 'zh' ? '天' : 'days'}</div>
-                      <div className="mt-1 text-sm text-gray-600">{t('rateLabelPerWeek')}：{parseFloat(p.rate_per_week || 0).toFixed(3)}% {t('perWeek')}</div>
+                      <div className="mt-1 text-sm text-gray-600">{t('rateLabelPerWeek')}：{parseFloat(p.rate_per_week || 0).toFixed(2)}%</div>
                       <div className="mt-1 text-xs text-gray-500">{t('issueLabel')}：{formatMoney(p.total_supply)}，{t('soldLabel')}：{formatMoney(sold)}，{t('remainingLabel')}：{formatMoney(remaining)}</div>
-                      <div className="mt-3 flex items-center justify-end gap-2">
+                      <div className="mt-3 flex items-center justify-between gap-2">
+                        <button
+                          onClick={() => { setBondSubscribeTarget(p); setBondSubscribeModal(true); }}
+                          className="bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white px-4 py-1.5 text-sm font-bold transition-all"
+                        >
+                          {t('subscribe')}
+                        </button>
                         {isAdmin && (
-                          <>
-                            <button
-                              onClick={() => handleEndBondIssue(p)}
-                              className="text-gray-700 hover:text-gray-900 p-2 hover:bg-gray-50 border border-gray-200"
-                              title={t('endIssue')}
-                            >
-                              <Lock className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleRedeemAllBond(p)}
-                              className="text-green-700 hover:text-green-900 p-2 hover:bg-green-50 border border-green-200"
-                              title={t('redeemAll')}
-                            >
-                              <CheckSquare className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => openBondEditModal(p)}
-                              className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 border border-blue-200"
-                              title={t('editShort')}
-                            >
-                              <Edit className="w-4 h-4" />
-                            </button>
-                            <button
-                              onClick={() => handleDeleteBondProduct(p)}
-                              className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 border border-red-200"
-                              title={t('delete')}
-                            >
-                              <Trash2 className="w-4 h-4" />
-                            </button>
-                          </>
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => handleEndBondIssue(p)} className="text-gray-700 hover:text-gray-900 p-2 hover:bg-gray-50 border border-gray-200" title={t('endIssue')}><Lock className="w-4 h-4" /></button>
+                            <button onClick={() => handleRedeemAllBond(p)} className="text-green-700 hover:text-green-900 p-2 hover:bg-green-50 border border-green-200" title={t('redeemAll')}><CheckSquare className="w-4 h-4" /></button>
+                            <button onClick={() => openBondEditModal(p)} className="text-blue-600 hover:text-blue-800 p-2 hover:bg-blue-50 border border-blue-200" title={t('editShort')}><Edit className="w-4 h-4" /></button>
+                            <button onClick={() => handleDeleteBondProduct(p)} className="text-red-600 hover:text-red-800 p-2 hover:bg-red-50 border border-red-200" title={t('delete')}><Trash2 className="w-4 h-4" /></button>
+                          </div>
                         )}
                       </div>
                     </div>
@@ -4861,6 +4877,158 @@ const App = () => {
               </div>
             )}
           </div>
+
+          {/* 我的持仓明细 */}
+          {(() => {
+            const myHoldings = approvedAll.filter(tx => tx.type === 'bond_subscribe' && tx.created_by === currentUser?.username);
+            return (
+              <div className="bg-white border border-amber-200 shadow-sm p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-semibold text-gray-800">{language === 'zh' ? '我的持仓明细' : 'My Holdings'}</div>
+                  <div className="text-xs text-gray-500">{language === 'zh' ? `共 ${myHoldings.length} 笔` : `${myHoldings.length} records`}</div>
+                </div>
+                {myHoldings.length === 0 ? (
+                  <div className="text-center text-gray-400 py-6 text-sm">{language === 'zh' ? '暂无持仓' : 'No holdings'}</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b border-amber-200">
+                          <th className="py-2 pr-4">{language === 'zh' ? '债券名称' : 'Bond'}</th>
+                          <th className="py-2 pr-4">{language === 'zh' ? '申购金额' : 'Amount'}</th>
+                          <th className="py-2 pr-4">{language === 'zh' ? '总利率' : 'Rate'}</th>
+                          <th className="py-2 pr-4">{language === 'zh' ? '申购时间' : 'Date'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {myHoldings.map(row => (
+                          <tr key={row.id} className="border-b border-gray-100 text-gray-700">
+                            <td className="py-2 pr-4 font-semibold text-amber-700">{row.client || '-'}</td>
+                            <td className="py-2 pr-4 font-bold">{formatMoney(row.principal)}</td>
+                            <td className="py-2 pr-4">{parseFloat(row.rate || 0).toFixed(2)}%</td>
+                            <td className="py-2 pr-4 whitespace-nowrap text-gray-500">{row.timestamp || row.created_at || '-'}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-amber-200">
+                          <td className="py-2 pr-4 font-bold text-gray-700">{language === 'zh' ? '合计' : 'Total'}</td>
+                          <td className="py-2 pr-4 font-bold text-amber-600">{formatMoney(myHoldings.reduce((s, r) => s + (parseFloat(r.principal) || 0), 0))}</td>
+                          <td colSpan={2}></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* 管理员：全员持仓总账单 */}
+          {isAdmin && (() => {
+            const allHoldings = approvedAll.filter(tx => tx.type === 'bond_subscribe').slice().sort((a, b) => new Date(b.timestamp || b.created_at || 0) - new Date(a.timestamp || a.created_at || 0));
+            return (
+              <div className="bg-white border border-amber-300 shadow-sm p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="font-semibold text-gray-800">{language === 'zh' ? '全员持仓总账单（管理员）' : 'All Holdings (Admin)'}</div>
+                  <div className="text-xs text-gray-500">{language === 'zh' ? `共 ${allHoldings.length} 笔` : `${allHoldings.length} records`}</div>
+                </div>
+                {allHoldings.length === 0 ? (
+                  <div className="text-center text-gray-400 py-6 text-sm">{language === 'zh' ? '暂无记录' : 'No records'}</div>
+                ) : (
+                  <div className="overflow-x-auto">
+                    <table className="min-w-full text-xs">
+                      <thead>
+                        <tr className="text-left text-gray-500 border-b border-amber-300">
+                          <th className="py-2 pr-4">{language === 'zh' ? '用户' : 'User'}</th>
+                          <th className="py-2 pr-4">{language === 'zh' ? '债券名称' : 'Bond'}</th>
+                          <th className="py-2 pr-4">{language === 'zh' ? '申购金额' : 'Amount'}</th>
+                          <th className="py-2 pr-4">{language === 'zh' ? '总利率' : 'Rate'}</th>
+                          <th className="py-2 pr-4">{language === 'zh' ? '申购时间' : 'Date'}</th>
+                          <th className="py-2 pr-4">{language === 'zh' ? '操作' : 'Actions'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {allHoldings.map(row => (
+                          editingHoldingId === row.id ? (
+                            <tr key={row.id} className="border-b border-amber-200 bg-amber-50">
+                              <td className="py-2 pr-2 font-semibold text-blue-700">{row.created_by || '-'}</td>
+                              <td className="py-2 pr-2">
+                                <input
+                                  className="border border-amber-300 rounded px-1.5 py-1 text-xs w-full outline-none focus:border-amber-500"
+                                  value={editHoldingData.client}
+                                  onChange={e => setEditHoldingData(p => ({ ...p, client: e.target.value }))}
+                                  placeholder={language === 'zh' ? '债券名称' : 'Bond name'}
+                                />
+                              </td>
+                              <td className="py-2 pr-2">
+                                <input
+                                  type="number"
+                                  className="border border-amber-300 rounded px-1.5 py-1 text-xs w-24 outline-none focus:border-amber-500"
+                                  value={editHoldingData.principal}
+                                  onChange={e => setEditHoldingData(p => ({ ...p, principal: e.target.value }))}
+                                  placeholder="0"
+                                />
+                              </td>
+                              <td className="py-2 pr-2">
+                                <input
+                                  type="number"
+                                  className="border border-amber-300 rounded px-1.5 py-1 text-xs w-16 outline-none focus:border-amber-500"
+                                  value={editHoldingData.rate}
+                                  onChange={e => setEditHoldingData(p => ({ ...p, rate: e.target.value }))}
+                                  placeholder="0"
+                                />
+                              </td>
+                              <td className="py-2 pr-2 whitespace-nowrap text-gray-500">{row.timestamp || row.created_at || '-'}</td>
+                              <td className="py-2 pr-2 whitespace-nowrap">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => handleUpdateHolding(row.id)}
+                                    className="bg-amber-500 hover:bg-amber-600 text-white text-[10px] font-bold px-2 py-1 rounded"
+                                  >{language === 'zh' ? '保存' : 'Save'}</button>
+                                  <button
+                                    onClick={() => setEditingHoldingId(null)}
+                                    className="bg-gray-200 hover:bg-gray-300 text-gray-700 text-[10px] font-bold px-2 py-1 rounded"
+                                  >{language === 'zh' ? '取消' : 'Cancel'}</button>
+                                </div>
+                              </td>
+                            </tr>
+                          ) : (
+                            <tr key={row.id} className="border-b border-gray-100 text-gray-700 hover:bg-amber-50">
+                              <td className="py-2 pr-4 font-semibold text-blue-700">{row.created_by || '-'}</td>
+                              <td className="py-2 pr-4 font-semibold text-amber-700">{row.client || '-'}</td>
+                              <td className="py-2 pr-4 font-bold">{formatMoney(row.principal)}</td>
+                              <td className="py-2 pr-4">{parseFloat(row.rate || 0).toFixed(2)}%</td>
+                              <td className="py-2 pr-4 whitespace-nowrap text-gray-500">{row.timestamp || row.created_at || '-'}</td>
+                              <td className="py-2 pr-4 whitespace-nowrap">
+                                <div className="flex items-center gap-1">
+                                  <button
+                                    onClick={() => { setEditingHoldingId(row.id); setEditHoldingData({ client: row.client || '', principal: row.principal || '', rate: row.rate || '' }); }}
+                                    className="bg-blue-100 hover:bg-blue-200 text-blue-700 text-[10px] font-bold px-2 py-1 rounded"
+                                  >{language === 'zh' ? '编辑' : 'Edit'}</button>
+                                  <button
+                                    onClick={() => handleDeleteHolding(row.id)}
+                                    className="bg-red-100 hover:bg-red-200 text-red-700 text-[10px] font-bold px-2 py-1 rounded"
+                                  >{language === 'zh' ? '删除' : 'Delete'}</button>
+                                </div>
+                              </td>
+                            </tr>
+                          )
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-amber-300">
+                          <td colSpan={2} className="py-2 pr-4 font-bold text-gray-700">{language === 'zh' ? '总计' : 'Total'}</td>
+                          <td className="py-2 pr-4 font-bold text-amber-600">{formatMoney(allHoldings.reduce((s, r) => s + (parseFloat(r.principal) || 0), 0))}</td>
+                          <td colSpan={3}></td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })()}
 
           <div className="bg-white border border-amber-200 shadow-sm p-4">
             <div className="flex items-center justify-between mb-4">
@@ -4938,7 +5106,7 @@ const App = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('ratePerWeek')}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{language === 'zh' ? '总利率(%)' : 'Total Rate (%)'}</label>
                       <input value={bondEditData.rate_per_week} onChange={e => setBondEditData({ ...bondEditData, rate_per_week: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                     </div>
                     <div>
@@ -4986,7 +5154,7 @@ const App = () => {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-sm font-semibold text-gray-700 mb-2">{t('ratePerWeek')}</label>
+                      <label className="block text-sm font-semibold text-gray-700 mb-2">{language === 'zh' ? '总利率(%)' : 'Total Rate (%)'}</label>
                       <input value={bondIssueData.rate_per_week} onChange={e => setBondIssueData({ ...bondIssueData, rate_per_week: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                     </div>
                     <div>
@@ -5017,7 +5185,7 @@ const App = () => {
                 <div className="text-sm text-gray-600 space-y-1">
                   <div>{t('category')}：{bondSubscribeTarget.category === 'long' ? t('longTerm') : t('shortTerm')}</div>
                   <div>{t('termLabel')}：{bondSubscribeTarget.term_days} {language === 'zh' ? '天' : 'days'}</div>
-                  <div>{t('rateLabelPerWeek')}：{parseFloat(bondSubscribeTarget.rate_per_week || 0).toFixed(3)}% {t('perWeek')}</div>
+                  <div>{t('rateLabelPerWeek')}：{parseFloat(bondSubscribeTarget.rate_per_week || 0).toFixed(2)}%</div>
                 </div>
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">{t('subscribeAmountM')}</label>
