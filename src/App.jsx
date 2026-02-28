@@ -1172,6 +1172,8 @@ const App = () => {
   const [newCardData, setNewCardData] = useState({ name: '', description: '', progress: 0 });
   const [editingCardId, setEditingCardId] = useState(null);
   const [editCardData, setEditCardData] = useState({ name: '', description: '', progress: 0 });
+  const [editingFlightId, setEditingFlightId] = useState(null);
+  const [editFlightData, setEditFlightData] = useState({ name: '', from: '', to: '', note: '', returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
   const [fundingCardId, setFundingCardId] = useState(null);
   const [fundAmount, setFundAmount] = useState('');
   
@@ -1259,7 +1261,7 @@ const App = () => {
         const returnNoteMatch = remark.match(/(?:^|\n)returnNote:\s*([\s\S]*?)(?=\nshipType:|$)/i);
         const shipTypeMatch = remark.match(/(?:^|\n)shipType:\s*(.*?)(?:\n|$)/i);
         const to = toMatch ? (toMatch[1] || '').trim() : (tx.rate != null ? String(tx.rate) : '');
-        const note = noteMatch ? (noteMatch[1] || '').trim() : remark;
+        const note = (noteMatch ? (noteMatch[1] || '').trim() : remark).replace(/\n?shipType:\s*\S*/gi, '').trim();
         const returnFrom = returnFromMatch ? (returnFromMatch[1] || '').trim() : '';
         const returnTo = returnToMatch ? (returnToMatch[1] || '').trim() : '';
         const returnNote = returnNoteMatch ? (returnNoteMatch[1] || '').trim() : '';
@@ -1761,6 +1763,31 @@ const App = () => {
         alert((language === 'zh' ? '删除失败' : 'Delete failed') + ': ' + (e?.message || e));
       }
     })();
+  };
+
+  const handleUpdateFlight = async (id) => {
+    const { name, from, to, note, returnFrom, returnTo, returnNote, shipType } = editFlightData;
+    if (!name.trim() || !from.trim() || !to.trim()) {
+      alert(language === 'zh' ? '名称、出发地、目的地不能为空' : 'Name, From, To are required');
+      return;
+    }
+    try {
+      let remark = `to:${to.trim()}\nnote:${note.trim()}`;
+      if (returnFrom.trim() && returnTo.trim()) {
+        remark += `\nreturnFrom:${returnFrom.trim()}\nreturnTo:${returnTo.trim()}\nreturnNote:${returnNote.trim()}`;
+      }
+      remark += `\nshipType:${shipType}`;
+      const { error } = await supabase.from('transactions').update({
+        client: name.trim(),
+        product_type: from.trim(),
+        remark,
+      }).eq('id', id);
+      if (error) throw error;
+      await refreshTransactions();
+      setEditingFlightId(null);
+    } catch (e) {
+      alert((language === 'zh' ? '更新失败' : 'Update failed') + ': ' + (e?.message || e));
+    }
   };
 
   const addLiuliProduct = async () => {
@@ -5568,39 +5595,74 @@ const App = () => {
                 {(liuliFlightsFiltered || []).length === 0 ? (
                   <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无航班记录' : 'No flights yet'}</div>
                 ) : (
-                  (liuliFlightsPaged || []).map((f, idx) => (
-                    <div
-                      key={f.id}
-                      className="bg-gradient-to-br from-white to-indigo-50 border-2 border-indigo-200 p-1.5 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start h-fit self-start"
-                    >
-                      <div className="flex-1">
-                        <div className="text-[11px] text-gray-600 mb-0.5 leading-tight">{f.name || '-'}</div>
-                        <div className="font-bold text-[12px] leading-tight">
-                          <span className="text-indigo-600">{f.from}</span>
-                          <span className="mx-2 text-gray-500">→</span>
-                          <span className="text-purple-600">{f.to}</span>
-                          <span className="ml-2 inline-flex items-center text-[10px] font-extrabold tracking-wider bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-2 py-0.5 rounded-full shadow-sm ring-1 ring-violet-200">{f.shipType || 'SCB'}</span>
+                  (liuliFlightsPaged || []).map((f, idx) => {
+                    const isEditingThis = editingFlightId === f.id;
+                    return isEditingThis ? (
+                      /* ── 编辑模式 ── */
+                      <div key={f.id} className="bg-indigo-50 border-2 border-indigo-400 p-2.5 shadow-md flex flex-col gap-1.5 col-span-1">
+                        <div className="text-[11px] font-bold text-indigo-700 mb-0.5">{language === 'zh' ? '编辑航班' : 'Edit Flight'}</div>
+                        <input className="w-full border border-indigo-300 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-indigo-400" placeholder={language === 'zh' ? '名称' : 'Name'} value={editFlightData.name} onChange={e => setEditFlightData(d => ({ ...d, name: e.target.value }))} />
+                        <div className="flex gap-1">
+                          <input className="flex-1 border border-indigo-300 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-indigo-400" placeholder={language === 'zh' ? '出发地' : 'From'} value={editFlightData.from} onChange={e => setEditFlightData(d => ({ ...d, from: e.target.value }))} />
+                          <input className="flex-1 border border-indigo-300 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-indigo-400" placeholder={language === 'zh' ? '目的地' : 'To'} value={editFlightData.to} onChange={e => setEditFlightData(d => ({ ...d, to: e.target.value }))} />
                         </div>
-                        {f.note ? <div className="text-[11px] text-gray-600 mt-1 whitespace-pre-wrap leading-snug">{f.note}</div> : null}
+                        <select className="w-full border border-indigo-300 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-indigo-400" value={editFlightData.shipType} onChange={e => setEditFlightData(d => ({ ...d, shipType: e.target.value }))}>
+                          <option value="SCB">SCB (500/500)</option>
+                          <option value="WCB">WCB (3000/1000)</option>
+                          <option value="LCB">LCB (2000/2000)</option>
+                          <option value="HCB">HCB (5000/5000)</option>
+                          <option value="VCB">VCB (1000/3000)</option>
+                        </select>
+                        <input className="w-full border border-indigo-300 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-indigo-400" placeholder={language === 'zh' ? '备注' : 'Note'} value={editFlightData.note} onChange={e => setEditFlightData(d => ({ ...d, note: e.target.value }))} />
+                        <div className="text-[10px] text-gray-500 font-medium">{language === 'zh' ? '回程（选填）' : 'Return (optional)'}</div>
+                        <div className="flex gap-1">
+                          <input className="flex-1 border border-purple-300 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-purple-400" placeholder={language === 'zh' ? '回程出发' : 'Ret.From'} value={editFlightData.returnFrom} onChange={e => setEditFlightData(d => ({ ...d, returnFrom: e.target.value }))} />
+                          <input className="flex-1 border border-purple-300 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-purple-400" placeholder={language === 'zh' ? '回程目的地' : 'Ret.To'} value={editFlightData.returnTo} onChange={e => setEditFlightData(d => ({ ...d, returnTo: e.target.value }))} />
+                        </div>
+                        <input className="w-full border border-purple-300 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-purple-400" placeholder={language === 'zh' ? '回程备注' : 'Ret.Note'} value={editFlightData.returnNote} onChange={e => setEditFlightData(d => ({ ...d, returnNote: e.target.value }))} />
+                        <div className="flex gap-1.5 mt-0.5">
+                          <button onClick={() => handleUpdateFlight(f.id)} className="flex-1 bg-indigo-600 hover:bg-indigo-700 text-white text-[11px] font-bold py-1 transition-colors">{language === 'zh' ? '保存' : 'Save'}</button>
+                          <button onClick={() => setEditingFlightId(null)} className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 text-[11px] font-bold py-1 transition-colors">{language === 'zh' ? '取消' : 'Cancel'}</button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* ── 显示模式 ── */
+                      <div key={f.id} className="bg-gradient-to-br from-white to-indigo-50 border-2 border-indigo-200 p-2.5 shadow-sm hover:shadow-md transition-shadow flex flex-col h-[120px] overflow-hidden">
+                        {/* 顶部：名称 + 按钮 */}
+                        <div className="flex justify-between items-center mb-1">
+                          <div className="font-extrabold text-[13px] text-indigo-800 leading-tight truncate flex-1 pr-1">{f.name || '-'}</div>
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isAdmin && (
+                              <button onClick={() => { setEditingFlightId(f.id); setEditFlightData({ name: f.name, from: f.from, to: f.to, note: f.note || '', returnFrom: f.returnFrom || '', returnTo: f.returnTo || '', returnNote: f.returnNote || '', shipType: f.shipType || 'SCB' }); }} className="text-[10px] text-indigo-500 hover:text-indigo-700">
+                                {language === 'zh' ? '编辑' : 'Edit'}
+                              </button>
+                            )}
+                            <button onClick={() => deleteLiuliFlight(f.id)} className="text-[10px] text-red-400 hover:text-red-600">
+                              {language === 'zh' ? '删除' : 'Del'}
+                            </button>
+                          </div>
+                        </div>
+                        {/* 航线 + 型号标签 */}
+                        <div className="flex items-center gap-1 mb-0.5 flex-wrap">
+                          <span className="font-bold text-[12px] text-indigo-600 truncate">{f.from}</span>
+                          <span className="text-gray-400 text-[11px]">→</span>
+                          <span className="font-bold text-[12px] text-purple-600 truncate">{f.to}</span>
+                          <span className="inline-flex items-center text-[9px] font-extrabold tracking-wider bg-gradient-to-r from-violet-600 to-fuchsia-600 text-white px-1.5 py-0.5 rounded-full shrink-0">{f.shipType || 'SCB'}</span>
+                        </div>
+                        {/* 备注 */}
+                        {f.note ? <div className="text-[10px] text-gray-500 line-clamp-1 leading-snug">{f.note}</div> : null}
+                        {/* 回程 */}
                         {(f.returnFrom && f.returnTo) ? (
-                          <div className="mt-1.5 border-t border-indigo-200 pt-1.5">
-                            <div className="font-bold text-[12px] leading-tight">
-                              <span className="text-indigo-600">{f.returnFrom}</span>
-                              <span className="mx-2 text-gray-500">→</span>
-                              <span className="text-purple-600">{f.returnTo}</span>
-                            </div>
-                            {f.returnNote ? <div className="text-[11px] text-gray-600 mt-1 whitespace-pre-wrap leading-snug">{f.returnNote}</div> : null}
+                          <div className="mt-1 border-t border-indigo-200 pt-1 flex items-center gap-1 flex-wrap">
+                            <span className="font-bold text-[11px] text-indigo-500 truncate">{f.returnFrom}</span>
+                            <span className="text-gray-400 text-[10px]">→</span>
+                            <span className="font-bold text-[11px] text-purple-500 truncate">{f.returnTo}</span>
+                            {f.returnNote ? <span className="text-[10px] text-gray-400 truncate w-full">{f.returnNote}</span> : null}
                           </div>
                         ) : null}
                       </div>
-                      <button
-                        onClick={() => deleteLiuliFlight(f.id)}
-                        className="text-[10px] text-red-600 hover:text-red-700 ml-2"
-                      >
-                        {language === 'zh' ? '删除' : 'Delete'}
-                      </button>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>
@@ -5652,26 +5714,26 @@ const App = () => {
                   (liuliProductsPaged || []).map((p, idx) => (
                     <div
                       key={p.id}
-                      className="bg-gradient-to-br from-white to-indigo-50 border-2 border-indigo-200 p-1.5 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start h-fit self-start"
+                      className="bg-gradient-to-br from-white to-indigo-50 border-2 border-indigo-200 p-1.5 shadow-sm hover:shadow-md transition-shadow flex justify-between items-start h-[90px] overflow-hidden"
                     >
-                      <div>
-                        <div className="font-bold text-gray-800 text-[11px] leading-tight">{p.name || '-'}</div>
-                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">{p.itemName || '-'}</div>
-                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
-                          {language === 'zh' ? '每天产量' : 'Per day'}: <span className="text-purple-600 font-semibold">{Math.round(Number(p.perDay) || 0)}</span>
+                      <div className="flex-1 overflow-hidden">
+                        <div className="font-bold text-gray-800 text-[11px] leading-tight truncate">{p.name || '-'}</div>
+                        <div className="text-[10px] text-gray-600 mt-0.5 leading-tight truncate">{p.itemName || '-'}</div>
+                        <div className="text-[10px] text-gray-600 mt-0.5 leading-tight">
+                          {language === 'zh' ? '每天' : '/day'}: <span className="text-purple-600 font-semibold">{Math.round(Number(p.perDay) || 0)}</span>
                         </div>
                         {p.pickup ? (
-                          <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
-                            {language === 'zh' ? '取货地' : 'Pickup'}: <span className="text-indigo-600 font-semibold">{p.pickup}</span>
+                          <div className="text-[10px] text-gray-600 mt-0.5 leading-tight truncate">
+                            {language === 'zh' ? '取货' : 'Pick'}: <span className="text-indigo-600 font-semibold">{p.pickup}</span>
                           </div>
                         ) : null}
-                        {p.note ? <div className="text-[11px] text-gray-600 mt-1 whitespace-pre-wrap leading-snug">{p.note}</div> : null}
+                        {p.note ? <div className="text-[10px] text-gray-500 mt-0.5 line-clamp-1 leading-snug">{p.note}</div> : null}
                       </div>
                       <button
                         onClick={() => deleteLiuliProduct(p.id)}
-                        className="text-[10px] text-red-600 hover:text-red-700"
+                        className="text-[10px] text-red-600 hover:text-red-700 shrink-0"
                       >
-                        {language === 'zh' ? '删除' : 'Delete'}
+                        {language === 'zh' ? '删' : 'Del'}
                       </button>
                     </div>
                   ))
@@ -5878,7 +5940,7 @@ const App = () => {
           </div>
 
           {/* 星星名片列表 */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
             {planetCards.length === 0 ? (
               <div className="col-span-full bg-white border border-blue-200 p-12 text-center">
                 <Activity className="w-16 h-16 mx-auto text-gray-300 mb-4" />
@@ -5894,43 +5956,43 @@ const App = () => {
                 const isFunding = fundingCardId === card.id;
 
                 return (
-                  <div key={card.id} className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 p-4 shadow-md hover:shadow-lg transition-shadow">
+                  <div key={card.id} className="bg-gradient-to-br from-blue-50 to-cyan-50 border-2 border-blue-200 p-3 shadow-md hover:shadow-lg transition-shadow">
                     {/* 名片标题 */}
-                    <div className="mb-3">
+                    <div className="mb-2">
                       {isEditing && isAdmin ? (
                         <input
                           type="text"
                           value={editCardData.name}
                           onChange={(e) => setEditCardData({ ...editCardData, name: e.target.value })}
-                          className="w-full text-lg font-bold border-2 border-blue-300 px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none"
+                          className="w-full text-sm font-bold border-2 border-blue-300 px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none"
                         />
                       ) : (
-                        <h3 className="text-lg font-bold text-blue-700">{card.client}</h3>
+                        <h3 className="text-sm font-bold text-blue-700">{card.client}</h3>
                       )}
                     </div>
 
                     {/* 描述 */}
-                    <div className="mb-3 min-h-[60px]">
+                    <div className="mb-2 min-h-[36px]">
                       {isEditing && (isAdmin || currentUser.role === 'global_admin') ? (
                         <textarea
                           value={editCardData.description}
                           onChange={(e) => setEditCardData({ ...editCardData, description: e.target.value })}
-                          className="w-full text-sm border-2 border-blue-300 px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none resize-none"
+                          className="w-full text-xs border-2 border-blue-300 px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none resize-none"
                           rows={2}
                         />
                       ) : (
-                        <p className="text-sm text-gray-700 line-clamp-3">{card.remark || '暂无描述'}</p>
+                        <p className="text-xs text-gray-700 line-clamp-2">{card.remark || '暂无描述'}</p>
                       )}
                     </div>
 
                     {/* 进度条 */}
-                    <div className="mb-3">
+                    <div className="mb-2">
                       <div className="flex justify-between items-center mb-1">
-                        <span className="text-xs font-medium text-gray-600">{t('devProgress')}</span>
-                        <span className="text-sm font-bold text-blue-500">{card.rate}%</span>
+                        <span className="text-[10px] font-medium text-gray-600">{t('devProgress')}</span>
+                        <span className="text-xs font-bold text-blue-500">{card.rate}%</span>
                       </div>
-                      <div className="w-full bg-gray-200 h-3">
-                        <div 
+                      <div className="w-full bg-gray-200 h-2">
+                        <div
                           className="bg-gradient-to-r from-green-300 via-emerald-400 to-green-300 h-full transition-all duration-500 animate-progress"
                           style={{ width: `${card.rate}%` }}
                         ></div>
@@ -5942,41 +6004,41 @@ const App = () => {
                           max="100"
                           value={editCardData.progress}
                           onChange={(e) => setEditCardData({ ...editCardData, progress: parseInt(e.target.value) || 0 })}
-                          className="w-full mt-2 text-sm border-2 border-blue-300 px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none"
+                          className="w-full mt-1 text-xs border-2 border-blue-300 px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none"
                         />
                       )}
                     </div>
 
                     {/* 资金显示 */}
-                    <div className="bg-white border border-green-200 p-3 mb-3">
-                      <p className="text-xs text-gray-600 mb-1">{t('cardFund')}</p>
-                      <p className="text-xl font-bold text-green-600">{formatMoney(cardFund)}</p>
+                    <div className="bg-white border border-green-200 p-2 mb-2">
+                      <p className="text-[10px] text-gray-600 mb-0.5">{t('cardFund')}</p>
+                      <p className="text-sm font-bold text-green-600">{formatMoney(cardFund)}</p>
                     </div>
 
                     {/* 资产价值显示 */}
                     {cardAssetValue > 0 && (
-                      <div className="bg-white border border-purple-200 p-3 mb-3">
-                        <p className="text-xs text-gray-600 mb-1">{t('totalAssetValue')}</p>
-                        <p className="text-xl font-bold text-purple-600">{formatMoney(cardAssetValue)}</p>
+                      <div className="bg-white border border-purple-200 p-2 mb-2">
+                        <p className="text-[10px] text-gray-600 mb-0.5">{t('totalAssetValue')}</p>
+                        <p className="text-sm font-bold text-purple-600">{formatMoney(cardAssetValue)}</p>
                       </div>
                     )}
 
                     {/* 注资名单 */}
-                    <div className="bg-gray-50 border border-gray-200 p-3 mb-3 max-h-40 overflow-y-auto">
-                      <p className="text-xs font-medium text-gray-700 mb-2">{t('fundingList')}</p>
+                    <div className="bg-gray-50 border border-gray-200 p-2 mb-2 max-h-28 overflow-y-auto">
+                      <p className="text-[10px] font-medium text-gray-700 mb-1">{t('fundingList')}</p>
                       {(() => {
                         const fundingList = getCardFundingList(card.client);
                         return fundingList.length > 0 ? (
-                          <div className="space-y-1">
+                          <div className="space-y-0.5">
                             {fundingList.map((fund, idx) => (
-                              <div key={idx} className="flex justify-between items-center text-xs bg-white px-2 py-1 border border-gray-100">
+                              <div key={idx} className="flex justify-between items-center text-[10px] bg-white px-1.5 py-0.5 border border-gray-100">
                                 <span className="text-gray-700 font-medium">{fund.created_by || '匿名'}</span>
                                 <span className="text-green-600 font-bold">{formatMoney(fund.principal)}</span>
                               </div>
                             ))}
                           </div>
                         ) : (
-                          <p className="text-xs text-gray-400 text-center py-2">{t('noFundingYet')}</p>
+                          <p className="text-[10px] text-gray-400 text-center py-1">{t('noFundingYet')}</p>
                         );
                       })()}
                     </div>
@@ -7642,13 +7704,13 @@ const App = () => {
                 <div className="mb-4 p-3 border border-purple-200 bg-purple-50 space-y-2">
                   <input
                     type="text"
-                    placeholder={language === 'zh' ? '职位 / 角色名称 *' : 'Position / Role *'}
+                    placeholder={language === 'zh' ? '董事名 *' : 'Director Name *'}
                     value={recruitmentForm.title}
                     onChange={e => setRecruitmentForm(f => ({ ...f, title: e.target.value }))}
                     className="w-full border border-purple-200 px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-300 outline-none"
                   />
                   <textarea
-                    placeholder={language === 'zh' ? '职位描述 / 要求' : 'Description / Requirements'}
+                    placeholder={language === 'zh' ? '项目招聘描述' : 'Project Recruitment Description'}
                     value={recruitmentForm.description}
                     onChange={e => setRecruitmentForm(f => ({ ...f, description: e.target.value }))}
                     rows={3}
@@ -7656,7 +7718,7 @@ const App = () => {
                   />
                   <input
                     type="text"
-                    placeholder={language === 'zh' ? '联系方式' : 'Contact Info'}
+                    placeholder={language === 'zh' ? 'QQ' : 'QQ'}
                     value={recruitmentForm.contact}
                     onChange={e => setRecruitmentForm(f => ({ ...f, contact: e.target.value }))}
                     className="w-full border border-purple-200 px-3 py-1.5 text-sm focus:ring-2 focus:ring-purple-300 outline-none"
