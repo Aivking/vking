@@ -1184,6 +1184,7 @@ const App = () => {
   const [editHoldingData, setEditHoldingData] = useState({ client: '', principal: '', rate: '' });
   const [editingRedeemId, setEditingRedeemId] = useState(null);
   const [editRedeemData, setEditRedeemData] = useState({ client: '', principal: '', rate: '' });
+  const [selectedRedeemIds, setSelectedRedeemIds] = useState(new Set());
   const [fundingCardId, setFundingCardId] = useState(null);
   const [fundAmount, setFundAmount] = useState('');
   const [fundSource, setFundSource] = useState('personal'); // 'personal' | 'bank'
@@ -1223,6 +1224,7 @@ const App = () => {
   const [bondSubscribeModal, setBondSubscribeModal] = useState(false);
   const [bondSubscribeTarget, setBondSubscribeTarget] = useState(null);
   const [bondSubscribeAmount, setBondSubscribeAmount] = useState('');
+  const [bondSubscribeNote, setBondSubscribeNote] = useState('');
 
   const [bondEditModal, setBondEditModal] = useState(false);
   const [bondEditTarget, setBondEditTarget] = useState(null);
@@ -1846,6 +1848,21 @@ const App = () => {
     }
   };
 
+  const handleBatchDeleteRedeem = async () => {
+    if (selectedRedeemIds.size === 0) return;
+    if (!window.confirm(language === 'zh' ? `确定删除选中的 ${selectedRedeemIds.size} 条赎回记录？` : `Delete ${selectedRedeemIds.size} selected records?`)) return;
+    try {
+      for (const id of selectedRedeemIds) {
+        const { error } = await supabase.from('transactions').delete().eq('id', id);
+        if (error) throw error;
+      }
+      setSelectedRedeemIds(new Set());
+      await refreshTransactions();
+    } catch (e) {
+      alert((language === 'zh' ? '批量删除失败：' : 'Batch delete failed: ') + (e?.message || e));
+    }
+  };
+
   const handleUpdateFlight = async (id) => {
     const { name, from, to, note, returnFrom, returnTo, returnNote, shipType } = editFlightData;
     if (!name.trim() || !from.trim() || !to.trim()) {
@@ -2353,11 +2370,13 @@ const App = () => {
       remark: String(t('bondSubscribeRemark'))
         .replace('{id}', bondSubscribeTarget.tx_id)
         .replace('{days}', bondSubscribeTarget.term_days)
+        + (bondSubscribeNote.trim() ? ` 备注：${bondSubscribeNote.trim()}` : '')
     });
 
     setBondSubscribeModal(false);
     setBondSubscribeTarget(null);
     setBondSubscribeAmount('');
+    setBondSubscribeNote('');
   };
 
   const submitFundUserRequest = async () => {
@@ -5104,7 +5123,17 @@ const App = () => {
                 <div className="bg-white border border-green-200 shadow-sm p-4">
                   <div className="flex items-center justify-between mb-3">
                     <div className="font-semibold text-gray-800">{language === 'zh' ? (isAdmin ? '全员赎回账单（管理员）' : '我的赎回账单') : (isAdmin ? 'All Redeem Bills (Admin)' : 'My Redeem Bills')}</div>
-                    <div className="text-xs text-gray-500">{language === 'zh' ? `共 ${allRedeems.length} 笔` : `${allRedeems.length} records`}</div>
+                    <div className="flex items-center gap-2">
+                      {isAdmin && selectedRedeemIds.size > 0 && (
+                        <button
+                          onClick={handleBatchDeleteRedeem}
+                          className="bg-red-500 hover:bg-red-600 text-white text-xs font-bold px-3 py-1 rounded"
+                        >
+                          {language === 'zh' ? `删除选中 (${selectedRedeemIds.size})` : `Delete (${selectedRedeemIds.size})`}
+                        </button>
+                      )}
+                      <div className="text-xs text-gray-500">{language === 'zh' ? `共 ${allRedeems.length} 笔` : `${allRedeems.length} records`}</div>
+                    </div>
                   </div>
                   {allRedeems.length === 0 ? (
                     <div className="text-center text-gray-400 py-6 text-sm">{language === 'zh' ? '暂无赎回记录' : 'No redeem records'}</div>
@@ -5113,6 +5142,19 @@ const App = () => {
                       <table className="min-w-full text-xs">
                         <thead>
                           <tr className="text-left text-gray-500 border-b border-green-200">
+                            {isAdmin && (
+                              <th className="py-2 pr-2 w-6">
+                                <input
+                                  type="checkbox"
+                                  checked={allRedeems.length > 0 && allRedeems.every(r => selectedRedeemIds.has(r.id))}
+                                  onChange={e => {
+                                    if (e.target.checked) setSelectedRedeemIds(new Set(allRedeems.map(r => r.id)));
+                                    else setSelectedRedeemIds(new Set());
+                                  }}
+                                  className="cursor-pointer"
+                                />
+                              </th>
+                            )}
                             {isAdmin && <th className="py-2 pr-3">{language === 'zh' ? '用户' : 'User'}</th>}
                             <th className="py-2 pr-3">{language === 'zh' ? '债券' : 'Bond'}</th>
                             <th className="py-2 pr-3">{language === 'zh' ? '本金' : 'Principal'}</th>
@@ -5127,8 +5169,10 @@ const App = () => {
                             const p = parseFloat(row.principal) || 0;
                             const interest = p * (parseFloat(row.rate) || 0) / 100;
                             const total = p + interest;
+                            const isSelected = selectedRedeemIds.has(row.id);
                             return editingRedeemId === row.id ? (
                               <tr key={row.id} className="border-b border-green-100 bg-green-50">
+                                {isAdmin && <td className="py-2 pr-2"><input type="checkbox" checked={isSelected} onChange={() => {}} className="cursor-pointer opacity-50" disabled /></td>}
                                 {isAdmin && <td className="py-2 pr-2 text-blue-700 font-semibold">{row.created_by || '-'}</td>}
                                 <td className="py-2 pr-2">
                                   <input className="border border-green-300 rounded px-1.5 py-1 text-xs w-full outline-none" value={editRedeemData.client} onChange={e => setEditRedeemData(d => ({ ...d, client: e.target.value }))} />
@@ -5151,7 +5195,24 @@ const App = () => {
                                 )}
                               </tr>
                             ) : (
-                              <tr key={row.id} className="border-b border-gray-100 text-gray-700 hover:bg-green-50">
+                              <tr key={row.id} className={`border-b border-gray-100 text-gray-700 hover:bg-green-50 ${isSelected ? 'bg-red-50' : ''}`}>
+                                {isAdmin && (
+                                  <td className="py-2 pr-2">
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={() => {
+                                        setSelectedRedeemIds(prev => {
+                                          const next = new Set(prev);
+                                          if (next.has(row.id)) next.delete(row.id);
+                                          else next.add(row.id);
+                                          return next;
+                                        });
+                                      }}
+                                      className="cursor-pointer"
+                                    />
+                                  </td>
+                                )}
                                 {isAdmin && <td className="py-2 pr-3 font-semibold text-blue-700">{row.created_by || '-'}</td>}
                                 <td className="py-2 pr-3 font-semibold text-amber-700">{row.client || '-'}</td>
                                 <td className="py-2 pr-3 font-bold">{formatMoney(p)}</td>
@@ -5172,7 +5233,7 @@ const App = () => {
                         </tbody>
                         <tfoot>
                           <tr className="border-t-2 border-green-200">
-                            <td colSpan={isAdmin ? 2 : 1} className="py-2 pr-3 font-bold text-gray-700">{language === 'zh' ? '合计' : 'Total'}</td>
+                            <td colSpan={isAdmin ? 3 : 1} className="py-2 pr-3 font-bold text-gray-700">{language === 'zh' ? '合计' : 'Total'}</td>
                             <td className="py-2 pr-3 font-bold text-amber-600">{formatMoney(allRedeems.reduce((s, r) => s + (parseFloat(r.principal) || 0), 0))}</td>
                             <td className="py-2 pr-3 font-bold text-green-600">+{formatMoney(allRedeems.reduce((s, r) => s + (parseFloat(r.principal) || 0) * (parseFloat(r.rate) || 0) / 100, 0))}</td>
                             <td className="py-2 pr-3 font-bold text-emerald-700">{formatMoney(allRedeems.reduce((s, r) => { const p = parseFloat(r.principal) || 0; return s + p + p * (parseFloat(r.rate) || 0) / 100; }, 0))}</td>
@@ -5293,7 +5354,7 @@ const App = () => {
             );
           })()}
 
-          <div className="bg-white border border-amber-200 shadow-sm p-4">
+          {isAdmin && <div className="bg-white border border-amber-200 shadow-sm p-4">
             <div className="flex items-center justify-between mb-4">
               <div className="font-semibold text-gray-800">{t('bondBillsPublic')}</div>
               <div className="text-xs text-gray-500">{String(t('billCount')).replace('{count}', bondBills.length)}</div>
@@ -5328,7 +5389,7 @@ const App = () => {
                 </table>
               </div>
             )}
-          </div>
+          </div>}
 
           {bondEditModal && isAdmin && bondEditTarget && (
             <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
@@ -5461,7 +5522,7 @@ const App = () => {
                     <h3 className="font-bold text-xl text-gray-900">{t('subscribeBondTitle')}</h3>
                     <p className="text-sm text-gray-500 mt-1">{bondSubscribeTarget.name}</p>
                   </div>
-                  <button onClick={() => setBondSubscribeModal(false)} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
+                  <button onClick={() => { setBondSubscribeModal(false); setBondSubscribeNote(''); }} className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100">
                     <X className="w-6 h-6" />
                   </button>
                 </div>
@@ -5474,6 +5535,17 @@ const App = () => {
                   <label className="block text-sm font-semibold text-gray-700 mb-2">{t('subscribeAmountM')}</label>
                   <input value={bondSubscribeAmount} onChange={e => setBondSubscribeAmount(e.target.value)} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                   <p className="text-xs text-gray-500 mt-2">{t('requiresApproval')}</p>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">{language === 'zh' ? '备注说明（选填）' : 'Note (optional)'}</label>
+                  <textarea
+                    value={bondSubscribeNote}
+                    onChange={e => setBondSubscribeNote(e.target.value)}
+                    rows={3}
+                    placeholder={language === 'zh' ? '可填写申购说明...' : 'Optional note...'}
+                    className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none resize-none text-sm"
+                  />
+                  <p className="text-xs text-amber-600 mt-1 font-medium">{language === 'zh' ? '请同时将购买合同发送给 EUU' : 'Please also send the purchase contract to EUU'}</p>
                 </div>
                 <button onClick={submitBondSubscribe} className="w-full bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold py-3 transition-all">
                   {t('submitSubscribe')}
