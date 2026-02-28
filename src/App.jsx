@@ -74,6 +74,7 @@ const typeLabels = {
   'loan_interest': '贷款利息',
   'loan_repayment': '还款',
   'planet_fund': '星星基金',
+  'bank_planet_fund': '划拨银行注星',
   'planet_card': '星星名片',
   'bank_asset': '风投项目',
   'bond_issue': '债券发售',
@@ -823,6 +824,7 @@ const translations = {
       'interest_income': 'Interest Income',
       'interest_expense': 'Interest Expense',
       'planet_fund': 'Star Fund',
+      'bank_planet_fund': 'Bank→Star Transfer',
       'planet_card': 'Star Card',
       'bank_asset': 'VC Project',
       'bond_issue': 'Bond Issue',
@@ -1178,6 +1180,7 @@ const App = () => {
   const [editHoldingData, setEditHoldingData] = useState({ client: '', principal: '', rate: '' });
   const [fundingCardId, setFundingCardId] = useState(null);
   const [fundAmount, setFundAmount] = useState('');
+  const [fundSource, setFundSource] = useState('personal'); // 'personal' | 'bank'
   
   // 银行资产 State
   const [bankAssets, setBankAssets] = useState([]);
@@ -3322,19 +3325,29 @@ const App = () => {
       return;
     }
 
+    const isBankTransfer = isAdmin && fundSource === 'bank';
+
+    if (isBankTransfer) {
+      const available = calculateIdleCash();
+      if (amount > available) {
+        alert(language === 'zh' ? `银行可用余额不足，当前余额：${formatMoney(available)}` : `Insufficient bank balance: ${formatMoney(available)}`);
+        return;
+      }
+    }
+
     try {
       const card = planetCards.find(c => c.id === cardId);
-      
+
       const fundRecord = {
-        type: 'planet_fund',
-        client: card.client, // 星星名称
+        type: isBankTransfer ? 'bank_planet_fund' : 'planet_fund',
+        client: card.client,
         principal: amount,
         rate: 0,
         timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
         created_by: currentUser.username,
         creator_id: currentUser.id || currentUser.username,
-        status: 'pending',
-        remark: `为 ${card.client} 注入资金`
+        status: isBankTransfer ? 'approved' : 'pending',
+        remark: isBankTransfer ? `银行划拨资金注入 ${card.client}` : `为 ${card.client} 注入资金`
       };
 
       const { error } = await supabase
@@ -3343,9 +3356,14 @@ const App = () => {
 
       if (error) throw error;
 
-      alert(t('starCardSubmitted'));
+      await refreshTransactions();
+      alert(isBankTransfer
+        ? (language === 'zh' ? `已成功划拨 ${formatMoney(amount)} 注入 ${card.client}` : `Successfully transferred ${formatMoney(amount)} to ${card.client}`)
+        : t('starCardSubmitted')
+      );
       setFundAmount('');
       setFundingCardId(null);
+      setFundSource('personal');
     } catch (e) {
       alert(t('submitFailed') + ': ' + e.message);
     }
@@ -3354,14 +3372,14 @@ const App = () => {
   // 计算每个星星的资金总额
   const getCardFund = (cardName) => {
     return transactions
-      .filter(tx => tx.type === 'planet_fund' && tx.client === cardName && tx.status === 'approved')
+      .filter(tx => ['planet_fund', 'bank_planet_fund'].includes(tx.type) && tx.client === cardName && tx.status === 'approved')
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
   };
 
   // 获取注资记录列表
   const getCardFundingList = (cardName) => {
     return transactions
-      .filter(tx => tx.type === 'planet_fund' && tx.client === cardName && tx.status === 'approved')
+      .filter(tx => ['planet_fund', 'bank_planet_fund'].includes(tx.type) && tx.client === cardName && tx.status === 'approved')
       .sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
   };
 
@@ -4386,6 +4404,16 @@ const App = () => {
       .filter(tx => tx.type === 'bank_fund')
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
 
+    // 划拨银行注星：从银行余额中扣除
+    const bankPlanetFundTotal = approved
+      .filter(tx => tx.type === 'bank_planet_fund')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
+    // 债券申购：计入银行总余额（已批准的认购资金归银行管理）
+    const bondSubscribeTotal = approved
+      .filter(tx => tx.type === 'bond_subscribe')
+      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
+
     // 已结算利息净额：每周结算后会进入闲置资金（负数则扣减）
     const settledInterestNet = approved.reduce((sum, tx) => {
       if (tx.type === 'interest_income') return sum + (parseFloat(tx.principal) || 0);
@@ -4393,7 +4421,7 @@ const App = () => {
       return sum;
     }, 0);
 
-    const idleCash = injections.p - loans.p - bankFundNetTransfer + settledInterestNet;
+    const idleCash = injections.p + bondSubscribeTotal - loans.p - bankFundNetTransfer - bankPlanetFundTotal + settledInterestNet;
     
     console.log('银行闲置资金计算（当前状态）:', {
       总负债: injections.p,
@@ -6205,9 +6233,12 @@ const App = () => {
                         return fundingList.length > 0 ? (
                           <div className="space-y-0.5">
                             {fundingList.map((fund, idx) => (
-                              <div key={idx} className="flex justify-between items-center text-[10px] bg-white px-1.5 py-0.5 border border-gray-100">
-                                <span className="text-gray-700 font-medium">{fund.created_by || '匿名'}</span>
-                                <span className="text-green-600 font-bold">{formatMoney(fund.principal)}</span>
+                              <div key={idx} className={`flex justify-between items-center text-[10px] px-1.5 py-0.5 border ${fund.type === 'bank_planet_fund' ? 'bg-blue-50 border-blue-100' : 'bg-white border-gray-100'}`}>
+                                <span className="text-gray-700 font-medium">
+                                  {fund.created_by || '匿名'}
+                                  {fund.type === 'bank_planet_fund' && <span className="ml-1 text-blue-500 text-[9px]">[银行]</span>}
+                                </span>
+                                <span className={`font-bold ${fund.type === 'bank_planet_fund' ? 'text-blue-600' : 'text-green-600'}`}>{formatMoney(fund.principal)}</span>
                               </div>
                             ))}
                           </div>
@@ -6220,24 +6251,44 @@ const App = () => {
                     {/* 注资功能 */}
                     {isFunding ? (
                       <div className="space-y-2">
+                        {/* 管理员资金来源选择 */}
+                        {isAdmin && (
+                          <div className="flex gap-1 border border-green-200 rounded overflow-hidden text-[11px] font-semibold">
+                            <button
+                              onClick={() => setFundSource('personal')}
+                              className={`flex-1 py-1.5 transition-colors ${fundSource === 'personal' ? 'bg-green-600 text-white' : 'bg-green-50 text-green-700 hover:bg-green-100'}`}
+                            >{language === 'zh' ? '个人注资' : 'Personal'}</button>
+                            <button
+                              onClick={() => setFundSource('bank')}
+                              className={`flex-1 py-1.5 transition-colors ${fundSource === 'bank' ? 'bg-blue-600 text-white' : 'bg-blue-50 text-blue-700 hover:bg-blue-100'}`}
+                            >{language === 'zh' ? '划拨银行资金' : 'Bank Transfer'}</button>
+                          </div>
+                        )}
+                        {/* 划拨模式显示可用银行余额 */}
+                        {isAdmin && fundSource === 'bank' && (
+                          <div className="flex items-center justify-between bg-blue-50 border border-blue-200 px-2 py-1 rounded text-[11px]">
+                            <span className="text-blue-700">{language === 'zh' ? '银行可用余额' : 'Bank Available'}</span>
+                            <span className="text-blue-800 font-bold">{formatMoney(calculateIdleCash())}</span>
+                          </div>
+                        )}
                         <input
                           type="number"
                           min="0"
                           step="0.01"
                           value={fundAmount}
                           onChange={(e) => setFundAmount(e.target.value)}
-                          className="w-full border-2 border-green-300 px-3 py-2 text-sm focus:ring-2 focus:ring-green-500 outline-none"
+                          className={`w-full border-2 px-3 py-2 text-sm outline-none focus:ring-2 ${isAdmin && fundSource === 'bank' ? 'border-blue-300 focus:ring-blue-500' : 'border-green-300 focus:ring-green-500'}`}
                           placeholder={t('amountInputPlaceholder')}
                         />
                         <div className="flex gap-2">
                           <button
                             onClick={() => handlePlanetFundRequest(card.id)}
-                            className="flex-1 bg-green-600 hover:bg-green-700 text-white px-3 py-2 text-sm font-bold transition-colors"
+                            className={`flex-1 text-white px-3 py-2 text-sm font-bold transition-colors ${isAdmin && fundSource === 'bank' ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'}`}
                           >
-                            {t('submit')}
+                            {isAdmin && fundSource === 'bank' ? (language === 'zh' ? '确认划拨' : 'Transfer') : t('submit')}
                           </button>
                           <button
-                            onClick={() => { setFundingCardId(null); setFundAmount(''); }}
+                            onClick={() => { setFundingCardId(null); setFundAmount(''); setFundSource('personal'); }}
                             className="flex-1 bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 text-sm font-bold transition-colors"
                           >
                             {t('cancel')}
