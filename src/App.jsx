@@ -4197,8 +4197,8 @@ const App = () => {
     const bondUsed = approved
       .filter(tx => tx.type === 'bond_subscribe' && tx.created_by === currentUser?.username)
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-    const depositBalance = personalDeposits.total - bondUsed;
-    
+    const depositBalance = Math.max(0, personalDeposits.total - bondUsed);
+
     // 计算个人总余额（注资+存款+已结算利息）
     const personalTotalBalance = injectionBalance + depositBalance;
 
@@ -4260,7 +4260,7 @@ const App = () => {
     const bondUsed = transactions
       .filter(tx => tx.status === 'approved' && tx.type === 'bond_subscribe' && tx.created_by === currentUser.username)
       .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-    const depositBalance = personalDeposits.total - bondUsed;
+    const depositBalance = Math.max(0, personalDeposits.total - bondUsed);
 
     return injectionBalance + depositBalance;
   };
