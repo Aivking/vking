@@ -1208,7 +1208,8 @@ const App = () => {
     category: 'short', // short | long
     term_days: '30',
     rate_per_week: '2.0',
-    total_supply: '1000'
+    total_supply: '1000',
+    description: ''
   });
   const [bondSubscribeModal, setBondSubscribeModal] = useState(false);
   const [bondSubscribeTarget, setBondSubscribeTarget] = useState(null);
@@ -1221,7 +1222,8 @@ const App = () => {
     category: 'short',
     term_days: '30',
     rate_per_week: '2.0',
-    total_supply: '1000'
+    total_supply: '1000',
+    description: ''
   });
   
   // 基金交易记录编辑 State
@@ -1974,7 +1976,8 @@ const App = () => {
       category: bond?.category || 'short',
       term_days: String(bond?.term_days ?? '30'),
       rate_per_week: String(bond?.rate_per_week ?? '2.0'),
-      total_supply: String(bond?.total_supply ?? '1000')
+      total_supply: String(bond?.total_supply ?? '1000'),
+      description: bond?.description || ''
     });
     setBondEditModal(true);
   };
@@ -2007,7 +2010,9 @@ const App = () => {
           principal: totalSupply,
           rate: ratePerWeek,
           product_type: bondEditData.category === 'long' ? 'bond_long' : 'bond_short',
-          remark: String(t('bondTermRemark')).replace('{days}', termDays),
+          remark: bondEditData.description.trim()
+            ? `${bondEditData.description.trim()}|||${String(t('bondTermRemark')).replace('{days}', termDays)}`
+            : String(t('bondTermRemark')).replace('{days}', termDays),
           last_edited_by: currentUser.username,
           last_edited_at: new Date().toLocaleString('zh-CN', { hour12: false })
         })
@@ -2181,9 +2186,12 @@ const App = () => {
       const approvedIssues = (transactions || [])
         .filter(tx => tx.status === 'approved' && tx.type === 'bond_issue')
         .map(tx => {
+          const remark = String(tx.remark || '');
+          const hasSep = remark.includes('|||');
+          const description = hasSep ? remark.split('|||')[0].trim() : '';
+          const termRemark = hasSep ? remark.split('|||')[1] : remark;
           const termDays = (() => {
-            if (!tx.remark) return 0;
-            const m = String(tx.remark).match(/期限[:：]\s*(\d+)\s*天/);
+            const m = termRemark.match(/期限[:：]\s*(\d+)\s*天/);
             return m ? (parseInt(m[1], 10) || 0) : 0;
           })();
 
@@ -2195,6 +2203,7 @@ const App = () => {
             term_days: termDays,
             rate_per_week: parseFloat(tx.rate) || 0,
             total_supply: parseFloat(tx.principal) || 0,
+            description,
             created_at: tx.created_at || '',
             created_by: tx.created_by || ''
           };
@@ -2240,12 +2249,14 @@ const App = () => {
       principal: totalSupply,
       rate: ratePerWeek,
       product_type: bondIssueData.category === 'long' ? 'bond_long' : 'bond_short',
-      remark: String(t('bondTermRemark')).replace('{days}', termDays)
+      remark: bondIssueData.description.trim()
+        ? `${bondIssueData.description.trim()}|||${String(t('bondTermRemark')).replace('{days}', termDays)}`
+        : String(t('bondTermRemark')).replace('{days}', termDays)
     });
 
     await refreshTransactions();
     setBondIssueModal(false);
-    setBondIssueData({ name: '', category: 'short', term_days: '30', rate_per_week: '2.0', total_supply: '1000' });
+    setBondIssueData({ name: '', category: 'short', term_days: '30', rate_per_week: '2.0', total_supply: '1000', description: '' });
   };
 
   const submitBondSubscribe = async () => {
@@ -4880,6 +4891,9 @@ const App = () => {
                           {p.category === 'long' ? t('longTerm') : t('shortTerm')}
                         </div>
                       </div>
+                      {p.description && (
+                        <div className="mt-2 text-xs text-gray-500 leading-relaxed border-l-2 border-amber-300 pl-2">{p.description}</div>
+                      )}
                       <div className="mt-2 text-sm text-gray-600">{t('termLabel')}：{p.term_days} {language === 'zh' ? '天' : 'days'}</div>
                       <div className="mt-1 text-sm text-gray-600">{t('rateLabelPerWeek')}：{parseFloat(p.rate_per_week || 0).toFixed(2)}%</div>
                       <div className="mt-1 text-xs text-gray-500">{t('issueLabel')}：{formatMoney(p.total_supply)}，{t('soldLabel')}：{formatMoney(sold)}，{t('remainingLabel')}：{formatMoney(remaining)}</div>
@@ -5119,6 +5133,16 @@ const App = () => {
                     <label className="block text-sm font-semibold text-gray-700 mb-2">{t('bondName')}</label>
                     <input value={bondEditData.name} onChange={e => setBondEditData({ ...bondEditData, name: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
                   </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{language === 'zh' ? '债券描述（选填）' : 'Description (optional)'}</label>
+                    <textarea
+                      rows={2}
+                      value={bondEditData.description}
+                      onChange={e => setBondEditData({ ...bondEditData, description: e.target.value })}
+                      className="w-full border-2 border-amber-200 px-3 py-2 outline-none resize-none text-sm"
+                      placeholder={language === 'zh' ? '简要描述债券用途、风险等信息…' : 'Brief description of the bond…'}
+                    />
+                  </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="block text-sm font-semibold text-gray-700 mb-2">{t('category')}</label>
@@ -5166,6 +5190,16 @@ const App = () => {
                   <div>
                     <label className="block text-sm font-semibold text-gray-700 mb-2">{t('bondName')}</label>
                     <input value={bondIssueData.name} onChange={e => setBondIssueData({ ...bondIssueData, name: e.target.value })} className="w-full border-2 border-amber-200 px-3 py-2.5 outline-none" />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-semibold text-gray-700 mb-2">{language === 'zh' ? '债券描述（选填）' : 'Description (optional)'}</label>
+                    <textarea
+                      rows={2}
+                      value={bondIssueData.description}
+                      onChange={e => setBondIssueData({ ...bondIssueData, description: e.target.value })}
+                      className="w-full border-2 border-amber-200 px-3 py-2 outline-none resize-none text-sm"
+                      placeholder={language === 'zh' ? '简要描述债券用途、风险等信息…' : 'Brief description of the bond…'}
+                    />
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
