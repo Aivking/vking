@@ -8284,16 +8284,28 @@ const App = () => {
                             <p className="text-xs text-gray-500 mt-2 bg-blue-50 p-2">{t('fixedRateHint')}</p>
                           </div>
                         )}
-                        {!['injection', 'withdrawal', 'withdraw_dep', 'withdraw_inj'].includes(modalType) && (
+                        {modalType === 'deposit' && (
                           <div>
                             <label className="block text-sm font-semibold text-gray-700 mb-2">{t('rateLabel')}</label>
-                            <input 
-                                type="number" 
-                                step="0.1" 
-                                required 
-                                value={formData.rate} 
-                                onChange={e => setFormData({...formData, rate: e.target.value})} 
-                                className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all hover:border-green-300" 
+                            <input
+                                type="number"
+                                disabled
+                                value={formData.rate}
+                                className="w-full border-2 border-green-200 px-3 py-2.5 outline-none bg-gray-100 cursor-not-allowed text-gray-500"
+                            />
+                            <p className="text-xs text-gray-500 mt-2 bg-blue-50 p-2">{language === 'zh' ? '利率由产品类型决定，不可手动修改' : 'Rate is determined by product type and cannot be changed manually'}</p>
+                          </div>
+                        )}
+                        {!['injection', 'withdrawal', 'withdraw_dep', 'withdraw_inj', 'deposit'].includes(modalType) && (
+                          <div>
+                            <label className="block text-sm font-semibold text-gray-700 mb-2">{t('rateLabel')}</label>
+                            <input
+                                type="number"
+                                step="0.1"
+                                required
+                                value={formData.rate}
+                                onChange={e => setFormData({...formData, rate: e.target.value})}
+                                className="w-full border-2 border-green-200 px-3 py-2.5 outline-none focus:ring-2 focus:ring-green-400 focus:border-green-400 transition-all hover:border-green-300"
                                 placeholder="0.0"
                             />
                           </div>
