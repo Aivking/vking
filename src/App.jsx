@@ -73,6 +73,7 @@ const typeLabels = {
   'loan': '贷款',
   'loan_interest': '贷款利息',
   'loan_repayment': '还款',
+  'loan_repay_request': '还款申请',
   'planet_fund': '星星基金',
   'bank_planet_fund': '划拨银行注星',
   'bank_planet_withdraw': '撤回星星资金',
@@ -283,6 +284,9 @@ const translations = {
     reloadPage: '刷新页面',
     confirmDeleteRecordServer: '确认从服务器永久删除此记录？',
     confirmRepayLoan: '确认还款此笔贷款？',
+    confirmRepayRequest: '确认提交还款申请？管理员审批后贷款账单将消失。',
+    repayPending: '还款申请中',
+    repayAlreadyPending: '该笔贷款已有待审批的还款申请',
     confirmEndBondIssue: '确认结束该债券发行？结束后将无法继续申购，但已申购持仓会保留。',
     endBondIssueFailed: '结束发行失败',
     confirmRedeemAllBond: '确认全额赎回该债券？将结束发行并取消所有人的持仓（删除所有相关申购记录）。',
@@ -640,6 +644,9 @@ const translations = {
     reloadPage: 'Reload Page',
     confirmDeleteRecordServer: 'Permanently delete this record from server?',
     confirmRepayLoan: 'Confirm repayment for this loan?',
+    confirmRepayRequest: 'Submit repayment request? The loan will disappear after admin approval.',
+    repayPending: 'Repay Pending',
+    repayAlreadyPending: 'A repayment request for this loan is already pending',
     confirmEndBondIssue: 'End this bond issuance? Subscriptions will be disabled, existing holdings remain.',
     endBondIssueFailed: 'End issuance failed',
     confirmRedeemAllBond: 'Redeem all for this bond? It will end issuance and cancel all holdings.',
@@ -823,6 +830,7 @@ const translations = {
       'deposit_interest': 'Deposit Interest',
       'loan_interest': 'Loan Interest',
       'loan_repayment': 'Repayment',
+      'loan_repay_request': 'Repay Request',
       'interest_income': 'Interest Income',
       'interest_expense': 'Interest Expense',
       'planet_fund': 'Star Fund',
@@ -4010,6 +4018,14 @@ const App = () => {
             ...updateData
           });
         }
+
+        if (action === 'approve' && txToReview && txToReview.type === 'loan_repay_request') {
+          const m = (txToReview.remark || '').match(/loan_id:([^\s]+)/);
+          if (m) {
+            const { error: loanDelError } = await supabase.from('transactions').delete().eq('id', m[1]);
+            if (loanDelError) throw loanDelError;
+          }
+        }
       } else if (action === 'repay') {
         // 还款操作：删除贷款账单，资金回到资金池
         const loanTx = transactions.find(tx => tx.id === payload);
@@ -4062,6 +4078,33 @@ const App = () => {
       await fetchFundAccount();
     } catch (e) {
       alert("操作失败: " + e.message);
+    }
+  };
+
+  const handleUserRepayLoan = async (loanId) => {
+    if (!window.confirm(t('confirmRepayRequest'))) return;
+    const loanTx = transactions.find(tx => tx.id === loanId);
+    if (!loanTx) return alert('贷款记录不存在');
+    const alreadyPending = transactions.some(
+      tx => tx.type === 'loan_repay_request' && tx.status === 'pending' && (tx.remark || '').includes(`loan_id:${loanId}`)
+    );
+    if (alreadyPending) return alert(t('repayAlreadyPending'));
+    try {
+      const { error } = await supabase.from('transactions').insert([{
+        type: 'loan_repay_request',
+        client: loanTx.client || loanTx.created_by,
+        principal: parseFloat(loanTx.principal) || 0,
+        rate: parseFloat(loanTx.rate) || 0,
+        status: 'pending',
+        created_by: currentUser.username,
+        creator_id: currentUser.id || 'unknown',
+        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
+        remark: `loan_id:${loanId}`
+      }]);
+      if (error) throw error;
+      await refreshTransactions();
+    } catch (e) {
+      alert('提交失败: ' + e.message);
     }
   };
 
@@ -8037,46 +8080,15 @@ const App = () => {
 
         
 
-        {/* 管理员审批 */}
+        {/* 管理员审批 - 已移至账单页面 */}
         {currentPage !== 'loans' && isAdmin && pendingTx && pendingTx.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-xl p-6 shadow-sm">
-             <h3 className="text-lg font-bold text-amber-800 flex items-center gap-2 mb-4">
-               <AlertCircle className="w-5 h-5"/> {t('pendingApproval')} ({pendingTx.length})
-             </h3>
-             <div className="grid gap-3">
-                {pendingTx.map(tx => (
-                  <div key={tx.id} className="bg-white p-4 rounded-lg border border-amber-100 flex justify-between items-center">
-                    <div>
-                      <span className="font-bold mr-2">[{getLocalizedTypeLabel(tx.type || 'unknown', language)}]</span>
-                      <span>
-                        {tx.client || t('unknown')} - {formatMoney(tx.principal || 0)}
-                        {tx.type === 'withdraw_dep' && (
-                          <span className="ml-2 text-xs text-gray-500">
-                            ({(tx.product_type || 'normal') === 'risk' ? t('riskDeposit') : (tx.product_type || 'normal') === 'risk5' ? t('riskDeposit5') : t('normalDeposit')})
-                          </span>
-                        )}
-                      </span>
-                      <span className="text-xs text-gray-500 block">{t('applicantLabel')}: {tx.created_by || t('unknown')}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <button 
-                        onClick={async () => {
-                          await handleCRUD('approve', tx.id);
-                        }} 
-                        className="p-2 bg-green-100 text-green-700 rounded hover:bg-green-200"
-                      >
-                        <CheckCircle className="w-4 h-4"/>
-                      </button>
-                      <button 
-                        onClick={() => handleCRUD('reject', tx.id)} 
-                        className="p-2 bg-red-100 text-red-700 rounded hover:bg-red-200"
-                      >
-                        <XCircle className="w-4 h-4"/>
-                      </button>
-                    </div>
-                  </div>
-                ))}
-             </div>
+          <div className="bg-amber-50 border border-amber-200 p-4 flex items-center justify-between">
+            <span className="text-amber-800 font-semibold flex items-center gap-2">
+              <AlertCircle className="w-4 h-4"/> {t('pendingApproval')} ({pendingTx.length})
+            </span>
+            <button onClick={() => setCurrentPage('loans')} className="text-xs bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 font-medium transition-colors">
+              {language === 'zh' ? '前往账单页审批 →' : 'Go to Bills to Approve →'}
+            </button>
           </div>
         )}
 
@@ -8501,13 +8513,114 @@ const App = () => {
           </div>
         )}
 
+        {/* 账单页 - 管理员审批中心（左右两栏） */}
+        {currentPage === 'loans' && isAdmin && (() => {
+          const colorMap = {
+            orange:  { border:'border-orange-200',  bg:'bg-orange-50',  badge:'bg-orange-100 text-orange-700',  title:'text-orange-800' },
+            red:     { border:'border-red-200',     bg:'bg-red-50',     badge:'bg-red-100 text-red-700',        title:'text-red-800' },
+            blue:    { border:'border-blue-200',    bg:'bg-blue-50',    badge:'bg-blue-100 text-blue-700',      title:'text-blue-800' },
+            emerald: { border:'border-emerald-200', bg:'bg-emerald-50', badge:'bg-emerald-100 text-emerald-700',title:'text-emerald-800' },
+            amber:   { border:'border-amber-200',   bg:'bg-amber-50',   badge:'bg-amber-100 text-amber-700',    title:'text-amber-800' },
+            teal:    { border:'border-teal-200',    bg:'bg-teal-50',    badge:'bg-teal-100 text-teal-700',      title:'text-teal-800' },
+            purple:  { border:'border-purple-200',  bg:'bg-purple-50',  badge:'bg-purple-100 text-purple-700',  title:'text-purple-800' },
+            gray:    { border:'border-gray-200',    bg:'bg-gray-50',    badge:'bg-gray-100 text-gray-700',      title:'text-gray-800' },
+          };
+
+          const leftCats = [
+            { key:'repay', label: language==='zh'?'还款申请':'Repayment',   types:['loan_repay_request'],             color:'orange' },
+            { key:'loan',  label: language==='zh'?'贷款':'Loan',             types:['loan'],                           color:'red' },
+            { key:'dep',   label: language==='zh'?'存款 / 取款':'Deposit',   types:['deposit','withdraw_dep'],         color:'emerald' },
+            { key:'inj',   label: language==='zh'?'注资 / 撤资':'Injection', types:['injection','withdraw_inj'],       color:'blue' },
+          ];
+          const rightCats = [
+            { key:'bond',  label: language==='zh'?'债券申购':'Bond',         types:['bond_subscribe'],                 color:'amber' },
+            { key:'fund',  label: language==='zh'?'基金操作':'Fund',         types:['fund_subscribe','fund_redeem','fund_dividend_withdraw','fund_profit_withdraw'], color:'teal' },
+            { key:'asset', label: language==='zh'?'其他投资':'Other',        types:['bank_asset'],                     color:'purple' },
+          ];
+          const knownTypes = [...leftCats, ...rightCats].flatMap(c => c.types);
+          const otherItems = pendingTx.filter(tx => !knownTypes.includes(tx.type));
+          if (otherItems.length > 0) rightCats.push({ key:'other', label: language==='zh'?'其他':'Other', types: otherItems.map(tx=>tx.type), color:'gray' });
+
+          const leftCount  = leftCats.reduce((s,c)  => s + pendingTx.filter(tx => c.types.includes(tx.type)).length, 0);
+          const rightCount = rightCats.reduce((s,c) => s + pendingTx.filter(tx => c.types.includes(tx.type)).length, 0);
+
+          const renderCard = (tx, c) => (
+            <div key={tx.id} className="bg-white border border-gray-100 p-3 flex items-center justify-between gap-3 shadow-sm">
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <span className={`text-xs font-bold px-1.5 py-0.5 rounded ${c.badge}`}>{getLocalizedTypeLabel(tx.type || 'unknown', language)}</span>
+                  <span className="font-semibold text-sm text-gray-800">{tx.client || t('unknown')}</span>
+                  <span className="text-sm font-bold text-gray-900">{formatMoney(tx.principal || 0)}</span>
+                  {tx.type === 'withdraw_dep' && (
+                    <span className="text-xs text-gray-400">({(tx.product_type||'normal')==='risk'?t('riskDeposit'):(tx.product_type||'normal')==='risk5'?t('riskDeposit5'):t('normalDeposit')})</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-400 mt-0.5 flex gap-2 flex-wrap">
+                  <span>{t('applicantLabel')}: <span className="text-gray-600 font-medium">{tx.created_by||t('unknown')}</span></span>
+                  {tx.timestamp && <span>{tx.timestamp.split(' ')[0]}</span>}
+                </div>
+              </div>
+              <div className="flex gap-1.5 flex-shrink-0">
+                <button onClick={() => handleCRUD('approve', tx.id)} className="flex items-center gap-1 px-2.5 py-1.5 bg-green-100 hover:bg-green-200 text-green-700 text-xs font-semibold rounded transition-colors">
+                  <CheckCircle className="w-3 h-3"/> {language==='zh'?'批准':'OK'}
+                </button>
+                <button onClick={() => handleCRUD('reject', tx.id)} className="flex items-center gap-1 px-2.5 py-1.5 bg-red-100 hover:bg-red-200 text-red-700 text-xs font-semibold rounded transition-colors">
+                  <XCircle className="w-3 h-3"/> {language==='zh'?'拒绝':'No'}
+                </button>
+              </div>
+            </div>
+          );
+
+          const renderColumn = (cats, count, colTitle) => (
+            <div className="bg-white border border-amber-200 shadow-sm p-5 space-y-4 flex-1 min-w-0">
+              <h4 className="text-base font-bold text-amber-800 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4"/>
+                {colTitle}
+                {count > 0 && <span className="ml-1 px-2 py-0.5 text-xs bg-amber-100 text-amber-700 rounded-full font-bold">{count}</span>}
+              </h4>
+              {count === 0
+                ? <p className="text-xs text-gray-400 py-4 text-center">{language==='zh'?'暂无待审批':'No pending items'}</p>
+                : cats.map(cat => {
+                    const items = pendingTx.filter(tx => cat.types.includes(tx.type));
+                    if (!items.length) return null;
+                    const c = colorMap[cat.color] || colorMap.gray;
+                    return (
+                      <div key={cat.key} className={`border ${c.border} ${c.bg} p-3 space-y-2`}>
+                        <div className={`text-xs font-bold ${c.title} flex items-center gap-2`}>
+                          <span className={`px-2 py-0.5 rounded ${c.badge}`}>{cat.label}</span>
+                          <span className="text-gray-400 font-normal">{items.length} {language==='zh'?'条':'items'}</span>
+                        </div>
+                        <div className="space-y-1.5">{items.map(tx => renderCard(tx, c))}</div>
+                      </div>
+                    );
+                  })
+              }
+            </div>
+          );
+
+          return (
+            <div className="space-y-2">
+              <div className="text-sm font-bold text-amber-800 flex items-center gap-2 px-1">
+                <AlertCircle className="w-4 h-4"/> {language==='zh'?'待审批中心':'Approval Center'} ({pendingTx.length})
+              </div>
+              <div className="flex gap-4 items-start">
+                {renderColumn(leftCats,  leftCount,  language==='zh'?'贷款 · 存取款 · 注资':'Loans & Deposits')}
+                {renderColumn(rightCats, rightCount, language==='zh'?'基金 · 债券 · 投资':'Fund & Bonds & Assets')}
+              </div>
+            </div>
+          );
+        })()}
+
         {/* 表格区 */}
         {currentPage === 'loans' && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
            {currentPage === 'loans' && (
-           <TableSection title={t('loanAssets')} color="red" icon={ArrowUpRight} 
+           <TableSection title={t('loanAssets')} color="red" icon={ArrowUpRight}
              data={isAdmin ? displayTx.filter(tx => tx.type === 'loan') : transactions.filter(tx => tx.type === 'loan' && tx.created_by === currentUser?.username)}
-             isAdmin={isAdmin} onEdit={(tx) => openModal('loan', tx)} onDelete={(id) => handleCRUD('delete', id)} onRepay={(id) => {if(window.confirm(t('confirmRepayLoan'))) handleCRUD('repay', id)}} language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel}
+             isAdmin={isAdmin} onEdit={isAdmin ? (tx) => openModal('loan', tx) : null} onDelete={isAdmin ? (id) => handleCRUD('delete', id) : null} onRepay={isAdmin ? (id) => {if(window.confirm(t('confirmRepayLoan'))) handleCRUD('repay', id)} : null}
+             onUserRepay={!isAdmin ? handleUserRepayLoan : null}
+             pendingRepayLoanIds={!isAdmin ? new Set(transactions.filter(tx => tx.type === 'loan_repay_request' && tx.status === 'pending').map(tx => { const m = (tx.remark||'').match(/loan_id:([^\s]+)/); return m ? m[1] : null; }).filter(Boolean)) : null}
+             language={language} t={t} getLocalizedTypeLabel={getLocalizedTypeLabel}
              interestRecords={transactions.filter(tx => tx.status === 'approved' && tx.type === 'interest_income')} applyInterest={true} />
            )}
            
@@ -8957,7 +9070,7 @@ const StatCard = ({ title, value, subtext, icon }) => (
     </div>
 );
 
-const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, onRepay, onDeleteAll, onManageGroup, onAggregatedEdit, onAggregatedDelete, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
+const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelete, onRepay, onUserRepay, pendingRepayLoanIds, onDeleteAll, onManageGroup, onAggregatedEdit, onAggregatedDelete, language, t, getLocalizedTypeLabel, interestRecords = [], applyInterest = true }) => {
   // 使用单个state管理所有行的展开状态
   const [openActionsId, setOpenActionsId] = React.useState(null);
   const [editingCell, setEditingCell] = React.useState(null); // { id, field, value }
@@ -8965,7 +9078,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
   const tableRef = React.useRef(null);
   const [tableScale, setTableScale] = React.useState(1);
   const [scaledHeight, setScaledHeight] = React.useState(null);
-  const hasActions = Boolean(isAdmin && (onEdit || onDelete || onManageGroup || onRepay || onAggregatedDelete));
+  const hasActions = Boolean((isAdmin && (onEdit || onDelete || onManageGroup || onRepay || onAggregatedDelete)) || onUserRepay);
   
   const calculateWeeklyInterest = (principal, rate) => {
     return parseFloat((parseFloat(principal || 0) * parseFloat(rate || 0) / 100).toFixed(4));
@@ -9202,6 +9315,13 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                   </td>
                   <td className="px-1.5 py-1.5 text-xs text-gray-500 whitespace-nowrap">{row.timestamp ? row.timestamp.split(' ')[0] : '-'}</td>
                   {hasActions && <td className="px-1.5 py-1.5 text-center relative">
+                    {onUserRepay && row.type === 'loan' ? (
+                      pendingRepayLoanIds?.has(row.id)
+                        ? <span className="text-xs text-gray-400 italic px-2">{t('repayPending')}</span>
+                        : <button onClick={() => onUserRepay(row.id)} className="px-2 py-1 text-xs bg-orange-50 hover:bg-orange-100 text-orange-600 border border-orange-200 font-medium rounded">
+                            {t('repay')}
+                          </button>
+                    ) : (
                     <div className="relative inline-block">
                       <button onClick={() => setOpenActionsId(showActions ? null : row.id)} className="text-gray-500 hover:text-gray-700 p-1 rounded hover:bg-gray-200" title={t('actions')}>
                         <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6 10a2 2 0 11-4 0 2 2 0 014 0zM12 10a2 2 0 11-4 0 2 2 0 014 0zM16 12a2 2 0 100-4 2 2 0 000 4z" /></svg>
@@ -9233,6 +9353,7 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
                         </div>
                       )}
                     </div>
+                    )}
                   </td>}
                 </tr>
               );
