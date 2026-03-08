@@ -467,6 +467,19 @@ const translations = {
     amountLabel: '金额 (m)',
     rateLabel: '利率 (%)',
     submit: '提交',
+    // 基金账单（管理员）
+    fundBillsTitle: '基金申购/赎回账单',
+    fundBillsSubtitle: '管理员可见 · 记录所有申购、赎回及分红提取',
+    fundBillUser: '用户',
+    fundBillType: '类型',
+    fundBillAmount: '金额',
+    fundBillRemark: '备注',
+    fundBillTime: '时间',
+    fundBillStatus: '状态',
+    fundBillActions: '操作',
+    fundBillNoData: '暂无申购/赎回/分红提取记录',
+    fundBillSaveSuccess: '账单更新成功！',
+    fundBillSaveFailed: '账单更新失败',
     // 类型标签
     typeLabels: typeLabels
   },
@@ -820,6 +833,19 @@ const translations = {
     amountLabel: 'Amount (m)',
     rateLabel: 'Rate (%)',
     submit: 'Submit',
+    // Fund bills (admin)
+    fundBillsTitle: 'Fund Subscribe/Redeem Bills',
+    fundBillsSubtitle: 'Admin only · All subscribe, redeem & dividend withdrawal records',
+    fundBillUser: 'User',
+    fundBillType: 'Type',
+    fundBillAmount: 'Amount',
+    fundBillRemark: 'Remark',
+    fundBillTime: 'Time',
+    fundBillStatus: 'Status',
+    fundBillActions: 'Actions',
+    fundBillNoData: 'No subscribe/redeem/dividend records yet',
+    fundBillSaveSuccess: 'Bill updated successfully!',
+    fundBillSaveFailed: 'Bill update failed',
     // Type labels
     typeLabels: {
       'loan': 'Loan',
@@ -1248,6 +1274,10 @@ const App = () => {
   // 基金交易记录编辑 State
   const [editingFundTx, setEditingFundTx] = useState(null);
   const [editFundTxData, setEditFundTxData] = useState({ amount: '', remark: '' });
+
+  // 基金账单编辑 State（管理员）
+  const [editingFundBillId, setEditingFundBillId] = useState(null);
+  const [editFundBillData, setEditFundBillData] = useState({ principal: '', remark: '', client: '' });
   
   // 添加基金交易记录 State
   const [addFundTxModal, setAddFundTxModal] = useState(false);
@@ -2913,6 +2943,44 @@ const App = () => {
   const handleCancelEditFundTx = () => {
     setEditingFundTx(null);
     setEditFundTxData({ amount: '', remark: '' });
+  };
+
+  // 基金账单编辑（管理员）
+  const handleEditFundBill = (tx) => {
+    setEditingFundBillId(tx.id);
+    setEditFundBillData({
+      principal: tx.principal || '',
+      remark: tx.remark || '',
+      client: tx.client || tx.created_by || ''
+    });
+  };
+
+  const handleSaveFundBill = async () => {
+    try {
+      const { error } = await supabase
+        .from('transactions')
+        .update({
+          principal: parseFloat(editFundBillData.principal) || 0,
+          remark: editFundBillData.remark,
+          client: editFundBillData.client
+        })
+        .eq('id', editingFundBillId);
+
+      if (error) throw error;
+
+      await fetchFundTransactions();
+      setEditingFundBillId(null);
+      setEditFundBillData({ principal: '', remark: '', client: '' });
+      alert(t('fundBillSaveSuccess'));
+    } catch (e) {
+      console.error('更新基金账单失败:', e);
+      alert(t('fundBillSaveFailed') + ': ' + e.message);
+    }
+  };
+
+  const handleCancelEditFundBill = () => {
+    setEditingFundBillId(null);
+    setEditFundBillData({ principal: '', remark: '', client: '' });
   };
 
   const handleDeleteFundTx = async (txId) => {
@@ -7804,6 +7872,169 @@ const App = () => {
               </div>
             </div>
           </div>
+
+          {/* 基金申购/赎回账单（仅管理员可见） */}
+          {currentUser?.role === 'admin' && (
+            <div className="bg-white border border-green-200 shadow-sm p-4">
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="flex items-center gap-2 text-gray-700">
+                    <Wallet className="w-5 h-5 text-green-600" />
+                    <span className="font-semibold text-base">{t('fundBillsTitle')}</span>
+                  </div>
+                  <p className="text-xs text-gray-400 mt-1">{t('fundBillsSubtitle')}</p>
+                </div>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-green-200">
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">{t('fundBillTime')}</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">{t('fundBillUser')}</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">{t('fundBillType')}</th>
+                      <th className="text-right py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">{t('fundBillAmount')}</th>
+                      <th className="text-left py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">{t('fundBillRemark')}</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">{t('fundBillStatus')}</th>
+                      <th className="text-center py-2 px-3 font-semibold text-gray-700 text-xs whitespace-nowrap">{t('fundBillActions')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {fundTransactions
+                      .filter(tx => ['fund_subscribe', 'fund_redeem', 'fund_dividend_withdraw'].includes(tx.type))
+                      .length === 0 ? (
+                      <tr>
+                        <td colSpan="7" className="text-center py-8 text-gray-400 text-xs">{t('fundBillNoData')}</td>
+                      </tr>
+                    ) : (
+                      fundTransactions
+                        .filter(tx => ['fund_subscribe', 'fund_redeem', 'fund_dividend_withdraw'].includes(tx.type))
+                        .map((tx) => (
+                          <tr key={tx.id} className="border-b border-gray-100 hover:bg-green-50">
+                            <td className="py-2 px-3 text-gray-600 text-xs whitespace-nowrap">
+                              {new Date(tx.created_at || tx.timestamp).toLocaleString('zh-CN', {
+                                year: 'numeric', month: '2-digit', day: '2-digit',
+                                hour: '2-digit', minute: '2-digit'
+                              })}
+                            </td>
+                            {editingFundBillId === tx.id ? (
+                              <>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="text"
+                                    value={editFundBillData.client}
+                                    onChange={(e) => setEditFundBillData({...editFundBillData, client: e.target.value})}
+                                    className="w-full border border-green-200 px-2 py-1 text-xs focus:ring-1 focus:ring-green-400 outline-none"
+                                  />
+                                </td>
+                                <td className="py-2 px-3 whitespace-nowrap">
+                                  <span className={`inline-flex px-2 py-1 text-xs font-medium ${
+                                    tx.type === 'fund_subscribe' ? 'bg-emerald-100 text-emerald-700' :
+                                    tx.type === 'fund_redeem' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-purple-100 text-purple-700'
+                                  }`}>
+                                    {getLocalizedTypeLabel(tx.type, language)}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="number"
+                                    step="0.001"
+                                    value={editFundBillData.principal}
+                                    onChange={(e) => setEditFundBillData({...editFundBillData, principal: e.target.value})}
+                                    className="w-24 border border-green-200 px-2 py-1 text-xs text-right focus:ring-1 focus:ring-green-400 outline-none"
+                                  />
+                                </td>
+                                <td className="py-2 px-3">
+                                  <input
+                                    type="text"
+                                    value={editFundBillData.remark}
+                                    onChange={(e) => setEditFundBillData({...editFundBillData, remark: e.target.value})}
+                                    className="w-full border border-green-200 px-2 py-1 text-xs focus:ring-1 focus:ring-green-400 outline-none"
+                                  />
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  <span className={`inline-flex px-2 py-1 text-xs font-medium ${
+                                    tx.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                    tx.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {tx.status === 'approved' ? t('approved') : tx.status === 'rejected' ? t('rejected') : t('pending')}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={handleSaveFundBill}
+                                      className="bg-green-600 hover:bg-green-700 text-white px-2 py-1 text-xs font-medium transition-colors"
+                                    >
+                                      {t('save')}
+                                    </button>
+                                    <button
+                                      onClick={handleCancelEditFundBill}
+                                      className="bg-gray-100 hover:bg-gray-200 text-gray-700 px-2 py-1 text-xs font-medium transition-colors"
+                                    >
+                                      {t('cancel')}
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            ) : (
+                              <>
+                                <td className="py-2 px-3 text-gray-800 text-xs font-medium whitespace-nowrap">
+                                  {tx.client || tx.created_by || '-'}
+                                </td>
+                                <td className="py-2 px-3 whitespace-nowrap">
+                                  <span className={`inline-flex px-2 py-1 text-xs font-medium ${
+                                    tx.type === 'fund_subscribe' ? 'bg-emerald-100 text-emerald-700' :
+                                    tx.type === 'fund_redeem' ? 'bg-blue-100 text-blue-700' :
+                                    'bg-purple-100 text-purple-700'
+                                  }`}>
+                                    {getLocalizedTypeLabel(tx.type, language)}
+                                  </span>
+                                </td>
+                                <td className={`py-2 px-3 text-right font-medium text-xs whitespace-nowrap ${
+                                  tx.type === 'fund_subscribe' ? 'text-green-600' : 'text-blue-600'
+                                }`}>
+                                  {tx.type === 'fund_subscribe' ? '+' : '-'}{formatMoney(Math.abs(parseFloat(tx.principal) || 0))}
+                                </td>
+                                <td className="py-2 px-3 text-gray-600 text-xs">
+                                  <div className="max-w-[200px] truncate" title={tx.remark || ''}>{tx.remark || '-'}</div>
+                                </td>
+                                <td className="py-2 px-3 text-center">
+                                  <span className={`inline-flex px-2 py-1 text-xs font-medium ${
+                                    tx.status === 'approved' ? 'bg-green-100 text-green-700' :
+                                    tx.status === 'rejected' ? 'bg-red-100 text-red-700' :
+                                    'bg-amber-100 text-amber-700'
+                                  }`}>
+                                    {tx.status === 'approved' ? t('approved') : tx.status === 'rejected' ? t('rejected') : t('pending')}
+                                  </span>
+                                </td>
+                                <td className="py-2 px-3">
+                                  <div className="flex items-center justify-center gap-2">
+                                    <button
+                                      onClick={() => handleEditFundBill(tx)}
+                                      className="bg-blue-100 hover:bg-blue-200 text-blue-700 px-2 py-1 text-xs font-medium transition-colors"
+                                    >
+                                      {t('editShort')}
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteFundTx(tx.id)}
+                                      className="bg-red-100 hover:bg-red-200 text-red-700 px-2 py-1 text-xs font-medium transition-colors"
+                                    >
+                                      {t('delete')}
+                                    </button>
+                                  </div>
+                                </td>
+                              </>
+                            )}
+                          </tr>
+                        ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
 
         {/* 转账弹窗 */}
         {transferModal && (
