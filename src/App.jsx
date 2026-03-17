@@ -6666,11 +6666,11 @@ const App = () => {
                           {d.reported_at ? new Date(d.reported_at).toLocaleString('zh-CN') : ''}
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-0.5">
+                      <div className="grid grid-cols-4 gap-x-2 gap-y-1.5">
                         {Object.entries(d.tickers).sort((a, b) => b[1] - a[1]).map(([ticker, total]) => (
-                          <span key={ticker} className="inline-flex items-center bg-emerald-50 border border-emerald-200 px-1.5 py-0 text-[10px]">
+                          <span key={ticker} className="inline-flex items-center justify-center bg-emerald-50 border border-emerald-200 px-2 py-1 text-[10px]">
                             <span className="font-bold text-gray-700">{ticker}</span>
-                            <span className="text-emerald-600 ml-0.5">{Math.round(total * 100) / 100}/d</span>
+                            <span className="text-emerald-600 ml-1">{Math.round(total * 100) / 100}/d</span>
                           </span>
                         ))}
                       </div>
