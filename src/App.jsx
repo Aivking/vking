@@ -959,6 +959,7 @@ const App = () => {
   const [liuliActiveTab, setLiuliActiveTab] = useState('flights');
   const [productionReports, setProductionReports] = useState([]);
   const [productionReportsLoading, setProductionReportsLoading] = useState(false);
+  const [productionSearch, setProductionSearch] = useState('');
 
   // 获取产出上报数据
   const fetchProductionReports = async () => {
@@ -988,6 +989,15 @@ const App = () => {
     }
     return Object.values(map);
   }, [productionReports]);
+
+  // 按 ticker 搜索：返回 [{ticker, director, company, planet, daily_output}]
+  const productionSearchResults = useMemo(() => {
+    const q = (productionSearch || '').trim().toUpperCase();
+    if (!q) return null;
+    return productionReports
+      .filter(r => r.ticker.toUpperCase().includes(q) || r.director.toLowerCase().includes(q.toLowerCase()) || r.planet.toLowerCase().includes(q.toLowerCase()))
+      .sort((a, b) => b.daily_output - a.daily_output);
+  }, [productionReports, productionSearch]);
 
   const parseInterestCountFromRemark = (remark) => {
     if (!remark) return null;
@@ -6600,29 +6610,63 @@ const App = () => {
                   {productionReportsLoading ? (language === 'zh' ? '加载中...' : 'Loading...') : (language === 'zh' ? '刷新' : 'Refresh')}
                 </button>
               </div>
+              <input
+                value={productionSearch}
+                onChange={(e) => setProductionSearch(e.target.value)}
+                placeholder={language === 'zh' ? '搜索材料代码/董事名/星球...' : 'Search ticker/director/planet...'}
+                className="w-full border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-all mb-3"
+              />
               {productionByDirector.length === 0 ? (
                 <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无产出上报数据' : 'No production reports yet'}</div>
+              ) : productionSearchResults ? (
+                <div>
+                  <div className="text-xs text-gray-500 mb-2">{productionSearchResults.length} {language === 'zh' ? '条结果' : 'results'}</div>
+                  {productionSearchResults.length === 0 ? (
+                    <div className="text-gray-400 text-sm">{language === 'zh' ? '无匹配结果' : 'No matches'}</div>
+                  ) : (
+                    <table className="w-full text-sm border-collapse">
+                      <thead>
+                        <tr className="border-b border-emerald-200 text-left text-xs text-gray-500">
+                          <th className="py-1 pr-3">{language === 'zh' ? '材料' : 'Ticker'}</th>
+                          <th className="py-1 pr-3">{language === 'zh' ? '日产量' : 'Daily'}</th>
+                          <th className="py-1 pr-3">{language === 'zh' ? '董事' : 'Director'}</th>
+                          <th className="py-1 pr-3">{language === 'zh' ? '星球' : 'Planet'}</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {productionSearchResults.map((r, i) => (
+                          <tr key={i} className="border-b border-emerald-50 hover:bg-emerald-50">
+                            <td className="py-1 pr-3 font-bold text-gray-700">{r.ticker}</td>
+                            <td className="py-1 pr-3 text-emerald-600 font-semibold">{Math.round(Number(r.daily_output) * 100) / 100}/d</td>
+                            <td className="py-1 pr-3">{r.director} {r.company ? <span className="text-xs text-gray-400">[{r.company}]</span> : null}</td>
+                            <td className="py-1 pr-3 text-emerald-700">{r.planet}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
                   {productionByDirector.map((d) => (
-                    <div key={d.director} className="border border-emerald-200 p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div>
+                    <div key={d.director} className="border border-emerald-200 p-2">
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-xs">
                           <span className="font-bold text-gray-800">{d.director}</span>
-                          {d.company && <span className="text-xs text-gray-500 ml-2">[{d.company}]</span>}
+                          {d.company && <span className="text-gray-400 ml-1">[{d.company}]</span>}
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-[10px] text-gray-400">
                           {d.reported_at ? new Date(d.reported_at).toLocaleString('zh-CN') : ''}
                         </div>
                       </div>
                       {Object.entries(d.planets).map(([planet, items]) => (
-                        <div key={planet} className="mb-2">
-                          <div className="text-xs font-bold text-emerald-700 mb-1">{planet}</div>
-                          <div className="flex flex-wrap gap-1">
+                        <div key={planet} className="mb-1">
+                          <div className="text-[10px] font-bold text-emerald-700">{planet}</div>
+                          <div className="flex flex-wrap gap-0.5">
                             {items.map((item) => (
-                              <span key={item.ticker} className="inline-flex items-center bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px]">
+                              <span key={item.ticker} className="inline-flex items-center bg-emerald-50 border border-emerald-200 px-1.5 py-0 text-[10px]">
                                 <span className="font-bold text-gray-700">{item.ticker}</span>
-                                <span className="text-emerald-600 ml-1">{Math.round(Number(item.daily_output) * 100) / 100}/d</span>
+                                <span className="text-emerald-600 ml-0.5">{Math.round(Number(item.daily_output) * 100) / 100}/d</span>
                               </span>
                             ))}
                           </div>
