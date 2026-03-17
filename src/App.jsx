@@ -975,27 +975,36 @@ const App = () => {
     setProductionReportsLoading(false);
   };
 
-  // 按董事名分组的产出数据
+  // 按董事名分组，同材料合并总产量（不分星球）
   const productionByDirector = useMemo(() => {
     const map = {};
     for (const r of productionReports) {
       if (!map[r.director]) {
-        map[r.director] = { director: r.director, company: r.company, company_code: r.company_code, reported_at: r.reported_at, planets: {} };
+        map[r.director] = { director: r.director, company: r.company, company_code: r.company_code, reported_at: r.reported_at, tickers: {} };
       }
-      if (!map[r.director].planets[r.planet]) {
-        map[r.director].planets[r.planet] = [];
+      if (!map[r.director].tickers[r.ticker]) {
+        map[r.director].tickers[r.ticker] = 0;
       }
-      map[r.director].planets[r.planet].push({ ticker: r.ticker, daily_output: r.daily_output });
+      map[r.director].tickers[r.ticker] += Number(r.daily_output) || 0;
     }
     return Object.values(map);
   }, [productionReports]);
 
-  // 按 ticker 搜索：返回 [{ticker, director, company, planet, daily_output}]
+  // 搜索：合并同 director+ticker 的总产量
   const productionSearchResults = useMemo(() => {
     const q = (productionSearch || '').trim().toUpperCase();
     if (!q) return null;
-    return productionReports
-      .filter(r => r.ticker.toUpperCase().includes(q) || r.director.toLowerCase().includes(q.toLowerCase()) || r.planet.toLowerCase().includes(q.toLowerCase()))
+    // 先按 director+ticker 合并
+    const merged = {};
+    for (const r of productionReports) {
+      const key = `${r.director}||${r.ticker}`;
+      if (!merged[key]) {
+        merged[key] = { ticker: r.ticker, director: r.director, company: r.company, daily_output: 0 };
+      }
+      merged[key].daily_output += Number(r.daily_output) || 0;
+    }
+    return Object.values(merged)
+      .filter(r => r.ticker.toUpperCase().includes(q) || r.director.toLowerCase().includes(q.toLowerCase()))
       .sort((a, b) => b.daily_output - a.daily_output);
   }, [productionReports, productionSearch]);
 
@@ -6630,7 +6639,6 @@ const App = () => {
                           <th className="py-1 pr-3">{language === 'zh' ? '材料' : 'Ticker'}</th>
                           <th className="py-1 pr-3">{language === 'zh' ? '日产量' : 'Daily'}</th>
                           <th className="py-1 pr-3">{language === 'zh' ? '董事' : 'Director'}</th>
-                          <th className="py-1 pr-3">{language === 'zh' ? '星球' : 'Planet'}</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -6639,7 +6647,6 @@ const App = () => {
                             <td className="py-1 pr-3 font-bold text-gray-700">{r.ticker}</td>
                             <td className="py-1 pr-3 text-emerald-600 font-semibold">{Math.round(Number(r.daily_output) * 100) / 100}/d</td>
                             <td className="py-1 pr-3">{r.director} {r.company ? <span className="text-xs text-gray-400">[{r.company}]</span> : null}</td>
-                            <td className="py-1 pr-3 text-emerald-700">{r.planet}</td>
                           </tr>
                         ))}
                       </tbody>
@@ -6659,19 +6666,14 @@ const App = () => {
                           {d.reported_at ? new Date(d.reported_at).toLocaleString('zh-CN') : ''}
                         </div>
                       </div>
-                      {Object.entries(d.planets).map(([planet, items]) => (
-                        <div key={planet} className="mb-1">
-                          <div className="text-[10px] font-bold text-emerald-700">{planet}</div>
-                          <div className="flex flex-wrap gap-0.5">
-                            {items.map((item) => (
-                              <span key={item.ticker} className="inline-flex items-center bg-emerald-50 border border-emerald-200 px-1.5 py-0 text-[10px]">
-                                <span className="font-bold text-gray-700">{item.ticker}</span>
-                                <span className="text-emerald-600 ml-0.5">{Math.round(Number(item.daily_output) * 100) / 100}/d</span>
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      ))}
+                      <div className="flex flex-wrap gap-0.5">
+                        {Object.entries(d.tickers).sort((a, b) => b[1] - a[1]).map(([ticker, total]) => (
+                          <span key={ticker} className="inline-flex items-center bg-emerald-50 border border-emerald-200 px-1.5 py-0 text-[10px]">
+                            <span className="font-bold text-gray-700">{ticker}</span>
+                            <span className="text-emerald-600 ml-0.5">{Math.round(total * 100) / 100}/d</span>
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   ))}
                 </div>
