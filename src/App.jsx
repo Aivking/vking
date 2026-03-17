@@ -5720,6 +5720,10 @@ const App = () => {
   }
 
   if (currentPage === 'liuli') {
+    if (currentUserRole !== 'admin' && currentUserRole !== 'liuli_member') {
+      setCurrentPage('bank');
+      return null;
+    }
     return (
       <div className="min-h-screen bg-[#F0FAF4] text-gray-800 p-4 md:p-8 font-sans">
         <div className="max-w-7xl mx-auto space-y-6">
@@ -8469,7 +8473,13 @@ const App = () => {
             <div className="h-6 w-px bg-green-200 mx-2"></div>
             <div className="h-6 w-px bg-green-200 mx-2"></div>
             <Btn icon={MessageSquare} label={t('forum')} onClick={() => setCurrentPage('forum')} color="red" className="px-8" />
-            <button onClick={() => setCurrentPage('liuli')} className="bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 text-indigo-700 px-8 py-2 font-bold transition-all flex items-center gap-2 border border-indigo-200">
+            <button onClick={() => {
+              if (currentUserRole === 'admin' || currentUserRole === 'liuli_member') {
+                setCurrentPage('liuli');
+              } else {
+                alert(language === 'zh' ? '仅琉璃成员可进入' : 'Liuli members only');
+              }
+            }} className={`bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 text-indigo-700 px-8 py-2 font-bold transition-all flex items-center gap-2 border border-indigo-200 ${currentUserRole !== 'admin' && currentUserRole !== 'liuli_member' ? 'opacity-50 cursor-not-allowed' : ''}`}>
               <Activity className="w-4 h-4" />
               琉璃
             </button>
