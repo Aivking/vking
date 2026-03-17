@@ -957,6 +957,37 @@ const App = () => {
   const [liuliMaterialDemandModal, setLiuliMaterialDemandModal] = useState(false);
   const [liuliMaterialSupplyModal, setLiuliMaterialSupplyModal] = useState(false);
   const [liuliActiveTab, setLiuliActiveTab] = useState('flights');
+  const [productionReports, setProductionReports] = useState([]);
+  const [productionReportsLoading, setProductionReportsLoading] = useState(false);
+
+  // 获取产出上报数据
+  const fetchProductionReports = async () => {
+    if (!supabase) return;
+    setProductionReportsLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('production_reports')
+        .select('*')
+        .order('reported_at', { ascending: false });
+      if (!error && data) setProductionReports(data);
+    } catch (_) {}
+    setProductionReportsLoading(false);
+  };
+
+  // 按董事名分组的产出数据
+  const productionByDirector = useMemo(() => {
+    const map = {};
+    for (const r of productionReports) {
+      if (!map[r.director]) {
+        map[r.director] = { director: r.director, company: r.company, company_code: r.company_code, reported_at: r.reported_at, planets: {} };
+      }
+      if (!map[r.director].planets[r.planet]) {
+        map[r.director].planets[r.planet] = [];
+      }
+      map[r.director].planets[r.planet].push({ ticker: r.ticker, daily_output: r.daily_output });
+    }
+    return Object.values(map);
+  }, [productionReports]);
 
   const parseInterestCountFromRemark = (remark) => {
     if (!remark) return null;
@@ -5728,6 +5759,16 @@ const App = () => {
               >
                 {language === 'zh' ? '建材生产信息' : 'Material Supply'}
               </button>
+              <button
+                onClick={() => { setLiuliActiveTab('output_dashboard'); fetchProductionReports(); }}
+                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
+                  liuliActiveTab === 'output_dashboard'
+                    ? 'bg-emerald-500 text-white border-emerald-500'
+                    : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
+                }`}
+              >
+                {language === 'zh' ? '产出看板' : 'Output Dashboard'}
+              </button>
             </div>
           </div>
 
@@ -6544,6 +6585,53 @@ const App = () => {
                   ))
                 )}
               </div>
+            </div>
+            )}
+
+            {liuliActiveTab === 'output_dashboard' && (
+            <div className="bg-white border border-emerald-200 p-5 shadow-sm">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-lg font-black">{language === 'zh' ? '产出看板' : 'Output Dashboard'}</h2>
+                <button
+                  onClick={fetchProductionReports}
+                  disabled={productionReportsLoading}
+                  className="bg-gradient-to-r from-emerald-100 to-emerald-50 hover:from-emerald-200 hover:to-emerald-100 text-emerald-700 px-4 py-2 text-sm font-bold transition-all border border-emerald-300 disabled:opacity-40"
+                >
+                  {productionReportsLoading ? (language === 'zh' ? '加载中...' : 'Loading...') : (language === 'zh' ? '刷新' : 'Refresh')}
+                </button>
+              </div>
+              {productionByDirector.length === 0 ? (
+                <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无产出上报数据' : 'No production reports yet'}</div>
+              ) : (
+                <div className="space-y-4">
+                  {productionByDirector.map((d) => (
+                    <div key={d.director} className="border border-emerald-200 p-4">
+                      <div className="flex items-center justify-between mb-2">
+                        <div>
+                          <span className="font-bold text-gray-800">{d.director}</span>
+                          {d.company && <span className="text-xs text-gray-500 ml-2">[{d.company}]</span>}
+                        </div>
+                        <div className="text-xs text-gray-400">
+                          {d.reported_at ? new Date(d.reported_at).toLocaleString('zh-CN') : ''}
+                        </div>
+                      </div>
+                      {Object.entries(d.planets).map(([planet, items]) => (
+                        <div key={planet} className="mb-2">
+                          <div className="text-xs font-bold text-emerald-700 mb-1">{planet}</div>
+                          <div className="flex flex-wrap gap-1">
+                            {items.map((item) => (
+                              <span key={item.ticker} className="inline-flex items-center bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[11px]">
+                                <span className="font-bold text-gray-700">{item.ticker}</span>
+                                <span className="text-emerald-600 ml-1">{Math.round(Number(item.daily_output) * 100) / 100}/d</span>
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
             )}
           </div>
