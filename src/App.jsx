@@ -430,8 +430,8 @@ const translations = {
     revokeLiuliMember: '取消琉璃成员',
     memberGranted: '已授予琉璃成员资格',
     memberRevoked: '已取消琉璃成员资格',
-    membershipUpdateFailed: '成员资格更新失败',
     liuliMemberRequired: '仅琉璃成员可使用成员理财 (9%/周)',
+    membershipUpdateFailed: '成员资格更新失败',
     totalBalance: '资金余额',
     injectionAndDeposit: '注资+存款+利息',
     // 表格
@@ -798,8 +798,8 @@ const translations = {
     revokeLiuliMember: 'Revoke Liuli Member',
     memberGranted: 'Liuli membership granted',
     memberRevoked: 'Liuli membership revoked',
-    membershipUpdateFailed: 'Membership update failed',
     liuliMemberRequired: 'Only Liuli members can use Member Wealth (9%/week)',
+    membershipUpdateFailed: 'Membership update failed',
     totalBalance: 'Total Balance',
     injectionAndDeposit: 'Injection+Deposit+Interest',
     // Table
@@ -927,36 +927,6 @@ const App = () => {
   const [currentPage, setCurrentPage] = useState('bank'); // 'bank', 'loans', 'forum', 'planet', 'assets', 'fund', 'bonds'
   const [expandedPosts, setExpandedPosts] = useState(new Set()); // 展开的帖子ID
 
-  const [liuliFlights, setLiuliFlights] = useState([]);
-  const [liuliProducts, setLiuliProducts] = useState([]);
-  const [liuliFlightForm, setLiuliFlightForm] = useState({ name: '', from: '', to: '', note: '', roundTrip: false, returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
-  const [liuliProductForm, setLiuliProductForm] = useState({ name: '', itemName: '', perDay: '', pickup: '', note: '' });
-  const [liuliMaterialDemandForm, setLiuliMaterialDemandForm] = useState({
-    applicant: '',
-    items: [{ materialName: '', quantity: '' }],
-    note: ''
-  });
-  const [liuliMaterialDemandXitInput, setLiuliMaterialDemandXitInput] = useState('');
-  const [liuliMaterialSupplyForm, setLiuliMaterialSupplyForm] = useState({
-    producer: '',
-    items: [{ materialName: '', perDay: '', unitPrice: '' }],
-    pickup: '',
-    note: ''
-  });
-
-  const [liuliFlightSearch, setLiuliFlightSearch] = useState('');
-  const [liuliProductSearch, setLiuliProductSearch] = useState('');
-  const [liuliMaterialDemandSearch, setLiuliMaterialDemandSearch] = useState('');
-  const [liuliMaterialSupplySearch, setLiuliMaterialSupplySearch] = useState('');
-  const [liuliFlightPage, setLiuliFlightPage] = useState(1);
-  const [liuliProductPage, setLiuliProductPage] = useState(1);
-  const [liuliMaterialDemandPage, setLiuliMaterialDemandPage] = useState(1);
-  const [liuliMaterialSupplyPage, setLiuliMaterialSupplyPage] = useState(1);
-  const [liuliFlightModal, setLiuliFlightModal] = useState(false);
-  const [liuliProductModal, setLiuliProductModal] = useState(false);
-  const [liuliMaterialDemandModal, setLiuliMaterialDemandModal] = useState(false);
-  const [liuliMaterialSupplyModal, setLiuliMaterialSupplyModal] = useState(false);
-  const [liuliActiveTab, setLiuliActiveTab] = useState('flights');
   const [productionReports, setProductionReports] = useState([]);
   const [productionReportsLoading, setProductionReportsLoading] = useState(false);
   const [productionSearch, setProductionSearch] = useState('');
@@ -1024,11 +994,18 @@ const App = () => {
     return null;
   };
 
+  const parseLockedInterest = (remark) => {
+    if (!remark) return 0;
+    const m = String(remark).match(/lockedInterest:\s*([+-]?\d*\.?\d+)/);
+    return m ? parseFloat(m[1]) || 0 : 0;
+  };
+
   const getAccruedInterestForTx = (tx, interestExpenseRecords = []) => {
     if (!tx) return 0;
     const principal = parseFloat(tx.principal) || 0;
     const rate = parseFloat(tx.rate) || 0;
-    if (!principal || !rate) return 0;
+    const locked = parseLockedInterest(tx.remark);
+    if (!principal || !rate) return locked;
 
     const overrideCycles = parseInterestCountFromRemark(tx.remark);
     const txTime = tx.timestamp ? new Date(tx.timestamp) : null;
@@ -1043,7 +1020,65 @@ const App = () => {
           : 0);
 
     const weekly = principal * rate / 100;
-    return weekly * (cycles || 0);
+    return locked + weekly * (cycles || 0);
+  };
+
+  // 合并同用户同产品类型的存款/注资记录，利息分段计算
+  const mergeIntoExistingBill = async (newTx) => {
+    const type = newTx.type; // 'deposit' or 'injection'
+    const clientName = (newTx.client || newTx.created_by || '').trim();
+    if (!clientName) return false;
+
+    const productType = type === 'deposit' ? (newTx.product_type || 'normal') : null;
+
+    // 查找同用户同类型已批准的记录（排除 rate=0 的利息残余记录）
+    const approved = (transactions || []).filter(t => t.status === 'approved');
+    const interestExpenseRecs = approved.filter(t =>
+      t.type === 'interest_expense' &&
+      t.client === (type === 'deposit' ? '存款利息支出' : '注资利息支出')
+    );
+
+    const existing = approved.find(t => {
+      if (t.type !== type) return false;
+      if ((t.client || t.created_by) !== clientName) return false;
+      if (parseFloat(t.rate) === 0) return false; // 跳过利息残余
+      if (type === 'deposit' && (t.product_type || 'normal') !== productType) return false;
+      return true;
+    });
+
+    if (!existing) return false;
+
+    // 计算已有记录的当前累计利息（含之前的 lockedInterest）
+    const currentAccrued = getAccruedInterestForTx(existing, interestExpenseRecs);
+    const oldPrincipal = parseFloat(existing.principal) || 0;
+    const addPrincipal = parseFloat(newTx.principal) || 0;
+    const newPrincipal = oldPrincipal + addPrincipal;
+    const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+
+    // 注资可能利率不同，合并后用加权平均利率
+    const oldRate = parseFloat(existing.rate) || 0;
+    const newRate = parseFloat(newTx.rate) || oldRate;
+    const mergedRate = newPrincipal > 0
+      ? (oldPrincipal * oldRate + addPrincipal * newRate) / newPrincipal
+      : oldRate;
+
+    // 构建新的 remark：保留 lockedInterest，去掉旧的利息次数覆盖
+    const lockedStr = `lockedInterest:${parseFloat(currentAccrued.toFixed(3))}`;
+
+    const { error } = await supabase
+      .from('transactions')
+      .update({
+        principal: parseFloat(newPrincipal.toFixed(3)),
+        rate: parseFloat(mergedRate.toFixed(4)),
+        timestamp: now,
+        remark: lockedStr,
+        last_edited_by: currentUser?.username || 'system',
+        last_edited_at: now
+      })
+      .eq('id', existing.id);
+
+    if (error) throw error;
+    return true;
   };
 
   const parseBankAssetMeta = (tx) => {
@@ -1155,7 +1190,7 @@ const App = () => {
       available -= bondUsed;
     }
 
-    return { principals, interest, withdrawn, available };
+    return { principals: Math.max(0, principals), interest: Math.max(0, interest), withdrawn, available: Math.max(0, available) };
   };
 
   const applyApprovedWithdrawalToBills = async (withdrawTx) => {
@@ -1354,524 +1389,6 @@ const App = () => {
   // 利息管理 State
   const [interestManageModal, setInterestManageModal] = useState(false);
 
-  const liuliFlightsForTable = useMemo(() => {
-    const approved = (transactions || []).filter(tx => tx.status === 'approved');
-    return approved
-      .filter(tx => tx.type === 'liuli_flight')
-      .map(tx => {
-        const remark = String(tx.remark || '');
-        const toMatch = remark.match(/(?:^|\n)to:\s*(.*?)(?:\n|$)/i);
-        const noteMatch = remark.match(/(?:^|\n)note:\s*([\s\S]*?)(?=\nreturnFrom:|\nreturnTo:|\nreturnNote:|\nshipType:|$)/i);
-        const returnFromMatch = remark.match(/(?:^|\n)returnFrom:\s*(.*?)(?:\n|$)/i);
-        const returnToMatch = remark.match(/(?:^|\n)returnTo:\s*(.*?)(?:\n|$)/i);
-        const returnNoteMatch = remark.match(/(?:^|\n)returnNote:\s*([\s\S]*?)(?=\nshipType:|$)/i);
-        const shipTypeMatch = remark.match(/(?:^|\n)shipType:\s*(.*?)(?:\n|$)/i);
-        const to = toMatch ? (toMatch[1] || '').trim() : (tx.rate != null ? String(tx.rate) : '');
-        const note = (noteMatch ? (noteMatch[1] || '').trim() : remark)
-          .replace(/\n?(returnFrom|returnTo|returnNote|shipType):\s*[^\n]*/gi, '').trim();
-        const returnFrom = returnFromMatch ? (returnFromMatch[1] || '').trim() : '';
-        const returnTo = returnToMatch ? (returnToMatch[1] || '').trim() : '';
-        const returnNote = returnNoteMatch ? (returnNoteMatch[1] || '').trim() : '';
-        const shipType = shipTypeMatch ? (shipTypeMatch[1] || '').trim() : 'SCB';
-        return {
-          id: tx.id,
-          name: tx.client || '',
-          from: tx.product_type || '',
-          to,
-          note,
-          returnFrom,
-          returnTo,
-          returnNote,
-          shipType,
-          created_at: tx.timestamp || ''
-        };
-      });
-  }, [transactions]);
-
-  const liuliFlightsFiltered = useMemo(() => {
-    const q = (liuliFlightSearch || '').trim().toLowerCase();
-    if (!q) return liuliFlightsForTable || [];
-    return (liuliFlightsForTable || []).filter(f => {
-      const hay = [f.name, f.from, f.to, f.note, f.returnFrom, f.returnTo, f.returnNote, f.shipType].map(x => String(x || '').toLowerCase()).join(' ');
-      return hay.includes(q);
-    });
-  }, [liuliFlightsForTable, liuliFlightSearch]);
-
-  const liuliFlightsPageSize = 12;
-  const liuliFlightsTotalPages = useMemo(() => {
-    const len = (liuliFlightsFiltered || []).length;
-    return Math.max(1, Math.ceil(len / liuliFlightsPageSize));
-  }, [liuliFlightsFiltered]);
-
-  const liuliFlightsPaged = useMemo(() => {
-    const page = Math.min(Math.max(1, liuliFlightPage), liuliFlightsTotalPages);
-    const start = (page - 1) * liuliFlightsPageSize;
-    return (liuliFlightsFiltered || []).slice(start, start + liuliFlightsPageSize);
-  }, [liuliFlightsFiltered, liuliFlightPage, liuliFlightsTotalPages]);
-
-  useEffect(() => {
-    setLiuliFlightPage(1);
-  }, [liuliFlightSearch]);
-
-  useEffect(() => {
-    setLiuliFlightPage(p => Math.min(Math.max(1, p), liuliFlightsTotalPages));
-  }, [liuliFlightsTotalPages]);
-
-  const liuliProductsForTable = useMemo(() => {
-    const approved = (transactions || []).filter(tx => tx.status === 'approved');
-    return approved
-      .filter(tx => tx.type === 'liuli_product')
-      .map(tx => {
-        const remark = String(tx.remark || '');
-        const pickupMatch = remark.match(/(?:^|\n)pickup:\s*(.*?)(?:\n|$)/i);
-        const noteMatch = remark.match(/(?:^|\n)note:\s*([\s\S]*)$/i);
-        const pickup = pickupMatch ? (pickupMatch[1] || '').trim() : '';
-        const note = noteMatch ? (noteMatch[1] || '').trim() : '';
-        return {
-          id: tx.id,
-          name: tx.client || '',
-          itemName: tx.product_type || '',
-          perDay: parseFloat(tx.principal) || 0,
-          pickup,
-          note,
-          created_at: tx.timestamp || ''
-        };
-      });
-  }, [transactions]);
-
-  const liuliProductsFiltered = useMemo(() => {
-    const q = (liuliProductSearch || '').trim().toLowerCase();
-    if (!q) return liuliProductsForTable || [];
-    return (liuliProductsForTable || []).filter(p => {
-      const hay = [p.name, p.itemName, p.perDay, p.pickup, p.note].map(x => String(x || '').toLowerCase()).join(' ');
-      return hay.includes(q);
-    });
-  }, [liuliProductsForTable, liuliProductSearch]);
-
-  const liuliProductsPageSize = 24;
-  const liuliProductsTotalPages = useMemo(() => {
-    const len = (liuliProductsFiltered || []).length;
-    return Math.max(1, Math.ceil(len / liuliProductsPageSize));
-  }, [liuliProductsFiltered]);
-
-  const liuliProductsPaged = useMemo(() => {
-    const page = Math.min(Math.max(1, liuliProductPage), liuliProductsTotalPages);
-    const start = (page - 1) * liuliProductsPageSize;
-    return (liuliProductsFiltered || []).slice(start, start + liuliProductsPageSize);
-  }, [liuliProductsFiltered, liuliProductPage, liuliProductsTotalPages]);
-
-  useEffect(() => {
-    setLiuliProductPage(1);
-  }, [liuliProductSearch]);
-
-  useEffect(() => {
-    setLiuliProductPage(p => Math.min(Math.max(1, p), liuliProductsTotalPages));
-  }, [liuliProductsTotalPages]);
-
-  const liuliMaterialDemandsForTable = useMemo(() => {
-    const approved = (transactions || []).filter(tx => tx.status === 'approved');
-    return approved
-      .filter(tx => tx.type === 'liuli_material_demand')
-      .map(tx => {
-        const remark = String(tx.remark || '');
-        const itemsMatch = remark.match(/(?:^|\n)items:\s*(.*?)(?:\n|$)/i);
-        const summaryMatch = remark.match(/(?:^|\n)summary:\s*([\s\S]*?)(?=\nnote:|$)/i);
-        const noteMatch = remark.match(/(?:^|\n)note:\s*([\s\S]*)$/i);
-        let items = [];
-        if (itemsMatch && itemsMatch[1]) {
-          try {
-            const raw = decodeURIComponent((itemsMatch[1] || '').trim());
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) {
-              items = parsed
-                .map(it => ({
-                  materialName: String(it?.materialName || '').trim(),
-                  quantity: Math.round(Number(it?.quantity) || 0)
-                }))
-                .filter(it => it.materialName && it.quantity > 0);
-            }
-          } catch (_) {
-            items = [];
-          }
-        }
-        return {
-          id: tx.id,
-          applicant: tx.client || tx.created_by || '',
-          items,
-          summary: summaryMatch ? (summaryMatch[1] || '').trim() : remark,
-          note: noteMatch ? (noteMatch[1] || '').trim() : '',
-          created_at: tx.timestamp || '',
-          created_by: tx.created_by || ''
-        };
-      });
-  }, [transactions]);
-
-  const liuliMaterialDemandsFiltered = useMemo(() => {
-    const q = (liuliMaterialDemandSearch || '').trim().toLowerCase();
-    if (!q) return liuliMaterialDemandsForTable || [];
-    return (liuliMaterialDemandsForTable || []).filter(d => {
-      const itemsText = (d.items || []).map(it => `${it.materialName} ${it.quantity}`).join(' ');
-      const hay = [d.applicant, d.summary, d.note, itemsText].map(x => String(x || '').toLowerCase()).join(' ');
-      return hay.includes(q);
-    });
-  }, [liuliMaterialDemandsForTable, liuliMaterialDemandSearch]);
-
-  const liuliMaterialDemandPageSize = 12;
-  const liuliMaterialDemandTotalPages = useMemo(() => {
-    const len = (liuliMaterialDemandsFiltered || []).length;
-    return Math.max(1, Math.ceil(len / liuliMaterialDemandPageSize));
-  }, [liuliMaterialDemandsFiltered]);
-
-  const liuliMaterialDemandsPaged = useMemo(() => {
-    const page = Math.min(Math.max(1, liuliMaterialDemandPage), liuliMaterialDemandTotalPages);
-    const start = (page - 1) * liuliMaterialDemandPageSize;
-    return (liuliMaterialDemandsFiltered || []).slice(start, start + liuliMaterialDemandPageSize);
-  }, [liuliMaterialDemandsFiltered, liuliMaterialDemandPage, liuliMaterialDemandTotalPages]);
-
-  useEffect(() => {
-    setLiuliMaterialDemandPage(1);
-  }, [liuliMaterialDemandSearch]);
-
-  useEffect(() => {
-    setLiuliMaterialDemandPage(p => Math.min(Math.max(1, p), liuliMaterialDemandTotalPages));
-  }, [liuliMaterialDemandTotalPages]);
-
-  const liuliMaterialSuppliesForTable = useMemo(() => {
-    const approved = (transactions || []).filter(tx => tx.status === 'approved');
-    return approved
-      .filter(tx => tx.type === 'liuli_material_supply')
-      .map(tx => {
-        const remark = String(tx.remark || '');
-        const pickupMatch = remark.match(/(?:^|\n)pickup:\s*(.*?)(?:\n|$)/i);
-        const noteMatch = remark.match(/(?:^|\n)note:\s*([\s\S]*)$/i);
-        return {
-          id: tx.id,
-          producer: tx.client || '',
-          materialName: tx.product_type || '',
-          perDay: Math.round(parseFloat(tx.principal) || 0),
-          unitPrice: parseFloat(tx.rate) || 0,
-          pickup: pickupMatch ? (pickupMatch[1] || '').trim() : '',
-          note: noteMatch ? (noteMatch[1] || '').trim() : '',
-          created_at: tx.timestamp || ''
-        };
-      });
-  }, [transactions]);
-
-  const liuliMaterialSuppliesFiltered = useMemo(() => {
-    const q = (liuliMaterialSupplySearch || '').trim().toLowerCase();
-    if (!q) return liuliMaterialSuppliesForTable || [];
-    return (liuliMaterialSuppliesForTable || []).filter(s => {
-      const hay = [s.producer, s.materialName, s.perDay, s.unitPrice, s.pickup, s.note]
-        .map(x => String(x || '').toLowerCase())
-        .join(' ');
-      return hay.includes(q);
-    });
-  }, [liuliMaterialSuppliesForTable, liuliMaterialSupplySearch]);
-
-  const liuliMaterialSupplyPageSize = 12;
-  const liuliMaterialSupplyTotalPages = useMemo(() => {
-    const len = (liuliMaterialSuppliesFiltered || []).length;
-    return Math.max(1, Math.ceil(len / liuliMaterialSupplyPageSize));
-  }, [liuliMaterialSuppliesFiltered]);
-
-  const liuliMaterialSuppliesPaged = useMemo(() => {
-    const page = Math.min(Math.max(1, liuliMaterialSupplyPage), liuliMaterialSupplyTotalPages);
-    const start = (page - 1) * liuliMaterialSupplyPageSize;
-    return (liuliMaterialSuppliesFiltered || []).slice(start, start + liuliMaterialSupplyPageSize);
-  }, [liuliMaterialSuppliesFiltered, liuliMaterialSupplyPage, liuliMaterialSupplyTotalPages]);
-
-  useEffect(() => {
-    setLiuliMaterialSupplyPage(1);
-  }, [liuliMaterialSupplySearch]);
-
-  useEffect(() => {
-    setLiuliMaterialSupplyPage(p => Math.min(Math.max(1, p), liuliMaterialSupplyTotalPages));
-  }, [liuliMaterialSupplyTotalPages]);
-
-  const addLiuliMaterialDemand = async () => {
-    const applicant = (liuliMaterialDemandForm.applicant || '').trim() || currentUser?.username || '';
-    const note = (liuliMaterialDemandForm.note || '').trim();
-    const normalizedItems = (liuliMaterialDemandForm.items || [])
-      .map(it => ({
-        materialName: String(it?.materialName || '').trim(),
-        quantity: Number(it?.quantity)
-      }))
-      .filter(it => it.materialName && Number.isInteger(it.quantity) && it.quantity > 0);
-
-    if (!applicant) {
-      alert(language === 'zh' ? '请填写申请人' : 'Please fill in applicant');
-      return false;
-    }
-    if (normalizedItems.length === 0) {
-      alert(language === 'zh' ? '请至少填写一条有效建材（名称+整数数量）' : 'Please add at least one valid material item (integer quantity)');
-      return false;
-    }
-
-    try {
-      const summary = normalizedItems
-        .map(it => `${it.materialName} x ${it.quantity}`)
-        .join('\n');
-      const encodedItems = encodeURIComponent(JSON.stringify(normalizedItems));
-      const newItem = {
-        type: 'liuli_material_demand',
-        client: applicant,
-        principal: 0,
-        rate: 0,
-        product_type: '',
-        remark: `items:${encodedItems}\nsummary:${summary}\nnote:${note}`,
-        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
-        created_by: currentUser?.username || 'unknown',
-        creator_id: currentUser?.id || 'unknown',
-        status: 'approved'
-      };
-
-      const { error } = await supabase.from('transactions').insert([newItem]);
-      if (error) throw error;
-      await refreshTransactions();
-      setLiuliMaterialDemandForm({ applicant: '', items: [{ materialName: '', quantity: '' }], note: '' });
-      setLiuliMaterialDemandXitInput('');
-      return true;
-    } catch (e) {
-      alert((language === 'zh' ? '提交失败' : 'Submit failed') + ': ' + (e?.message || e));
-      return false;
-    }
-  };
-
-  const importLiuliMaterialDemandFromXit = () => {
-    const rawInput = String(liuliMaterialDemandXitInput || '').trim();
-    if (!rawInput) {
-      alert(language === 'zh' ? '请先粘贴 XIT/PRUNplanner JSON' : 'Please paste XIT/PRUNplanner JSON first');
-      return;
-    }
-
-    try {
-      let jsonText = rawInput;
-      const fenced = rawInput.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
-      if (fenced && fenced[1]) jsonText = fenced[1];
-
-      const parsed = JSON.parse(jsonText);
-      const matMap = new Map();
-      const visited = new Set();
-
-      const collectMaterials = (node) => {
-        if (!node || typeof node !== 'object') return;
-        if (visited.has(node)) return;
-        visited.add(node);
-
-        if (node.materials && typeof node.materials === 'object' && !Array.isArray(node.materials)) {
-          Object.entries(node.materials).forEach(([name, qty]) => {
-            const materialName = String(name || '').trim();
-            const quantity = Math.round(Number(qty));
-            if (!materialName || !Number.isFinite(quantity) || quantity <= 0) return;
-            matMap.set(materialName, (matMap.get(materialName) || 0) + quantity);
-          });
-        }
-
-        if (Array.isArray(node)) {
-          node.forEach(collectMaterials);
-          return;
-        }
-
-        Object.values(node).forEach(collectMaterials);
-      };
-
-      collectMaterials(parsed);
-
-      if (matMap.size === 0) {
-        alert(language === 'zh' ? '未识别到 materials 字段中的建材数据' : 'No materials found in JSON');
-        return;
-      }
-
-      const importedItems = Array.from(matMap.entries()).map(([materialName, quantity]) => ({
-        materialName,
-        quantity: String(Math.round(Number(quantity)))
-      }));
-
-      setLiuliMaterialDemandForm(prev => ({
-        ...prev,
-        items: importedItems
-      }));
-
-      alert(
-        language === 'zh'
-          ? `已导入 ${importedItems.length} 种建材`
-          : `Imported ${importedItems.length} material items`
-      );
-    } catch (e) {
-      alert((language === 'zh' ? 'XIT JSON 解析失败' : 'Failed to parse XIT JSON') + ': ' + (e?.message || e));
-    }
-  };
-
-  const deleteLiuliMaterialDemand = (id) => {
-    (async () => {
-      try {
-        const tx = (transactions || []).find(t => t.id === id);
-        if (!tx) return;
-        const isOwner = (tx.created_by && currentUser?.username && tx.created_by === currentUser.username);
-        if (!isOwner && currentUser?.role !== 'admin') {
-          alert(language === 'zh' ? '无权限删除' : 'No permission');
-          return;
-        }
-        const { error } = await supabase.from('transactions').delete().eq('id', id);
-        if (error) throw error;
-        await refreshTransactions();
-      } catch (e) {
-        alert((language === 'zh' ? '删除失败' : 'Delete failed') + ': ' + (e?.message || e));
-      }
-    })();
-  };
-
-  const addLiuliMaterialSupply = async () => {
-    const producer = (liuliMaterialSupplyForm.producer || '').trim() || currentUser?.username || '';
-    const pickup = (liuliMaterialSupplyForm.pickup || '').trim();
-    const note = (liuliMaterialSupplyForm.note || '').trim();
-    const normalizedItems = (liuliMaterialSupplyForm.items || [])
-      .map(it => ({
-        materialName: String(it?.materialName || '').trim(),
-        perDay: Number(it?.perDay),
-        unitPrice: parseFloat(it?.unitPrice)
-      }))
-      .filter(it =>
-        it.materialName &&
-        Number.isInteger(it.perDay) &&
-        it.perDay >= 0 &&
-        Number.isFinite(it.unitPrice) &&
-        it.unitPrice >= 0
-      );
-
-    if (!producer) {
-      alert(language === 'zh' ? '请填写生产者名称' : 'Please fill in producer');
-      return false;
-    }
-    if (normalizedItems.length === 0) {
-      alert(language === 'zh' ? '请至少填写一条有效建材（名称+整数日产量+单价）' : 'Please add at least one valid material item (integer output + price)');
-      return false;
-    }
-
-    try {
-      const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
-      const rows = normalizedItems.map(it => ({
-        type: 'liuli_material_supply',
-        client: producer,
-        principal: it.perDay,
-        rate: it.unitPrice,
-        product_type: it.materialName,
-        remark: `pickup:${pickup}\nnote:${note}`,
-        timestamp: now,
-        created_by: currentUser?.username || 'unknown',
-        creator_id: currentUser?.id || 'unknown',
-        status: 'approved'
-      }));
-
-      const { error } = await supabase.from('transactions').insert(rows);
-      if (error) throw error;
-      await refreshTransactions();
-      setLiuliMaterialSupplyForm({
-        producer: '',
-        items: [{ materialName: '', perDay: '', unitPrice: '' }],
-        pickup: '',
-        note: ''
-      });
-      return true;
-    } catch (e) {
-      alert((language === 'zh' ? '登记失败' : 'Add failed') + ': ' + (e?.message || e));
-      return false;
-    }
-  };
-
-  const deleteLiuliMaterialSupply = (id) => {
-    (async () => {
-      try {
-        const tx = (transactions || []).find(t => t.id === id);
-        if (!tx) return;
-        const isOwner = (tx.created_by && currentUser?.username && tx.created_by === currentUser.username);
-        if (!isOwner && currentUser?.role !== 'admin') {
-          alert(language === 'zh' ? '无权限删除' : 'No permission');
-          return;
-        }
-        const { error } = await supabase.from('transactions').delete().eq('id', id);
-        if (error) throw error;
-        await refreshTransactions();
-      } catch (e) {
-        alert((language === 'zh' ? '删除失败' : 'Delete failed') + ': ' + (e?.message || e));
-      }
-    })();
-  };
-
-  const addLiuliFlight = async () => {
-    const name = (liuliFlightForm.name || '').trim();
-    const from = (liuliFlightForm.from || '').trim();
-    const to = (liuliFlightForm.to || '').trim();
-    const note = (liuliFlightForm.note || '').trim();
-    const roundTrip = liuliFlightForm.roundTrip;
-    const returnFrom = (liuliFlightForm.returnFrom || '').trim();
-    const returnTo = (liuliFlightForm.returnTo || '').trim();
-    const returnNote = (liuliFlightForm.returnNote || '').trim();
-    const shipType = (liuliFlightForm.shipType || 'SCB').trim();
-
-    if (!name) {
-      alert(language === 'zh' ? '请填写名称' : 'Please fill in name');
-      return false;
-    }
-    if (!from || !to) {
-      alert(language === 'zh' ? '请填写出发地与目的地' : 'Please fill in From and To');
-      return false;
-    }
-    if (roundTrip && (!returnFrom || !returnTo)) {
-      alert(language === 'zh' ? '往返模式下请填写返程出发地与目的地' : 'Please fill in return From and To for round trip');
-      return false;
-    }
-
-    try {
-      let remark = `to:${to}\nnote:${note}`;
-      if (roundTrip) {
-        remark += `\nreturnFrom:${returnFrom}\nreturnTo:${returnTo}\nreturnNote:${returnNote}`;
-      }
-      remark += `\nshipType:${shipType}`;
-
-      const newItem = {
-        type: 'liuli_flight',
-        client: name,
-        principal: 0,
-        rate: 0,
-        product_type: from,
-        remark,
-        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
-        created_by: currentUser?.username || 'unknown',
-        creator_id: currentUser?.id || 'unknown',
-        status: 'approved'
-      };
-
-      const { error } = await supabase.from('transactions').insert([newItem]);
-      if (error) throw error;
-      await refreshTransactions();
-      setLiuliFlightForm({ name: '', from: '', to: '', note: '', roundTrip: false, returnFrom: '', returnTo: '', returnNote: '', shipType: 'SCB' });
-      return true;
-    } catch (e) {
-      alert((language === 'zh' ? '登记失败' : 'Add failed') + ': ' + (e?.message || e));
-      return false;
-    }
-  };
-
-  const deleteLiuliFlight = (id) => {
-    (async () => {
-      try {
-        const tx = (transactions || []).find(t => t.id === id);
-        if (!tx) return;
-        const isOwner = (tx.created_by && currentUser?.username && tx.created_by === currentUser.username);
-        if (!isOwner && currentUser?.role !== 'admin') {
-          alert(language === 'zh' ? '无权限删除' : 'No permission');
-          return;
-        }
-        const { error } = await supabase.from('transactions').delete().eq('id', id);
-        if (error) throw error;
-        await refreshTransactions();
-      } catch (e) {
-        alert((language === 'zh' ? '删除失败' : 'Delete failed') + ': ' + (e?.message || e));
-      }
-    })();
-  };
-
   const handleDeleteHolding = async (id) => {
     if (!window.confirm(language === 'zh' ? '确认删除该持仓记录？' : 'Confirm delete this holding?')) return;
     try {
@@ -1974,70 +1491,6 @@ const App = () => {
     } catch (e) {
       alert((language === 'zh' ? '更新失败' : 'Update failed') + ': ' + (e?.message || e));
     }
-  };
-
-  const addLiuliProduct = async () => {
-    const name = (liuliProductForm.name || '').trim();
-    const itemName = (liuliProductForm.itemName || '').trim();
-    const pickup = (liuliProductForm.pickup || '').trim();
-    const note = (liuliProductForm.note || '').trim();
-    const perDayNum = parseFloat(liuliProductForm.perDay);
-
-    if (!name) {
-      alert(language === 'zh' ? '请填写名称' : 'Please fill in name');
-      return false;
-    }
-    if (!itemName) {
-      alert(language === 'zh' ? '请填写物品名称' : 'Please fill in item name');
-      return false;
-    }
-    if (!Number.isFinite(perDayNum) || perDayNum < 0) {
-      alert(language === 'zh' ? '每天产量必须是有效数字' : 'Per-day output must be a valid number');
-      return false;
-    }
-
-    try {
-      const newItem = {
-        type: 'liuli_product',
-        client: name,
-        principal: perDayNum,
-        rate: 0,
-        product_type: itemName,
-        remark: `pickup:${pickup}\nnote:${note}`,
-        timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
-        created_by: currentUser?.username || 'unknown',
-        creator_id: currentUser?.id || 'unknown',
-        status: 'approved'
-      };
-
-      const { error } = await supabase.from('transactions').insert([newItem]);
-      if (error) throw error;
-      await refreshTransactions();
-      setLiuliProductForm({ name: '', itemName: '', perDay: '', pickup: '', note: '' });
-      return true;
-    } catch (e) {
-      alert((language === 'zh' ? '登记失败' : 'Add failed') + ': ' + (e?.message || e));
-      return false;
-    }
-  };
-
-  const deleteLiuliProduct = (id) => {
-    (async () => {
-      try {
-        const tx = (transactions || []).find(t => t.id === id);
-        if (!tx) return;
-        const isOwner = (tx.created_by && currentUser?.username && tx.created_by === currentUser.username);
-        if (!isOwner && currentUser?.role !== 'admin') {
-          alert(language === 'zh' ? '无权限删除' : 'No permission');
-          return;
-        }
-        const { error } = await supabase.from('transactions').delete().eq('id', id);
-        if (error) throw error;
-        await refreshTransactions();
-      } catch (e) {
-        alert((language === 'zh' ? '删除失败' : 'Delete failed') + ': ' + (e?.message || e));
-      }
-    })();
   };
 
   // 翻译函数
@@ -3881,6 +3334,141 @@ const App = () => {
     }
   };
 
+  // 一键合并已有同用户同类型的存款/注资记录
+  const handleMergeExistingBills = async () => {
+    if (!window.confirm(language === 'zh'
+      ? '将合并所有同用户同产品类型的存款/注资记录（利息分段计算），是否继续？'
+      : 'Merge all same-user same-product deposit/injection records? Continue?')) return;
+    try {
+      // 从 DB 获取最新数据
+      const { data: freshTx, error: fErr } = await supabase
+        .from('transactions')
+        .select('*')
+        .eq('status', 'approved');
+      if (fErr) throw fErr;
+      const approved = freshTx || [];
+
+      const interestExpDep = approved.filter(t => t.type === 'interest_expense' && t.client === '存款利息支出');
+      const interestExpInj = approved.filter(t => t.type === 'interest_expense' && t.client === '注资利息支出');
+
+      let mergedCount = 0;
+      let deletedCount = 0;
+
+      for (const billType of ['deposit', 'injection']) {
+        const interestRecs = billType === 'deposit' ? interestExpDep : interestExpInj;
+        const bills = approved.filter(t => t.type === billType && parseFloat(t.principal) >= 0);
+
+        // 按 client + product_type 分组
+        const groups = new Map();
+        for (const bill of bills) {
+          const client = (bill.client || bill.created_by || '').trim();
+          const pt = billType === 'deposit' ? (bill.product_type || 'normal') : '_';
+          const key = `${client}::${pt}`;
+          if (!groups.has(key)) groups.set(key, []);
+          groups.get(key).push(bill);
+        }
+
+        for (const [, group] of groups) {
+          if (group.length <= 1) continue;
+
+          // 按时间排序，保留最早的记录作为主记录
+          group.sort((a, b) => new Date(a.timestamp || 0) - new Date(b.timestamp || 0));
+
+          // 计算所有记录的利息总和与本金总和
+          let totalAccrued = 0;
+          let totalPrincipal = 0;
+          let weightedRateSum = 0;
+
+          for (const bill of group) {
+            const p = parseFloat(bill.principal) || 0;
+            const r = parseFloat(bill.rate) || 0;
+            totalPrincipal += p;
+            weightedRateSum += p * r;
+            // 只计算有利率的记录的利息
+            if (r > 0) {
+              totalAccrued += getAccruedInterestForTx(bill, interestRecs);
+            }
+          }
+
+          const mergedRate = totalPrincipal > 0 ? weightedRateSum / totalPrincipal : 0;
+          const now = new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false });
+          const lockedStr = totalAccrued > 0 ? `lockedInterest:${parseFloat(totalAccrued.toFixed(3))}` : '';
+          const keepId = group[0].id;
+
+          // 更新主记录
+          const { error: upErr } = await supabase
+            .from('transactions')
+            .update({
+              principal: parseFloat(totalPrincipal.toFixed(3)),
+              rate: parseFloat(mergedRate.toFixed(4)),
+              timestamp: now,
+              remark: lockedStr,
+              last_edited_by: currentUser?.username || 'system',
+              last_edited_at: now
+            })
+            .eq('id', keepId);
+          if (upErr) throw upErr;
+
+          // 删除其余记录
+          const deleteIds = group.slice(1).map(b => b.id);
+          for (const did of deleteIds) {
+            const { error: delErr } = await supabase
+              .from('transactions')
+              .delete()
+              .eq('id', did);
+            if (delErr) throw delErr;
+          }
+
+          mergedCount++;
+          deletedCount += deleteIds.length;
+        }
+      }
+
+      if (mergedCount === 0) {
+        alert(language === 'zh' ? '没有需要合并的记录' : 'No records to merge');
+      } else {
+        alert(language === 'zh'
+          ? `合并完成！合并了 ${mergedCount} 组记录，删除了 ${deletedCount} 条重复记录`
+          : `Merged ${mergedCount} groups, deleted ${deletedCount} duplicate records`);
+      }
+      await refreshTransactions();
+    } catch (e) {
+      alert((language === 'zh' ? '合并失败: ' : 'Merge failed: ') + e.message);
+    }
+  };
+
+  // 一键修复负数本金记录
+  const handleFixNegativeBills = async () => {
+    if (!window.confirm(language === 'zh'
+      ? '将把所有本金为负数的存款/注资记录置为0，是否继续？'
+      : 'This will set all negative-principal deposit/injection records to 0. Continue?')) return;
+    try {
+      const { data: negatives, error: qErr } = await supabase
+        .from('transactions')
+        .select('id, type, client, principal')
+        .in('type', ['deposit', 'injection'])
+        .lt('principal', 0);
+      if (qErr) throw qErr;
+      if (!negatives || negatives.length === 0) {
+        alert(language === 'zh' ? '没有找到负数记录' : 'No negative records found');
+        return;
+      }
+      for (const rec of negatives) {
+        const { error } = await supabase
+          .from('transactions')
+          .update({ principal: 0, rate: 0, remark: '负数修复（已置0）' })
+          .eq('id', rec.id);
+        if (error) throw error;
+      }
+      alert(language === 'zh'
+        ? `已修复 ${negatives.length} 条负数记录`
+        : `Fixed ${negatives.length} negative records`);
+      await refreshTransactions();
+    } catch (e) {
+      alert((language === 'zh' ? '修复失败: ' : 'Fix failed: ') + e.message);
+    }
+  };
+
   const handleForceSettleInterest = () => {
     setForceSettleConfirmStep(1);
   };
@@ -3957,13 +3545,7 @@ const App = () => {
     try {
       if (action === 'create') {
         if (payload.type === 'deposit') {
-          if (payload.product_type === 'risk') {
-            const targetClientName = String(payload.client || '').trim() || currentUser?.username;
-            const targetClientUser = getUserByName(targetClientName) || (targetClientName === currentUser?.username ? (getUserByName(currentUser?.username) || currentUser) : null);
-            if (!isLiuliEligibleUser(targetClientUser)) {
-              return alert(t('liuliMemberRequired'));
-            }
-          }
+          // 9%理财所有人可选，由管理员审批通过/拒绝
           if (payload.product_type === 'risk') {
             payload = { ...payload, rate: 9 };
           } else if (payload.product_type === 'risk5') {
@@ -4005,8 +3587,20 @@ const App = () => {
           timestamp: new Date().toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }),
           created_by: currentUser.username,
           creator_id: currentUser.id || 'unknown',
-          status: currentUser.role === 'admin' ? 'approved' : 'pending' 
+          status: currentUser.role === 'admin' ? 'approved' : 'pending'
         };
+
+        // admin 直接创建存款/注资时，尝试合并到已有同用户记录
+        if (newItem.status === 'approved' && ['deposit', 'injection'].includes(newItem.type)) {
+          const merged = await mergeIntoExistingBill(newItem);
+          if (merged) {
+            setModalOpen(false);
+            setFormData({ client: '', principal: '', rate: '' });
+            await refreshTransactions();
+            return;
+          }
+        }
+
         const { error } = await supabase.from('transactions').insert([newItem]);
         if (error) throw error;
 
@@ -4051,13 +3645,7 @@ const App = () => {
         }
         
         if (action === 'approve' && txToReview) {
-          if (txToReview.type === 'deposit' && txToReview.product_type === 'risk') {
-            const targetClientName = String(txToReview.client || txToReview.created_by || '').trim();
-            const targetClientUser = getUserByName(targetClientName);
-            if (!isLiuliEligibleUser(targetClientUser)) {
-              throw new Error(t('liuliMemberRequired'));
-            }
-          }
+          // 9%理财审批：管理员直接通过/拒绝，不再校验琉璃成员资格
 
           if (txToReview.type === 'fund_dividend_withdraw') {
             const available = (() => {
@@ -4121,6 +3709,17 @@ const App = () => {
 
             updateData.rate = principalPart;
             updateData.remark = `${txToReview.remark || ''} 本金:${principalPart.toFixed(3)} 分红:${dividendPart.toFixed(3)}`.trim();
+          }
+        }
+
+        // 审批存款/注资时，尝试合并到已有同用户记录
+        if (action === 'approve' && txToReview && ['deposit', 'injection'].includes(txToReview.type)) {
+          const merged = await mergeIntoExistingBill({ ...txToReview, status: 'approved' });
+          if (merged) {
+            // 合并成功，删除原 pending 记录
+            await supabase.from('transactions').delete().eq('id', payload);
+            await refreshTransactions();
+            return;
           }
         }
 
@@ -4820,10 +4419,10 @@ const App = () => {
   const currentUserRecord = getUserByName(currentUser?.username) || currentUser;
   const currentUserRole = currentUserRecord?.role || currentUser?.role || 'user';
   const isAdmin = currentUserRole === 'admin';
-  const canUseRiskDeposit = isLiuliEligibleUser(currentUserRecord);
+  const canUseRiskDeposit = true; // 所有人可选9%理财，需管理员审批
   const depositTargetNameForForm = isAdmin ? String(formData?.client || '').trim() : String(currentUser?.username || '').trim();
   const depositTargetUserForForm = depositTargetNameForForm ? (getUserByName(depositTargetNameForForm) || (depositTargetNameForForm === currentUser?.username ? currentUserRecord : null)) : null;
-  const canSelectRiskDeposit = modalType === 'deposit' ? isLiuliEligibleUser(depositTargetUserForForm) : canUseRiskDeposit;
+  const canSelectRiskDeposit = true; // 所有人可选9%理财，需管理员审批
 
   const accountUsersFiltered = (() => {
     const q = String(accountSearch || '').trim().toLowerCase();
@@ -4888,9 +4487,13 @@ const App = () => {
       const otherIds = row.source_ids.slice(1);
 
       if (field === 'settlement_count') {
+        // 查找原记录保留 lockedInterest
+        const origTx = (transactions || []).find(t => t.id === repId);
+        const existingLocked = parseLockedInterest(origTx?.remark);
+        const lockedPart = existingLocked > 0 ? `\nlockedInterest:${existingLocked}` : '';
         const { error } = await supabase
           .from('transactions')
-          .update({ remark: `${t('interestCountPrefix')}:${Math.round(numValue)}` })
+          .update({ remark: `${t('interestCountPrefix')}:${Math.round(numValue)}${lockedPart}` })
           .eq('id', repId);
         if (error) throw error;
         return;
@@ -5714,977 +5317,6 @@ const App = () => {
               </div>
             </div>
           )}
-        </div>
-      </div>
-    );
-  }
-
-  if (currentPage === 'liuli') {
-    if (currentUserRole !== 'admin' && currentUserRole !== 'liuli_member') {
-      setCurrentPage('bank');
-      return null;
-    }
-    return (
-      <div className="min-h-screen bg-[#F0FAF4] text-gray-800 p-4 md:p-8 font-sans">
-        <div className="max-w-7xl mx-auto space-y-6">
-          <div className="flex items-center justify-between">
-            <button
-              onClick={() => setCurrentPage('bank')}
-              className="bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-medium transition-colors border border-emerald-200 flex items-center gap-2"
-            >
-              {language === 'zh' ? '返回主页' : 'Back'}
-            </button>
-            <div className="text-right">
-              <h1 className="text-3xl font-black tracking-wide bg-gradient-to-r from-emerald-400 via-teal-500 to-green-600 bg-clip-text text-transparent animate-gradient">琉璃</h1>
-              <div className="text-xs text-gray-500">Liuli</div>
-            </div>
-          </div>
-
-          <div className="bg-white border border-emerald-200 p-2">
-            <div className="flex items-center gap-2 overflow-x-auto">
-              <button
-                onClick={() => setLiuliActiveTab('flights')}
-                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
-                  liuliActiveTab === 'flights'
-                    ? 'bg-emerald-500 text-white border-emerald-500'
-                    : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
-                }`}
-              >
-                {language === 'zh' ? '飞船航班信息' : 'Flights'}
-              </button>
-              <button
-                onClick={() => setLiuliActiveTab('productivity')}
-                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
-                  liuliActiveTab === 'productivity'
-                    ? 'bg-emerald-500 text-white border-emerald-500'
-                    : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
-                }`}
-              >
-                {language === 'zh' ? '生产力信息' : 'Productivity'}
-              </button>
-              <button
-                onClick={() => setLiuliActiveTab('material_requests')}
-                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
-                  liuliActiveTab === 'material_requests'
-                    ? 'bg-emerald-500 text-white border-emerald-500'
-                    : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
-                }`}
-              >
-                {language === 'zh' ? '建材汇总申请' : 'Material Requests'}
-              </button>
-              <button
-                onClick={() => setLiuliActiveTab('material_supply')}
-                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
-                  liuliActiveTab === 'material_supply'
-                    ? 'bg-emerald-500 text-white border-emerald-500'
-                    : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
-                }`}
-              >
-                {language === 'zh' ? '建材生产信息' : 'Material Supply'}
-              </button>
-              <button
-                onClick={() => { setLiuliActiveTab('output_dashboard'); fetchProductionReports(); }}
-                className={`px-4 py-2 text-sm font-bold border transition-colors whitespace-nowrap ${
-                  liuliActiveTab === 'output_dashboard'
-                    ? 'bg-emerald-500 text-white border-emerald-500'
-                    : 'bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50'
-                }`}
-              >
-                {language === 'zh' ? '产出看板' : 'Output Dashboard'}
-              </button>
-            </div>
-          </div>
-
-          <div className="space-y-6">
-            {liuliFlightModal ? (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-                <div className="bg-white border-2 border-emerald-200 shadow-2xl max-w-lg w-full p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="font-black text-lg">{language === 'zh' ? '飞船航班登记' : 'Flight Register'}</div>
-                    <button
-                      onClick={() => setLiuliFlightModal(false)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
-                    >
-                      <X className="w-6 h-6" />
-                    </button>
-                  </div>
-
-                  <input
-                    value={liuliFlightForm.name}
-                    onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder={language === 'zh' ? '名称' : 'Name'}
-                    className="w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                  />
-                  <div className="grid grid-cols-2 gap-3 mt-3">
-                    <input
-                      value={liuliFlightForm.from}
-                      onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, from: e.target.value }))}
-                      placeholder={language === 'zh' ? '出发地' : 'From'}
-                      className="border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                    />
-                    <input
-                      value={liuliFlightForm.to}
-                      onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, to: e.target.value }))}
-                      placeholder={language === 'zh' ? '目的地' : 'To'}
-                      className="border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                    />
-                  </div>
-                  <textarea
-                    value={liuliFlightForm.note}
-                    onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, note: e.target.value }))}
-                    placeholder={language === 'zh' ? '注释' : 'Note'}
-                    rows={2}
-                    className="mt-3 w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200 resize-none"
-                  />
-                  <select
-                    value={liuliFlightForm.shipType}
-                    onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, shipType: e.target.value }))}
-                    className="mt-3 w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                  >
-                    <option value="SCB">SCB (500/500)</option>
-                    <option value="WCB">WCB (3000/1000)</option>
-                    <option value="LCB">LCB (2000/2000)</option>
-                    <option value="HCB">HCB (5000/5000)</option>
-                    <option value="VCB">VCB (1000/3000)</option>
-                  </select>
-                  <div className="mt-3 flex items-center gap-2">
-                    <input
-                      type="checkbox"
-                      id="liuliRoundTrip"
-                      checked={liuliFlightForm.roundTrip}
-                      onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, roundTrip: e.target.checked }))}
-                      className="w-4 h-4 text-teal-600 border-2 border-emerald-100 rounded focus:ring-2 focus:ring-emerald-300"
-                    />
-                    <label htmlFor="liuliRoundTrip" className="text-sm text-gray-700 select-none cursor-pointer">
-                      {language === 'zh' ? '往返' : 'Round Trip'}
-                    </label>
-                  </div>
-                  {liuliFlightForm.roundTrip && (
-                    <>
-                      <div className="grid grid-cols-2 gap-3 mt-3">
-                        <input
-                          value={liuliFlightForm.returnFrom}
-                          onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, returnFrom: e.target.value }))}
-                          placeholder={language === 'zh' ? '返程出发地' : 'Return From'}
-                          className="border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                        />
-                        <input
-                          value={liuliFlightForm.returnTo}
-                          onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, returnTo: e.target.value }))}
-                          placeholder={language === 'zh' ? '返程目的地' : 'Return To'}
-                          className="border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                        />
-                      </div>
-                      <textarea
-                        value={liuliFlightForm.returnNote}
-                        onChange={(e) => setLiuliFlightForm(prev => ({ ...prev, returnNote: e.target.value }))}
-                        placeholder={language === 'zh' ? '返程注释' : 'Return Note'}
-                        rows={2}
-                        className="mt-3 w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200 resize-none"
-                      />
-                    </>
-                  )}
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setLiuliFlightModal(false)}
-                      className="w-full bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-bold transition-colors border border-emerald-200"
-                    >
-                      {language === 'zh' ? '取消' : 'Cancel'}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const ok = await addLiuliFlight();
-                        if (ok) setLiuliFlightModal(false);
-                      }}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold transition-colors"
-                    >
-                      {language === 'zh' ? '登记航班' : 'Add'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {liuliProductModal ? (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-                <div className="bg-white border-2 border-emerald-200 shadow-2xl max-w-lg w-full p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="font-black text-lg">{language === 'zh' ? '生产力登记' : 'Productivity Register'}</div>
-                    <button
-                      onClick={() => setLiuliProductModal(false)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
-                    >
-                      <X className="w-6 h-6" />
-                    </button>
-                  </div>
-
-                  <input
-                    value={liuliProductForm.name}
-                    onChange={(e) => setLiuliProductForm(prev => ({ ...prev, name: e.target.value }))}
-                    placeholder={language === 'zh' ? '名称' : 'Name'}
-                    className="w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                  />
-                  <input
-                    value={liuliProductForm.itemName}
-                    onChange={(e) => setLiuliProductForm(prev => ({ ...prev, itemName: e.target.value }))}
-                    placeholder={language === 'zh' ? '物品名称' : 'Item Name'}
-                    className="mt-3 w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                  />
-                  <div className="grid grid-cols-2 gap-3 mt-3">
-                    <input
-                      value={liuliProductForm.perDay}
-                      onChange={(e) => setLiuliProductForm(prev => ({ ...prev, perDay: e.target.value }))}
-                      placeholder={language === 'zh' ? '每天产量' : 'Per Day'}
-                      type="number"
-                      step="0.001"
-                      className="border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                    />
-                    <input
-                      value={liuliProductForm.pickup}
-                      onChange={(e) => setLiuliProductForm(prev => ({ ...prev, pickup: e.target.value }))}
-                      placeholder={language === 'zh' ? '取货地' : 'Pickup'}
-                      className="border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                    />
-                  </div>
-                  <textarea
-                    value={liuliProductForm.note}
-                    onChange={(e) => setLiuliProductForm(prev => ({ ...prev, note: e.target.value }))}
-                    placeholder={language === 'zh' ? '注释' : 'Note'}
-                    rows={2}
-                    className="mt-3 w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200 resize-none"
-                  />
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setLiuliProductModal(false)}
-                      className="w-full bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-bold transition-colors border border-emerald-200"
-                    >
-                      {language === 'zh' ? '取消' : 'Cancel'}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const ok = await addLiuliProduct();
-                        if (ok) setLiuliProductModal(false);
-                      }}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold transition-colors"
-                    >
-                      {language === 'zh' ? '登记产量' : 'Add'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {liuliMaterialDemandModal ? (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-                <div className="bg-white border-2 border-emerald-200 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="font-black text-lg">{language === 'zh' ? '建材汇总申请' : 'Material Request Summary'}</div>
-                    <button
-                      onClick={() => setLiuliMaterialDemandModal(false)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
-                    >
-                      <X className="w-6 h-6" />
-                    </button>
-                  </div>
-
-                  <input
-                    value={liuliMaterialDemandForm.applicant}
-                    onChange={(e) => setLiuliMaterialDemandForm(prev => ({ ...prev, applicant: e.target.value }))}
-                    placeholder={language === 'zh' ? '申请人（默认当前账号）' : 'Applicant (default current user)'}
-                    className="w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                  />
-                  <div className="mt-3 border-2 border-emerald-100 p-3 space-y-2">
-                    <div className="text-sm font-semibold text-gray-700">
-                      {language === 'zh' ? 'XIT/PRUNplanner 快捷导入（JSON）' : 'XIT/PRUNplanner Quick Import (JSON)'}
-                    </div>
-                    <textarea
-                      value={liuliMaterialDemandXitInput}
-                      onChange={(e) => setLiuliMaterialDemandXitInput(e.target.value)}
-                      placeholder={language === 'zh'
-                        ? '粘贴 XIT JSON（会自动提取 groups/materials）'
-                        : 'Paste XIT JSON (extracts groups/materials automatically)'}
-                      rows={4}
-                      className="w-full border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 resize-y"
-                    />
-                    <div className="flex justify-end">
-                      <button
-                        type="button"
-                        onClick={importLiuliMaterialDemandFromXit}
-                        className="text-xs px-3 py-1.5 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100 font-semibold"
-                      >
-                        {language === 'zh' ? '解析导入建材明细' : 'Parse & Import'}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="mt-3 border-2 border-emerald-100 p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold text-gray-700">
-                        {language === 'zh' ? '建材明细（名称 + 数量）' : 'Material Items (Name + Quantity)'}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setLiuliMaterialDemandForm(prev => ({
-                            ...prev,
-                            items: [...(prev.items || []), { materialName: '', quantity: '' }]
-                          }))
-                        }
-                        className="text-xs px-2 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                      >
-                        {language === 'zh' ? '新增一行' : 'Add Row'}
-                      </button>
-                    </div>
-                    <div className="space-y-2">
-                      {(liuliMaterialDemandForm.items || []).map((item, idx) => (
-                        <div key={`mat-demand-${idx}`} className="grid grid-cols-[1fr_140px_64px] gap-2">
-                          <input
-                            value={item.materialName}
-                            onChange={(e) =>
-                              setLiuliMaterialDemandForm(prev => {
-                                const next = [...(prev.items || [])];
-                                next[idx] = { ...next[idx], materialName: e.target.value };
-                                return { ...prev, items: next };
-                              })
-                            }
-                            placeholder={language === 'zh' ? '建材名称' : 'Material Name'}
-                            className="border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300"
-                          />
-                          <input
-                            value={item.quantity}
-                            onChange={(e) =>
-                              setLiuliMaterialDemandForm(prev => {
-                                const next = [...(prev.items || [])];
-                                next[idx] = { ...next[idx], quantity: e.target.value };
-                                return { ...prev, items: next };
-                              })
-                            }
-                            placeholder={language === 'zh' ? '数量' : 'Qty'}
-                            type="number"
-                            step="1"
-                            min="1"
-                            className="border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setLiuliMaterialDemandForm(prev => {
-                                const oldItems = prev.items || [];
-                                if (oldItems.length <= 1) return prev;
-                                const next = oldItems.filter((_, i) => i !== idx);
-                                return { ...prev, items: next };
-                              })
-                            }
-                            className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold"
-                          >
-                            {language === 'zh' ? '删除' : 'Remove'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <textarea
-                    value={liuliMaterialDemandForm.note}
-                    onChange={(e) => setLiuliMaterialDemandForm(prev => ({ ...prev, note: e.target.value }))}
-                    placeholder={language === 'zh' ? '备注（可选）' : 'Note (optional)'}
-                    rows={2}
-                    className="mt-3 w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200 resize-none"
-                  />
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setLiuliMaterialDemandModal(false)}
-                      className="w-full bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-bold transition-colors border border-emerald-200"
-                    >
-                      {language === 'zh' ? '取消' : 'Cancel'}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const ok = await addLiuliMaterialDemand();
-                        if (ok) setLiuliMaterialDemandModal(false);
-                      }}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold transition-colors"
-                    >
-                      {language === 'zh' ? '提交申请' : 'Submit'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {liuliMaterialSupplyModal ? (
-              <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50 backdrop-blur-sm">
-                <div className="bg-white border-2 border-emerald-200 shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6">
-                  <div className="flex items-center justify-between mb-4">
-                    <div className="font-black text-lg">{language === 'zh' ? '建材产能登记' : 'Material Supply Register'}</div>
-                    <button
-                      onClick={() => setLiuliMaterialSupplyModal(false)}
-                      className="text-gray-400 hover:text-gray-600 transition-colors p-1 rounded hover:bg-gray-100"
-                    >
-                      <X className="w-6 h-6" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      value={liuliMaterialSupplyForm.producer}
-                      onChange={(e) => setLiuliMaterialSupplyForm(prev => ({ ...prev, producer: e.target.value }))}
-                      placeholder={language === 'zh' ? '生产者（默认当前账号）' : 'Producer (default current user)'}
-                      className="border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                    />
-                    <div />
-                  </div>
-
-                  <div className="mt-3 border-2 border-emerald-100 p-3 space-y-2">
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold text-gray-700">
-                        {language === 'zh' ? '建材明细（名称 + 日产量 + 单价）' : 'Material Items (Name + Output + Price)'}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setLiuliMaterialSupplyForm(prev => ({
-                            ...prev,
-                            items: [...(prev.items || []), { materialName: '', perDay: '', unitPrice: '' }]
-                          }))
-                        }
-                        className="text-xs px-2 py-1 bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100"
-                      >
-                        {language === 'zh' ? '新增一行' : 'Add Row'}
-                      </button>
-                    </div>
-                    <div className="space-y-2">
-                      {(liuliMaterialSupplyForm.items || []).map((item, idx) => (
-                        <div key={`mat-supply-${idx}`} className="grid grid-cols-[1fr_130px_120px_64px] gap-2">
-                          <input
-                            value={item.materialName}
-                            onChange={(e) =>
-                              setLiuliMaterialSupplyForm(prev => {
-                                const next = [...(prev.items || [])];
-                                next[idx] = { ...next[idx], materialName: e.target.value };
-                                return { ...prev, items: next };
-                              })
-                            }
-                            placeholder={language === 'zh' ? '建材名称' : 'Material Name'}
-                            className="border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300"
-                          />
-                          <input
-                            value={item.perDay}
-                            onChange={(e) =>
-                              setLiuliMaterialSupplyForm(prev => {
-                                const next = [...(prev.items || [])];
-                                next[idx] = { ...next[idx], perDay: e.target.value };
-                                return { ...prev, items: next };
-                              })
-                            }
-                            placeholder={language === 'zh' ? '日产量' : 'Output'}
-                            type="number"
-                            step="1"
-                            min="0"
-                            className="border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300"
-                          />
-                          <input
-                            value={item.unitPrice}
-                            onChange={(e) =>
-                              setLiuliMaterialSupplyForm(prev => {
-                                const next = [...(prev.items || [])];
-                                next[idx] = { ...next[idx], unitPrice: e.target.value };
-                                return { ...prev, items: next };
-                              })
-                            }
-                            placeholder={language === 'zh' ? '单价' : 'Price'}
-                            type="number"
-                            step="0.001"
-                            className="border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300"
-                          />
-                          <button
-                            type="button"
-                            onClick={() =>
-                              setLiuliMaterialSupplyForm(prev => {
-                                const oldItems = prev.items || [];
-                                if (oldItems.length <= 1) return prev;
-                                const next = oldItems.filter((_, i) => i !== idx);
-                                return { ...prev, items: next };
-                              })
-                            }
-                            className="border border-red-200 bg-red-50 text-red-600 hover:bg-red-100 text-xs font-semibold"
-                          >
-                            {language === 'zh' ? '删除' : 'Remove'}
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                  <input
-                    value={liuliMaterialSupplyForm.pickup}
-                    onChange={(e) => setLiuliMaterialSupplyForm(prev => ({ ...prev, pickup: e.target.value }))}
-                    placeholder={language === 'zh' ? '交付/取货地点（可选）' : 'Delivery/Pickup (optional)'}
-                    className="mt-3 w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200"
-                  />
-                  <textarea
-                    value={liuliMaterialSupplyForm.note}
-                    onChange={(e) => setLiuliMaterialSupplyForm(prev => ({ ...prev, note: e.target.value }))}
-                    placeholder={language === 'zh' ? '备注（可选）' : 'Note (optional)'}
-                    rows={2}
-                    className="mt-3 w-full border-2 border-emerald-100 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-300 focus:border-emerald-300 transition-all hover:border-emerald-200 resize-none"
-                  />
-
-                  <div className="mt-4 grid grid-cols-2 gap-3">
-                    <button
-                      onClick={() => setLiuliMaterialSupplyModal(false)}
-                      className="w-full bg-white hover:bg-gray-50 text-gray-700 px-4 py-2 font-bold transition-colors border border-emerald-200"
-                    >
-                      {language === 'zh' ? '取消' : 'Cancel'}
-                    </button>
-                    <button
-                      onClick={async () => {
-                        const ok = await addLiuliMaterialSupply();
-                        if (ok) setLiuliMaterialSupplyModal(false);
-                      }}
-                      className="w-full bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 font-bold transition-colors"
-                    >
-                      {language === 'zh' ? '登记建材' : 'Save'}
-                    </button>
-                  </div>
-                </div>
-              </div>
-            ) : null}
-
-            {liuliActiveTab === 'flights' && (
-            <div className="bg-white border border-emerald-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-black">{language === 'zh' ? '飞船航班信息' : 'Flights'}</h2>
-                <div className="flex items-center gap-3">
-                  <div className="text-xs text-gray-500">{(liuliFlightsFiltered || []).length}</div>
-                  <button
-                    onClick={() => setLiuliFlightModal(true)}
-                    className="bg-gradient-to-r from-emerald-100 to-emerald-50 hover:from-emerald-200 hover:to-emerald-100 text-emerald-700 px-4 py-2 text-sm font-bold transition-all border border-emerald-300"
-                  >
-                    {language === 'zh' ? '登记航班' : 'Add'}
-                  </button>
-                </div>
-              </div>
-              <input
-                value={liuliFlightSearch}
-                onChange={(e) => setLiuliFlightSearch(e.target.value)}
-                placeholder={language === 'zh' ? '搜索航班...' : 'Search flights...'}
-                className="w-full border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-all mb-3"
-              />
-              <div className="flex items-center justify-between mb-3">
-                <button
-                  onClick={() => setLiuliFlightPage(p => Math.max(1, p - 1))}
-                  disabled={liuliFlightPage <= 1}
-                  className="px-3 py-1.5 text-sm font-bold border border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {language === 'zh' ? '上一页' : 'Prev'}
-                </button>
-                <div className="text-xs text-gray-500">
-                  {liuliFlightPage}/{liuliFlightsTotalPages}
-                </div>
-                <button
-                  onClick={() => setLiuliFlightPage(p => Math.min(liuliFlightsTotalPages, p + 1))}
-                  disabled={liuliFlightPage >= liuliFlightsTotalPages}
-                  className="px-3 py-1.5 text-sm font-bold border border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {language === 'zh' ? '下一页' : 'Next'}
-                </button>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 min-h-[320px] items-start">
-                {(liuliFlightsFiltered || []).length === 0 ? (
-                  <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无航班记录' : 'No flights yet'}</div>
-                ) : (
-                  (liuliFlightsPaged || []).map((f, idx) => {
-                    const isEditingThis = editingFlightId === f.id;
-                    const badgeColors = {
-                      SCB: 'from-sky-400 to-blue-500',
-                      WCB: 'from-emerald-400 to-teal-500',
-                      LCB: 'from-amber-400 to-orange-500',
-                      HCB: 'from-rose-400 to-red-500',
-                      VCB: 'from-violet-400 to-purple-500',
-                    };
-                    const badge = badgeColors[f.shipType] || badgeColors.SCB;
-                    return isEditingThis ? (
-                      /* ── 编辑模式 ── */
-                      <div key={f.id} className="bg-white border-2 border-emerald-300 p-2.5 shadow-md flex flex-col gap-1.5 col-span-1">
-                        <div className="text-[11px] font-bold text-emerald-700 mb-0.5">{language === 'zh' ? '编辑航班' : 'Edit Flight'}</div>
-                        <input className="w-full border border-emerald-200 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-300" placeholder={language === 'zh' ? '名称' : 'Name'} value={editFlightData.name} onChange={e => setEditFlightData(d => ({ ...d, name: e.target.value }))} />
-                        <div className="flex gap-1">
-                          <input className="flex-1 border border-emerald-200 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-300" placeholder={language === 'zh' ? '出发地' : 'From'} value={editFlightData.from} onChange={e => setEditFlightData(d => ({ ...d, from: e.target.value }))} />
-                          <input className="flex-1 border border-emerald-200 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-300" placeholder={language === 'zh' ? '目的地' : 'To'} value={editFlightData.to} onChange={e => setEditFlightData(d => ({ ...d, to: e.target.value }))} />
-                        </div>
-                        <select className="w-full border border-emerald-200 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-300" value={editFlightData.shipType} onChange={e => setEditFlightData(d => ({ ...d, shipType: e.target.value }))}>
-                          <option value="SCB">SCB (500/500)</option>
-                          <option value="WCB">WCB (3000/1000)</option>
-                          <option value="LCB">LCB (2000/2000)</option>
-                          <option value="HCB">HCB (5000/5000)</option>
-                          <option value="VCB">VCB (1000/3000)</option>
-                        </select>
-                        <input className="w-full border border-emerald-200 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-300" placeholder={language === 'zh' ? '备注' : 'Note'} value={editFlightData.note} onChange={e => setEditFlightData(d => ({ ...d, note: e.target.value }))} />
-                        <div className="text-[10px] text-gray-400 font-medium">{language === 'zh' ? '回程（选填）' : 'Return (optional)'}</div>
-                        <div className="flex gap-1">
-                          <input className="flex-1 border border-emerald-200 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-300" placeholder={language === 'zh' ? '回程出发' : 'Ret.From'} value={editFlightData.returnFrom} onChange={e => setEditFlightData(d => ({ ...d, returnFrom: e.target.value }))} />
-                          <input className="flex-1 border border-emerald-200 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-300" placeholder={language === 'zh' ? '回程目的地' : 'Ret.To'} value={editFlightData.returnTo} onChange={e => setEditFlightData(d => ({ ...d, returnTo: e.target.value }))} />
-                        </div>
-                        <input className="w-full border border-emerald-200 px-2 py-1 text-[11px] outline-none focus:ring-1 focus:ring-emerald-300" placeholder={language === 'zh' ? '回程备注' : 'Ret.Note'} value={editFlightData.returnNote} onChange={e => setEditFlightData(d => ({ ...d, returnNote: e.target.value }))} />
-                        <div className="flex gap-1.5 mt-0.5">
-                          <button onClick={() => handleUpdateFlight(f.id)} className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-bold py-1">{language === 'zh' ? '保存' : 'Save'}</button>
-                          <button onClick={() => setEditingFlightId(null)} className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-600 text-[11px] font-bold py-1">{language === 'zh' ? '取消' : 'Cancel'}</button>
-                        </div>
-                      </div>
-                    ) : (
-                      /* ── 显示模式 ── */
-                      <div key={f.id} className="bg-white border border-emerald-200 p-2.5 shadow-sm hover:shadow-md hover:border-emerald-300 transition-all flex flex-col h-[120px] overflow-hidden">
-                        {/* 顶部：名称 + 按钮 */}
-                        <div className="flex justify-between items-center mb-1">
-                          <div className="font-extrabold text-[13px] text-gray-800 leading-tight truncate flex-1 pr-1">{f.name || '-'}</div>
-                          <div className="flex items-center gap-1.5 shrink-0">
-                            {isAdmin && (
-                              <button onClick={() => { setEditingFlightId(f.id); setEditFlightData({ name: f.name, from: f.from, to: f.to, note: f.note || '', returnFrom: f.returnFrom || '', returnTo: f.returnTo || '', returnNote: f.returnNote || '', shipType: f.shipType || 'SCB' }); }} className="text-[10px] text-emerald-600 hover:text-emerald-800">
-                                {language === 'zh' ? '编辑' : 'Edit'}
-                              </button>
-                            )}
-                            <button onClick={() => deleteLiuliFlight(f.id)} className="text-[10px] text-gray-300 hover:text-red-400">
-                              {language === 'zh' ? '删除' : 'Del'}
-                            </button>
-                          </div>
-                        </div>
-                        {/* 航线 + 型号标签 */}
-                        <div className="flex items-center gap-1 mb-0.5 flex-wrap">
-                          <span className="font-semibold text-[12px] text-emerald-700 truncate">{f.from}</span>
-                          <span className="text-gray-300 text-[11px]">→</span>
-                          <span className="font-semibold text-[12px] text-emerald-700 truncate">{f.to}</span>
-                          <span className={`inline-flex items-center text-[9px] font-extrabold tracking-wider bg-gradient-to-r ${badge} text-white px-1.5 py-0.5 rounded-full shrink-0`}>{f.shipType || 'SCB'}</span>
-                        </div>
-                        {/* 备注 */}
-                        {f.note ? <div className="text-[10px] text-gray-400 line-clamp-1 leading-snug">{f.note}</div> : null}
-                        {/* 回程 */}
-                        {(f.returnFrom && f.returnTo) ? (
-                          <div className="mt-1 border-t border-emerald-100 pt-1 flex items-center gap-1 flex-wrap">
-                            <span className="font-semibold text-[11px] text-emerald-600 truncate">{f.returnFrom}</span>
-                            <span className="text-gray-300 text-[10px]">→</span>
-                            <span className="font-semibold text-[11px] text-emerald-600 truncate">{f.returnTo}</span>
-                            {f.returnNote ? <span className="text-[10px] text-gray-400 truncate w-full">{f.returnNote}</span> : null}
-                          </div>
-                        ) : null}
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </div>
-            )}
-
-            {liuliActiveTab === 'productivity' && (
-            <div className="bg-white border border-emerald-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-black">{language === 'zh' ? '生产力信息' : 'Productivity'}</h2>
-                <div className="flex items-center gap-3">
-                  <div className="text-xs text-gray-500">{(liuliProductsFiltered || []).length}</div>
-                  <button
-                    onClick={() => setLiuliProductModal(true)}
-                    className="bg-gradient-to-r from-emerald-100 to-emerald-50 hover:from-emerald-200 hover:to-emerald-100 text-emerald-700 px-4 py-2 text-sm font-bold transition-all border border-emerald-300"
-                  >
-                    {language === 'zh' ? '登记产量' : 'Add'}
-                  </button>
-                </div>
-              </div>
-              <input
-                value={liuliProductSearch}
-                onChange={(e) => setLiuliProductSearch(e.target.value)}
-                placeholder={language === 'zh' ? '搜索生产力...' : 'Search productivity...'}
-                className="w-full border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-all mb-3"
-              />
-              <div className="flex items-center justify-between mb-3">
-                <button
-                  onClick={() => setLiuliProductPage(p => Math.max(1, p - 1))}
-                  disabled={liuliProductPage <= 1}
-                  className="px-3 py-1.5 text-sm font-bold border border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {language === 'zh' ? '上一页' : 'Prev'}
-                </button>
-                <div className="text-xs text-gray-500">
-                  {liuliProductPage}/{liuliProductsTotalPages}
-                </div>
-                <button
-                  onClick={() => setLiuliProductPage(p => Math.min(liuliProductsTotalPages, p + 1))}
-                  disabled={liuliProductPage >= liuliProductsTotalPages}
-                  className="px-3 py-1.5 text-sm font-bold border border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {language === 'zh' ? '下一页' : 'Next'}
-                </button>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-2 min-h-[320px] items-start">
-                {(liuliProductsFiltered || []).length === 0 ? (
-                  <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无登记' : 'No items yet'}</div>
-                ) : (
-                  (liuliProductsPaged || []).map((p, idx) => (
-                    <div
-                      key={p.id}
-                      className="bg-white border border-emerald-200 hover:border-emerald-300 hover:shadow-md transition-all flex flex-col h-[105px] overflow-hidden"
-                    >
-                      {/* 顶部色带：名称 */}
-                      <div className="bg-gradient-to-r from-emerald-500 to-teal-500 px-2 py-1 flex justify-between items-center">
-                        <div className="font-extrabold text-white text-[12px] leading-tight truncate flex-1 pr-1">{p.name || '-'}</div>
-                        <button onClick={() => deleteLiuliProduct(p.id)} className="text-[10px] text-white/60 hover:text-white shrink-0">✕</button>
-                      </div>
-                      {/* 产品名标签 */}
-                      <div className="px-2 pt-1 pb-0.5">
-                        <span className="inline-block bg-emerald-50 border border-emerald-200 text-emerald-700 font-semibold text-[10px] px-1.5 py-0.5 rounded-sm truncate max-w-full">{p.itemName || '-'}</span>
-                      </div>
-                      {/* 日产量 */}
-                      <div className="px-2">
-                        <span className="text-[10px] text-gray-500">{language === 'zh' ? '日产' : '/day'} <span className="text-emerald-600 font-extrabold text-[12px]">{Math.round(Number(p.perDay) || 0)}</span></span>
-                      </div>
-                      {/* 取货地 */}
-                      {p.pickup ? <div className="px-2 text-[10px] text-gray-400 truncate">📍 <span className="text-teal-600 font-semibold">{p.pickup}</span></div> : null}
-                      {p.note ? <div className="px-2 text-[9px] text-gray-400 line-clamp-1 mt-0.5">{p.note}</div> : null}
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-            )}
-
-            {liuliActiveTab === 'material_requests' && (
-            <div className="bg-white border border-emerald-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-black">{language === 'zh' ? '建材汇总申请' : 'Material Requests'}</h2>
-                <div className="flex items-center gap-3">
-                  <div className="text-xs text-gray-500">{(liuliMaterialDemandsFiltered || []).length}</div>
-                  <button
-                    onClick={() => setLiuliMaterialDemandModal(true)}
-                    className="bg-gradient-to-r from-emerald-100 to-emerald-50 hover:from-emerald-200 hover:to-emerald-100 text-emerald-700 px-4 py-2 text-sm font-bold transition-all border border-emerald-300"
-                  >
-                    {language === 'zh' ? '填写申请' : 'Add Request'}
-                  </button>
-                </div>
-              </div>
-              <input
-                value={liuliMaterialDemandSearch}
-                onChange={(e) => setLiuliMaterialDemandSearch(e.target.value)}
-                placeholder={language === 'zh' ? '搜索建材申请...' : 'Search material requests...'}
-                className="w-full border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-all mb-3"
-              />
-              <div className="flex items-center justify-between mb-3">
-                <button
-                  onClick={() => setLiuliMaterialDemandPage(p => Math.max(1, p - 1))}
-                  disabled={liuliMaterialDemandPage <= 1}
-                  className="px-3 py-1.5 text-sm font-bold border border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {language === 'zh' ? '上一页' : 'Prev'}
-                </button>
-                <div className="text-xs text-gray-500">
-                  {liuliMaterialDemandPage}/{liuliMaterialDemandTotalPages}
-                </div>
-                <button
-                  onClick={() => setLiuliMaterialDemandPage(p => Math.min(liuliMaterialDemandTotalPages, p + 1))}
-                  disabled={liuliMaterialDemandPage >= liuliMaterialDemandTotalPages}
-                  className="px-3 py-1.5 text-sm font-bold border border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {language === 'zh' ? '下一页' : 'Next'}
-                </button>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2 min-h-[220px] items-start">
-                {(liuliMaterialDemandsFiltered || []).length === 0 ? (
-                  <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无建材申请' : 'No material requests yet'}</div>
-                ) : (
-                  (liuliMaterialDemandsPaged || []).map((d) => (
-                    <div
-                      key={d.id}
-                      className="bg-gradient-to-br from-white to-emerald-50 border border-emerald-200 p-2 hover:shadow-md transition-shadow flex justify-between items-start h-fit self-start"
-                    >
-                      <div className="flex-1">
-                        <div className="font-bold text-[12px] text-gray-800">{d.applicant || '-'}</div>
-                        {(d.items || []).length > 0 ? (
-                          <div className="mt-2 space-y-1.5">
-                            {(d.items || []).map((it, i) => (
-                              <div
-                                key={`${d.id}-item-${i}`}
-                                className="flex items-center justify-between gap-2 bg-white border border-emerald-100 px-2 py-1"
-                              >
-                                <span className="text-[13px] font-extrabold tracking-wide text-emerald-700">
-                                  {it.materialName}
-                                </span>
-                                <span className="inline-flex items-center px-2 py-0.5 text-[12px] font-extrabold text-emerald-700 bg-emerald-100 border border-emerald-200">
-                                  x {Math.round(Number(it.quantity) || 0)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        ) : (
-                          <div className="mt-1 text-[11px] text-gray-700 whitespace-pre-wrap leading-snug">{d.summary || '-'}</div>
-                        )}
-                        {d.note ? (
-                          <div className="mt-1 text-[11px] text-gray-500 whitespace-pre-wrap leading-snug">
-                            {language === 'zh' ? '备注' : 'Note'}: {d.note}
-                          </div>
-                        ) : null}
-                      </div>
-                      <button
-                        onClick={() => deleteLiuliMaterialDemand(d.id)}
-                        className="text-[10px] text-red-600 hover:text-red-700 ml-2"
-                      >
-                        {language === 'zh' ? '删除' : 'Delete'}
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-            )}
-
-            {liuliActiveTab === 'material_supply' && (
-            <div className="bg-white border border-emerald-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-black">{language === 'zh' ? '建材生产信息' : 'Material Supply'}</h2>
-                <div className="flex items-center gap-3">
-                  <div className="text-xs text-gray-500">{(liuliMaterialSuppliesFiltered || []).length}</div>
-                  <button
-                    onClick={() => setLiuliMaterialSupplyModal(true)}
-                    className="bg-gradient-to-r from-emerald-100 to-emerald-50 hover:from-emerald-200 hover:to-emerald-100 text-emerald-700 px-4 py-2 text-sm font-bold transition-all border border-emerald-300"
-                  >
-                    {language === 'zh' ? '登记建材' : 'Add Supply'}
-                  </button>
-                </div>
-              </div>
-              <input
-                value={liuliMaterialSupplySearch}
-                onChange={(e) => setLiuliMaterialSupplySearch(e.target.value)}
-                placeholder={language === 'zh' ? '搜索建材产能...' : 'Search material supply...'}
-                className="w-full border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-all mb-3"
-              />
-              <div className="flex items-center justify-between mb-3">
-                <button
-                  onClick={() => setLiuliMaterialSupplyPage(p => Math.max(1, p - 1))}
-                  disabled={liuliMaterialSupplyPage <= 1}
-                  className="px-3 py-1.5 text-sm font-bold border border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {language === 'zh' ? '上一页' : 'Prev'}
-                </button>
-                <div className="text-xs text-gray-500">
-                  {liuliMaterialSupplyPage}/{liuliMaterialSupplyTotalPages}
-                </div>
-                <button
-                  onClick={() => setLiuliMaterialSupplyPage(p => Math.min(liuliMaterialSupplyTotalPages, p + 1))}
-                  disabled={liuliMaterialSupplyPage >= liuliMaterialSupplyTotalPages}
-                  className="px-3 py-1.5 text-sm font-bold border border-emerald-200 text-emerald-700 bg-white hover:bg-emerald-50 disabled:opacity-40 disabled:cursor-not-allowed"
-                >
-                  {language === 'zh' ? '下一页' : 'Next'}
-                </button>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2 min-h-[220px] items-start">
-                {(liuliMaterialSuppliesFiltered || []).length === 0 ? (
-                  <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无建材产能登记' : 'No material supply yet'}</div>
-                ) : (
-                  (liuliMaterialSuppliesPaged || []).map((s) => (
-                    <div
-                      key={s.id}
-                      className="bg-gradient-to-br from-white to-emerald-50 border border-emerald-200 p-2 hover:shadow-md transition-shadow flex justify-between items-start h-fit self-start"
-                    >
-                      <div>
-                        <div className="font-bold text-gray-800 text-[11px] leading-tight">{s.producer || '-'}</div>
-                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">{s.materialName || '-'}</div>
-                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
-                          {language === 'zh' ? '日产量' : 'Per day'}: <span className="text-teal-600 font-semibold">{Math.round(Number(s.perDay) || 0)}</span>
-                        </div>
-                        <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
-                          {language === 'zh' ? '单价' : 'Unit Price'}: <span className="text-teal-600 font-semibold">{Number(s.unitPrice).toFixed(3)}</span>
-                        </div>
-                        {s.pickup ? (
-                          <div className="text-[11px] text-gray-600 mt-0.5 leading-tight">
-                            {language === 'zh' ? '交付地' : 'Delivery'}: <span className="text-emerald-700 font-semibold">{s.pickup}</span>
-                          </div>
-                        ) : null}
-                        {s.note ? <div className="text-[11px] text-gray-600 mt-1 whitespace-pre-wrap leading-snug">{s.note}</div> : null}
-                      </div>
-                      <button
-                        onClick={() => deleteLiuliMaterialSupply(s.id)}
-                        className="text-[10px] text-red-600 hover:text-red-700"
-                      >
-                        {language === 'zh' ? '删除' : 'Delete'}
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-            )}
-
-            {liuliActiveTab === 'output_dashboard' && (
-            <div className="bg-white border border-emerald-200 p-5 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-black">{language === 'zh' ? '产出看板' : 'Output Dashboard'}</h2>
-                <button
-                  onClick={fetchProductionReports}
-                  disabled={productionReportsLoading}
-                  className="bg-gradient-to-r from-emerald-100 to-emerald-50 hover:from-emerald-200 hover:to-emerald-100 text-emerald-700 px-4 py-2 text-sm font-bold transition-all border border-emerald-300 disabled:opacity-40"
-                >
-                  {productionReportsLoading ? (language === 'zh' ? '加载中...' : 'Loading...') : (language === 'zh' ? '刷新' : 'Refresh')}
-                </button>
-              </div>
-              <input
-                value={productionSearch}
-                onChange={(e) => setProductionSearch(e.target.value)}
-                placeholder={language === 'zh' ? '搜索材料代码/董事名/星球...' : 'Search ticker/director/planet...'}
-                className="w-full border border-emerald-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 transition-all mb-3"
-              />
-              {productionByDirector.length === 0 ? (
-                <div className="text-gray-400 text-sm">{language === 'zh' ? '暂无产出上报数据' : 'No production reports yet'}</div>
-              ) : productionSearchResults ? (
-                <div>
-                  <div className="text-xs text-gray-500 mb-2">{productionSearchResults.length} {language === 'zh' ? '条结果' : 'results'}</div>
-                  {productionSearchResults.length === 0 ? (
-                    <div className="text-gray-400 text-sm">{language === 'zh' ? '无匹配结果' : 'No matches'}</div>
-                  ) : (
-                    <table className="w-full text-sm border-collapse">
-                      <thead>
-                        <tr className="border-b border-emerald-200 text-left text-xs text-gray-500">
-                          <th className="py-1 pr-3">{language === 'zh' ? '材料' : 'Ticker'}</th>
-                          <th className="py-1 pr-3">{language === 'zh' ? '日产量' : 'Daily'}</th>
-                          <th className="py-1 pr-3">{language === 'zh' ? '董事' : 'Director'}</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {productionSearchResults.map((r, i) => (
-                          <tr key={i} className="border-b border-emerald-50 hover:bg-emerald-50">
-                            <td className="py-1 pr-3 font-bold text-gray-700">{r.ticker}</td>
-                            <td className="py-1 pr-3 text-emerald-600 font-semibold">{Math.round(Number(r.daily_output) * 100) / 100}/d</td>
-                            <td className="py-1 pr-3">{r.director} {r.company ? <span className="text-xs text-gray-400">[{r.company}]</span> : null}</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  )}
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-2">
-                  {productionByDirector.map((d) => (
-                    <div key={d.director} className="border border-emerald-200 p-2">
-                      <div className="flex items-center justify-between mb-1">
-                        <div className="text-xs">
-                          <span className="font-bold text-gray-800">{d.director}</span>
-                          {d.company && <span className="text-gray-400 ml-1">[{d.company}]</span>}
-                        </div>
-                        <div className="text-[10px] text-gray-400">
-                          {d.reported_at ? new Date(d.reported_at).toLocaleString('zh-CN') : ''}
-                        </div>
-                      </div>
-                      <div className="grid grid-cols-4 gap-x-2 gap-y-1.5">
-                        {Object.entries(d.tickers).sort((a, b) => b[1] - a[1]).map(([ticker, total]) => (
-                          <span key={ticker} className="inline-flex items-center justify-center bg-emerald-50 border border-emerald-200 px-2 py-1 text-[10px]">
-                            <span className="font-bold text-gray-700">{ticker}</span>
-                            <span className="text-emerald-600 ml-1">{Math.round(total * 100) / 100}/d</span>
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-            )}
-          </div>
         </div>
       </div>
     );
@@ -8473,16 +7105,6 @@ const App = () => {
             <div className="h-6 w-px bg-green-200 mx-2"></div>
             <div className="h-6 w-px bg-green-200 mx-2"></div>
             <Btn icon={MessageSquare} label={t('forum')} onClick={() => setCurrentPage('forum')} color="red" className="px-8" />
-            <button onClick={() => {
-              if (currentUserRole === 'admin' || currentUserRole === 'liuli_member') {
-                setCurrentPage('liuli');
-              } else {
-                alert(language === 'zh' ? '仅琉璃成员可进入' : 'Liuli members only');
-              }
-            }} className={`bg-gradient-to-r from-indigo-100 to-purple-100 hover:from-indigo-200 hover:to-purple-200 text-indigo-700 px-8 py-2 font-bold transition-all flex items-center gap-2 border border-indigo-200 ${currentUserRole !== 'admin' && currentUserRole !== 'liuli_member' ? 'opacity-50 cursor-not-allowed' : ''}`}>
-              <Activity className="w-4 h-4" />
-              琉璃
-            </button>
             <button onClick={() => setCurrentPage('planet')} className="bg-gradient-to-r from-blue-100 to-blue-200 hover:from-blue-200 hover:to-blue-300 text-blue-700 px-8 py-2 font-bold transition-all flex items-center gap-2 border border-blue-300">
               <Activity className="w-4 h-4" />
               {t('planetDev')}
@@ -8500,6 +7122,8 @@ const App = () => {
               {t('bankBonds')}
             </button>
             {isAdmin && <Btn icon={AlertCircle} label={t('forceSettle')} onClick={handleForceSettleInterest} color="red" />}
+            {isAdmin && <Btn icon={AlertCircle} label={language === 'zh' ? '合并账单' : 'Merge Bills'} onClick={handleMergeExistingBills} color="blue" />}
+            {isAdmin && <Btn icon={AlertCircle} label={language === 'zh' ? '修复负数' : 'Fix Negatives'} onClick={handleFixNegativeBills} color="orange" />}
             {isAdmin && <button
               onClick={() => setInterestManageModal(true)}
               className="flex items-center gap-2 px-4 py-2 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 transition-colors font-medium"
@@ -9258,14 +7882,6 @@ const App = () => {
                                 value={formData.client} 
                                 onChange={e => {
                                   const nextClient = e.target.value;
-                                  if (modalType === 'deposit' && isAdmin && formData.product_type === 'risk') {
-                                    const nextTarget = getUserByName(String(nextClient || '').trim());
-                                    if (!isLiuliEligibleUser(nextTarget)) {
-                                      setShowRiskEligibilityHint(false);
-                                      setFormData({ ...formData, client: nextClient, product_type: 'risk5', rate: '5' });
-                                      return;
-                                    }
-                                  }
                                   if (modalType === 'deposit') setShowRiskEligibilityHint(false);
                                   setFormData({ ...formData, client: nextClient });
                                 }} 
@@ -9499,10 +8115,13 @@ const TableSection = ({ title, color, icon: Icon, data, isAdmin, onEdit, onDelet
       }
       
       if (field === 'settlement_count') {
-        // 对于利息次数，存储在备注字段中
+        // 对于利息次数，存储在备注字段中；保留 lockedInterest
+        const { data: curRow } = await supabase.from('transactions').select('remark').eq('id', rowId).single();
+        const lockedMatch = (curRow?.remark || '').match(/lockedInterest:\s*([+-]?\d*\.?\d+)/);
+        const lockedPart = lockedMatch ? `\nlockedInterest:${lockedMatch[1]}` : '';
         const { error } = await supabase
           .from('transactions')
-          .update({ remark: `${t('interestCountPrefix')}:${Math.round(numValue)}` })
+          .update({ remark: `${t('interestCountPrefix')}:${Math.round(numValue)}${lockedPart}` })
           .eq('id', rowId);
         
         if (error) throw error;
