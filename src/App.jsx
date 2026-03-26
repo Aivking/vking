@@ -1183,14 +1183,8 @@ const App = () => {
     // 因此 principals 已经是扣减后的余额，不需要再减 withdrawn，否则会重复扣减。
     let available = principals + interest;
 
-    if (accountType === 'deposit') {
-      const bondUsed = approved
-        .filter(tx => tx.type === 'bond_subscribe' && tx.created_by === clientName)
-        .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-      available -= bondUsed;
-    }
-
-    return { principals: Math.max(0, principals), interest: Math.max(0, interest), withdrawn, available: Math.max(0, available) };
+    // 债券单独计算，不从存款可用余额中扣除
+    return { principals: Math.max(0, principals), interest: Math.max(0, interest), withdrawn, bondUsed: 0, available: Math.max(0, available) };
   };
 
   const applyApprovedWithdrawalToBills = async (withdrawTx) => {
@@ -3571,14 +3565,14 @@ const App = () => {
         if (payload.type === 'withdraw_dep') {
           const targetClient = payload.client || currentUser?.username;
           const pt = payload.product_type || 'normal';
-          const { principals, available } = getAvailableForClient('deposit', targetClient, pt);
+          const { principals, interest, bondUsed, available } = getAvailableForClient('deposit', targetClient, pt);
           if (principals === 0) {
             return alert(language === 'zh' ? '没有存款记录，无法取款！' : 'No deposit records, cannot withdraw!');
           }
           if (parseFloat(payload.principal) > available) {
             return alert(language === 'zh'
-              ? `取款金额不得超过可用金额 ${available.toFixed(3)}m (该用户该产品存款+利息-已取款-债券占用)`
-              : `Withdrawal amount cannot exceed available ${available.toFixed(3)}m`);
+              ? `取款金额不得超过可用金额 ${available.toFixed(3)}m\n本金: ${principals.toFixed(3)}m\n利息: ${interest.toFixed(3)}m\n债券占用: ${bondUsed.toFixed(3)}m\n可用 = 本金+利息-债券占用`
+              : `Withdrawal amount cannot exceed available ${available.toFixed(3)}m\nPrincipal: ${principals.toFixed(3)}m\nInterest: ${interest.toFixed(3)}m\nBond used: ${bondUsed.toFixed(3)}m`);
           }
         }
         
@@ -3954,10 +3948,8 @@ const App = () => {
     // withdraw_inj/withdraw_dep 审批时已通过 applyApprovedWithdrawalToBills 直接
     // 修改了原注资/存款记录的 principal，无需再次扣减，否则会双重计算。
     const injectionBalance = personalInjections.total;
-    const bondUsed = approved
-      .filter(tx => tx.type === 'bond_subscribe' && tx.created_by === currentUser?.username)
-      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-    const depositBalance = Math.max(0, personalDeposits.total - bondUsed);
+    // 债券单独计算，不从存款余额中扣除
+    const depositBalance = Math.max(0, personalDeposits.total);
 
     // 计算个人总余额（注资+存款+已结算利息）
     const personalTotalBalance = injectionBalance + depositBalance;
@@ -4017,10 +4009,8 @@ const App = () => {
     // withdraw_inj/withdraw_dep 已通过 applyApprovedWithdrawalToBills 修改了原记录 principal，
     // 无需再次扣减，否则会双重计算。
     const injectionBalance = personalInjections.total;
-    const bondUsed = transactions
-      .filter(tx => tx.status === 'approved' && tx.type === 'bond_subscribe' && tx.created_by === currentUser.username)
-      .reduce((sum, tx) => sum + (parseFloat(tx.principal) || 0), 0);
-    const depositBalance = Math.max(0, personalDeposits.total - bondUsed);
+    // 债券单独计算，不从存款余额中扣除
+    const depositBalance = Math.max(0, personalDeposits.total);
 
     return injectionBalance + depositBalance;
   };
